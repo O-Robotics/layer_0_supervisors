@@ -15,6 +15,7 @@
 #include <std_srvs/srv/trigger.hpp>
 
 #include "amr_sweeper_fsm/srv/request_state.hpp"
+#include "amr_sweeper_scheduler/srv/prepare_mission_execution.hpp"
 
 namespace amr_sweeper_scheduler
 {
@@ -118,6 +119,11 @@ private:
   void request_mission_build(const std::string & mission_path);
   [[nodiscard]] bool mission_json_or_folder_exists(const std::string & mission_id) const;
   [[nodiscard]] bool prepare_active_mission_execution(const TimeWindow & window);
+  [[nodiscard]] bool prepare_mission_execution(
+    const std::string & mission_id,
+    const std::string & mission_path,
+    const std::string & window_start,
+    const std::string & window_end);
   void request_running_state(const TimeWindow & window);
   [[nodiscard]] bool mission_artifacts_ready(const std::string & mission_path) const;
   [[nodiscard]] std::string mission_costmap_yaml_path(const std::string & mission_path) const;
@@ -140,6 +146,8 @@ private:
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr planned_pub_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr trigger_pub_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr reload_srv_;
+  rclcpp::Service<amr_sweeper_scheduler::srv::PrepareMissionExecution>::SharedPtr
+    prepare_mission_execution_srv_;
   rclcpp::AsyncParametersClient::SharedPtr mission_builder_parameter_client_;
   rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr mission_builder_build_client_;
   rclcpp::Client<amr_sweeper_fsm::srv::RequestState>::SharedPtr fsm_request_client_;

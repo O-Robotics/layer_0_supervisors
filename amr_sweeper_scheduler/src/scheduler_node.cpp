@@ -613,6 +613,52 @@ SchedulerNode::SchedulerNode(const rclcpp::NodeOptions & options)
       }
     });
 
+  prepare_mission_execution_srv_ =
+    create_service<amr_sweeper_scheduler::srv::PrepareMissionExecution>(
+    "prepare_mission_execution",
+    [this](
+      const std::shared_ptr<amr_sweeper_scheduler::srv::PrepareMissionExecution::Request> request,
+      std::shared_ptr<amr_sweeper_scheduler::srv::PrepareMissionExecution::Response> response)
+    {
+      refresh_mission_catalog();
+
+      if (request->mission_id.empty()) {
+        response->success = false;
+        response->message = "mission_id must not be empty";
+        return;
+      }
+
+      const auto mission_path = resolve_mission_path(request->mission_id);
+      if (!mission_path) {
+        response->success = false;
+        response->message = "Mission not found for mission_id=" + request->mission_id;
+        trigger_warn("SCHED_MANUAL_MISSION_NOT_FOUND", "mission_id=" + request->mission_id);
+        return;
+      }
+
+      if (!mission_artifacts_ready(*mission_path)) {
+        response->success = false;
+        response->message =
+          "Mission artifacts are missing or stale; build the mission before preparing execution.";
+        trigger_warn("SCHED_MANUAL_MISSION_NOT_READY", "mission_id=" + request->mission_id);
+        return;
+      }
+
+      if (!prepare_mission_execution(request->mission_id, *mission_path, "", "")) {
+        response->success = false;
+        response->message = "Failed to prepare mission execution context";
+        trigger_error("SCHED_MANUAL_MISSION_PREP_FAILED", "mission_id=" + request->mission_id);
+        return;
+      }
+
+      response->success = true;
+      response->message = "Mission execution context prepared";
+      response->mission_execution_directory = prepared_execution_directory_;
+      response->execution_context_file =
+        (std::filesystem::path(prepared_execution_directory_) / "execution_context.json").string();
+      trigger_info("SCHED_MANUAL_MISSION_PREPARED", "mission_id=" + request->mission_id);
+    });
+
   parser_ = std::make_unique<IcalParserMinimal>();
   expander_ = std::make_unique<ScheduleExpanderStub>();
 
@@ -919,11 +965,24 @@ bool SchedulerNode::prepare_active_mission_execution(const TimeWindow & window)
     return false;
   }
 
-  const std::filesystem::path mission_file(*window.mission_path);
-  const std::filesystem::path mission_folder = mission_folder_path(*window.mission_path);
-  const std::filesystem::path mission_costmap_yaml(mission_costmap_yaml_path(*window.mission_path));
-  const std::filesystem::path mission_costmap_image(mission_costmap_image_path(*window.mission_path));
-  const std::filesystem::path mission_route(mission_route_path(*window.mission_path));
+  return prepare_mission_execution(
+    *window.mission_id,
+    *window.mission_path,
+    window.start_local,
+    window.end_local);
+}
+
+bool SchedulerNode::prepare_mission_execution(
+  const std::string & mission_id,
+  const std::string & mission_path,
+  const std::string & window_start,
+  const std::string & window_end)
+{
+  const std::filesystem::path mission_file(mission_path);
+  const std::filesystem::path mission_folder = mission_folder_path(mission_path);
+  const std::filesystem::path mission_costmap_yaml(mission_costmap_yaml_path(mission_path));
+  const std::filesystem::path mission_costmap_image(mission_costmap_image_path(mission_path));
+  const std::filesystem::path mission_route(mission_route_path(mission_path));
 
   if (!std::filesystem::exists(mission_file) ||
     !std::filesystem::exists(mission_costmap_yaml) ||
@@ -973,14 +1032,14 @@ bool SchedulerNode::prepare_active_mission_execution(const TimeWindow & window)
   }
 
   nlohmann::json context{
-    {"mission_id", *window.mission_id},
+    {"mission_id", mission_id},
     {"mission_file", mission_file.string()},
     {"mission_folder", mission_folder.string()},
     {"mission_route_file", mission_route.string()},
     {"mission_costmap_yaml", mission_costmap_yaml.string()},
     {"mission_run_directory", mission_run_directory.string()},
-    {"mission_window_start", window.start_local},
-    {"mission_window_end", window.end_local},
+    {"mission_window_start", window_start},
+    {"mission_window_end", window_end},
     {"run_started_at", run_timestamp}};
 
   std::ofstream context_stream(mission_run_directory / "execution_context.json");
@@ -990,12 +1049,12 @@ bool SchedulerNode::prepare_active_mission_execution(const TimeWindow & window)
   context_stream << std::setw(2) << context << '\n';
 
   const nlohmann::json execution_pointer{
-    {"mission_id", *window.mission_id},
+    {"mission_id", mission_id},
     {"mission_folder", mission_folder.string()},
     {"mission_run_directory", mission_run_directory.string()},
     {"execution_context_file", (mission_run_directory / "execution_context.json").string()},
-    {"mission_window_start", window.start_local},
-    {"mission_window_end", window.end_local}};
+    {"mission_window_start", window_start},
+    {"mission_window_end", window_end}};
   std::ofstream pointer_stream(
     resolve_path(missions_directory_) / active_execution_pointer_filename_,
     std::ios::trunc);

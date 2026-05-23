@@ -14,6 +14,7 @@ To support FSM supervision, the node provides:
 - **Tunable parameters** (launch arguments) controlling reload intervals, strictness, and publishing.
 - **ROS logs ("rosout triggers")** with a configurable prefix for machine parsing by the FSM.
 - Optional **trigger topic** publishing string events for FSM monitoring.
+- A `prepare_mission_execution` service for manual mission context creation outside schedule windows.
 
 See `config/architecture.md` and `config/schedule_semantics.md`.
 
@@ -32,6 +33,18 @@ See `config/architecture.md` and `config/schedule_semantics.md`.
   - writes `src/missions/active_execution.json` so `RUNNING` uses the exact scheduler-selected execution folder
   - writes fresh root-level active aliases for the selected mission
   - requests the FSM transition to `RUNNING` once the mission is runnable
+
+For manual operation, call `prepare_mission_execution` with a `mission_id` to create a fresh
+`<mission>/<execution_timestamp>/execution_context.json` and update `src/missions/active_execution.json`.
+That prepared execution directory can then be passed into the FSM `request_state` call.
+
+Example:
+
+```bash
+ros2 service call /prepare_mission_execution \
+  amr_sweeper_scheduler/srv/PrepareMissionExecution \
+  "{mission_id: 'polygon_test_20260523T000000Z'}"
+```
 
 ### Required VEVENT properties
 

@@ -1,0 +1,6 @@
+string mission_id
+---
+bool success
+string message
+string mission_execution_directory
+string execution_context_file

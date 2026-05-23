@@ -12,8 +12,17 @@ find_package(amr_sweeper_fsm REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
 find_package(rcl_interfaces REQUIRED)
+find_package(rosidl_default_generators REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
+
+rosidl_generate_interfaces(${PROJECT_NAME}
+  "srv/PrepareMissionExecution.srv"
+)
+
+rosidl_get_typesupport_target(cpp_typesupport_target
+  ${PROJECT_NAME} "rosidl_typesupport_cpp"
+)
 
 add_executable(scheduler_node
   src/scheduler_node.cpp
@@ -30,6 +39,11 @@ ament_target_dependencies(scheduler_node
   std_msgs
   std_srvs
 )
+target_link_libraries(scheduler_node
+  ${cpp_typesupport_target}
+)
+
+add_dependencies(scheduler_node ${PROJECT_NAME})
 
 install(TARGETS
   scheduler_node
@@ -43,5 +57,7 @@ install(DIRECTORY include/
 install(DIRECTORY launch config
   DESTINATION share/${PROJECT_NAME}
 )
+
+ament_export_dependencies(rosidl_default_runtime)
 
 ament_package()
