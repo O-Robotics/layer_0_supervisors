@@ -1,0 +1,106 @@
+AMR Sweeper FSM (Layer 0) — FSM Workflow
+===========================================
+
+Scope
+-----
+This document describes the workflow of the AMR-Sweeper's FSM in fsm_layer_0 (amr_sweeper_layer_0_fsm):
+  - what the supervisor does
+  - what each state is responsible for
+  - how startup gating works (INITIALIZING → IDLING / FAULT)
+  - how `state_parameters.yaml` and per-state profile files tune behavior without code changes
+
+
+Architecture at a glance
+------------------------
+Nodes (default namespace: /amr_sweeper):
+  - supervisor                     (rclcpp::Node)
+  - initializing_state             (LifecycleNode)
+  - idling_state                   (LifecycleNode)
+  - running_state                  (LifecycleNode)
+  - charging_state                 (LifecycleNode)
+  - fault_state                    (LifecycleNode)
+
+Only ONE lifecycle state node is to be ACTIVE at a time.
+All other lifecycle state nodes are typically INACTIVE (or UNCONFIGURED) but alive (running).
+
+FSM-state name set:
+  INITIALIZING, IDLING, RUNNING, CHARGING, FAULT
+
+Profile ID bands (100-wide band of profiles per FSM-state)
+---------------------------------------------
+  INITIALIZING : 000 - 099   (FSM tester 000, default 001)
+  IDLING       : 100 - 199   (FSM tester 100, default 101)
+  RUNNING      : 200 - 299   (FSM tester 200, default 201)
+  CHARGING     : 300 - 399   (FSM tester 300, default 301)
+  FAULT        : 400 - 499   (FSM tester 400, default 401)
+
+
+FSM workflow
+------------
+Launch:
+  - Start supervisor + all 5 state lifecycle nodes.
+
+Discovery:
+  - Supervisor discovers available nodes/services and monitors readiness.
+
+Request and arbitration:
+  - External clients call /amr_sweeper/request_state (RequestState.srv).
+  - Supervisor arbitrates requests by priority/force and sets:
+      desired_state
+      desired_profile_id
+
+Transition:
+  - Supervisor manages lifecycle transitions so that only one FSM-state is ACTIVE.
+  - If desired_state changes, the supervisor deactivates the current state and activates the target state.
+  - If desired_state is the same but desired_profile_id changes, the supervisor re-enters the same state
+    (deactivate → cleanup/configure → activate) so the new profile is applied cleanly.
+
+
+State behaviour (design intent)
+------------------------------
+
+INITIALIZING
+  - Perform a full startup systems check.
+  - The default startup profile validates layer 1 hardware, layer 2 controllers, layer 3 localization/navigation/mapping,
+    plus mission-builder and scheduler readiness.
+  - Only requests the next FSM-state (typically IDLING) when those required checks pass; otherwise requests FAULT.
+
+IDLING
+  - Robot is safe and ready.
+  - Runs mission preparation in the background.
+  - `amr_sweeper_mission_builder` watches `/missions` for new or changed VDA5050 missions and keeps artifacts updated.
+  - `amr_sweeper_scheduler` watches the `/missions` schedule, checks mission readiness, requests a mission build when needed,
+    and asks the supervisor to enter RUNNING when a valid WORK window becomes active.
+
+RUNNING
+  - Autonomous mission execution / sweeping behavior.
+  - Teleop operation 
+
+CHARGING
+  - Charge supervision.
+  - Transitions to IDLING when charge complete.
+
+FAULT
+  - Safe stop / inhibit motion.
+  - Only transitions out when faults can be cleared (or re-initialize via INITIALIZING).
+
+
+How configuration tunes behaviour
+--------------------------------
+The FSM is configured by two YAML layers:
+
+1) config/state_parameters.yaml
+   - Per FSM-state fault block 
+   - Path to that state's profile file.
+
+2) config/profiles/<state>_profiles.yaml
+   - Contains the processes and rules for each profile in that FSM-state.
+   - Processes may define internal recovery/degraded actions and may escalate to a state fault.
+
+
+Operational notes
+-----------------
+- Add or change a subsystem:
+  1) Add/modify the process definition inside the relevant per-state profile YAML file.
+  2) Add per-process rosout triggers for RECOVER/DEGRADED/FAULT behavior as needed.
+  3) Use the state-level fault block in state_parameters.yaml for global safety triggers.

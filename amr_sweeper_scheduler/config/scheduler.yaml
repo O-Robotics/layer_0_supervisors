@@ -1,0 +1,38 @@
+amr_sweeper_scheduler:
+  ros__parameters:
+    # -- Mission Sources And Outputs ------------------------------------------
+    schedule_ics_path:              ''                   # Explicit schedule file path. Leave empty to auto-discover the newest schedule_<timestamp>.ics file in missions_directory. Default: empty string
+    missions_directory:             src/missions         # Folder containing schedule_<timestamp>.ics, incoming mission files, per-mission subfolders, and active runtime aliases. Default: src/missions
+    default_schedule_filename:      ''                   # Legacy fallback schedule filename if auto-discovery finds no schedule_<timestamp>.ics files. Default: empty string
+    mission_file_extension:         .json                # File suffix used when cataloging VDA5050 mission files. Default: .json
+    robot_id:                       RBT-01               # Robot identifier used to filter schedule entries. Default: RBT-01
+    mission_builder_node_name:      mission_builder_node # Mission builder node name used by the async parameter client. Default: mission_builder_node
+    mission_builder_build_service:  build_current_mission # Trigger service called when the active mission must be rebuilt. Default: build_current_mission
+    fsm_request_service:            request_state        # FSM service used to request the RUNNING transition. Default: request_state
+    active_costmap_output_basename: global_costmap       # Active runtime costmap alias basename expected at the /missions root. Default: global_costmap
+    active_route_output_basename:   active_mission_path  # Active runtime route alias basename expected at the /missions root. Default: active_mission_path
+    active_execution_pointer_filename: active_execution.json # Active runtime execution pointer written at the /missions root so RUNNING uses the exact scheduler-selected execution folder. Default: active_execution.json
+
+    # -- Runtime Cadence And FSM Handoff --------------------------------------
+    horizon_hours:                  72                   # Recurrence expansion horizon measured forward from now. Default: 72
+    running_profile_id:             201                  # FSM RUNNING profile requested when a mission window becomes runnable. Default: 201
+    tick_seconds:                   2.0                  # Scheduler publish and decision tick in seconds. Default: 2.0
+    trigger_running_on_work_window: true                 # Request RUNNING automatically when a valid WORK window is active. Default: true
+
+    # -- Schedule Reload Policy -----------------------------------------------
+    schedule_poll_interval_sec:     60.0                 # Filesystem poll period used to detect schedule changes. Default: 60.0
+    reload_on_mtime_change:         true                 # Reload the schedule when the file modification time changes. Default: true
+    reload_on_every_poll:           false                # Force a full reload on every poll cycle for diagnostics only. Default: false
+
+    # -- Validation -----------------------------------------------------------
+    strict_validation:              true                 # Fail the schedule load when required fields or values are invalid. Default: true
+    max_events:                     2000                 # Safety cap on parsed VEVENT count. Default: 2000
+    require_x_robot_id:             true                 # Require X-ROBOT-ID on every VEVENT. Default: true
+    require_x_schedule_type:        true                 # Require X-SCHEDULE-TYPE on every VEVENT. Default: true
+    require_x_mission_id_for_work:  true                 # Require X-MISSION-ID on WORK entries. Default: true
+
+    # -- FSM Monitoring Output ------------------------------------------------
+    emit_rosout_triggers:           true                 # Emit machine-parsable rosout triggers for FSM monitoring. Default: true
+    rosout_trigger_prefix:          FSM_TRIGGER          # Prefix attached to rosout and trigger-topic events. Default: FSM_TRIGGER
+    emit_trigger_topic:             true                 # Publish scheduler trigger events on a topic in addition to rosout. Default: true
+    trigger_topic_name:             scheduler_triggers   # Topic name for scheduler trigger events. Default: scheduler_triggers

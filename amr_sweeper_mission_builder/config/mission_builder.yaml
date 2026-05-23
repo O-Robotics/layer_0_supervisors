@@ -1,0 +1,14 @@
+mission_builder_node:
+  ros__parameters:
+    # -- Mission Sources And Outputs ------------------------------------------
+    mission_path:                 ''                             # Optional active mission path. Leave empty for auto-discovery until the scheduler selects a mission. Default: empty string
+    missions_directory:           src/missions                   # Folder containing incoming mission JSON files, per-mission subfolders, and active runtime aliases. Default: src/missions
+    mission_file_extension:       .json                          # Mission file suffix scanned when discovering new VDA5050 missions. Default: .json
+    costmap_output_basename:      global_costmap                 # Active runtime costmap alias basename written at the /missions root. Default: global_costmap
+    coverage_path_basename:       active_mission_path            # Active runtime route alias basename written at the /missions root. Default: active_mission_path
+
+    # -- Build Controls -------------------------------------------------------
+    mission_build_resolution:     0.1                            # Costmap raster resolution in meters per cell. Default: 0.1
+    mission_build_padding_meters: 2.0                            # Extra padding around the polygon envelope when exporting the costmap. Default: 2.0
+    auto_build_on_start:          true                           # Build the active mission immediately when the node starts. Default: true
+    watch_for_updates:            true                           # Keep scanning for new or changed mission files while IDLING. Default: true

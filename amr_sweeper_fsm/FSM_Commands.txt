@@ -1,0 +1,186 @@
+AMR Sweeper FSM - Commands and Interfaces
+========================================
+
+Assumptions
+-----------
+- Package: amr_sweeper_layer_0_fsm  (folder: /layer_0_supervisor/amr_sweeper_fsm)
+- Default namespace in launch: /amr_sweeper
+- Supervisor node name: supervisor (within namespace)
+- State nodes (LifecycleNodes): initializing_state, idling_state, running_state, charging_state, fault_state
+
+If you launch with a different namespace, replace '/amr_sweeper' accordingly.
+
+1) Build and launch
+-------------------
+Terminal A:
+  cd ~/rob_ws
+  source /opt/ros/jazzy/setup.bash
+  colcon build --packages-select amr_sweeper_layer_0_fsm
+  source install/setup.bash
+  ros2 launch amr_sweeper_layer_0_fsm amr_sweeper_layer_0_fsm.launch.py
+
+Arguments (pass arguments as '<name>:=<value>'):
+    'namespace': Top-level namespace for all FSM nodes. (default: 'amr_sweeper')
+    'use_sim_time': Use ROS time from /clock when true. (default: 'false')
+    'start_profile': Startup FSM profile id. (default: '001')
+    'tick_period_ms': Supervisor tick period in milliseconds. (default: '100')
+    'state_params_file': FSM state parameters YAML. Defines per-state profiles.
+      (default: '<package_share>/share/amr_sweeper_layer_0_fsm/config/state_parameters.yaml')
+
+"TEST"
+ros2 launch amr_sweeper_layer_0_fsm amr_sweeper_layer_0_fsm.launch.py start_profile:=000
+
+2) Discover ROS graph
+---------------------
+List nodes:
+  ros2 node list
+
+List topics:
+  ros2 topic list | sort
+
+List services:
+  ros2 service list | sort
+
+
+3) FSM control surface (Supervisor)
+-----------------------------------
+Service (relative name):
+  request_state
+
+Fully-qualified (default namespace):
+  /amr_sweeper/request_state
+
+Type:
+  amr_sweeper_layer_0_fsm/srv/RequestState
+
+Request fields (srv/RequestState.srv):
+--------------------------------------
+  string target_state
+  string target_lifecycle
+  uint16 target_profile_id
+  string requester
+  uint8  priority
+  bool   force
+  string reason
+  string mission_execution_directory
+
+
+Example: request RUNNING default (profile 200)
+
+  ros2 service call /amr_sweeper/request_state \
+    amr_sweeper_layer_0_fsm/srv/RequestState \
+    "{target_state: 'RUNNING',
+      target_lifecycle: '',
+      target_profile_id: 200,
+      requester: 'cli',
+      priority: 10,
+      force: false,
+      reason: 'test RUNNING default',
+      mission_execution_directory: ''}"
+
+
+Example: request RUNNING (profile 201)
+
+  ros2 service call /amr_sweeper/request_state \
+    amr_sweeper_layer_0_fsm/srv/RequestState \
+    "{target_state: 'RUNNING',
+      target_lifecycle: '',
+      target_profile_id: 201,
+      requester: 'cli',
+      priority: 10,
+      force: false,
+      reason: 'test RUNNING profile 201',
+      mission_execution_directory: '/abs/path/to/missions/order_20260523T120000Z/20260523T121500Z'}"
+
+Profile 201 runtime wiring:
+  - layer 1 hardware bringup (critical)
+  - layer 2 controllers bringup without joystick (critical)
+  - layer 3 localization/navigation/mapping bringup (critical)
+  - joystick launch as a separate optional process
+
+
+Example: request CHARGING default but keep lifecycle node Inactive (staging)
+
+  ros2 service call /amr_sweeper/request_state \
+    amr_sweeper_layer_0_fsm/srv/RequestState \
+    "{target_state: 'CHARGING',
+      target_lifecycle: 'Inactive',
+      target_profile_id: 300,
+      requester: 'cli',
+      priority: 10,
+      force: false,
+      reason: 'stage CHARGING Inactive'}"
+
+
+Notes on priority / force
+-------------------------
+- priority (uint8): higher value wins when multiple requests arrive.
+- force (bool): bypasses supervisor guard checks and forces the desired target.
+
+
+4) FSM observation (Supervisor publishers)
+------------------------------------------
+
+Topic 1: fsm_state
+  Type: amr_sweeper_layer_0_fsm/msg/FSMState
+  Default fully-qualified: /amr_sweeper/fsm_state
+
+  ros2 topic echo /amr_sweeper/fsm_state
+
+
+Topic 2: fsm_status
+  Type: amr_sweeper_layer_0_fsm/msg/FSMStatus
+  Default fully-qualified: /amr_sweeper/fsm_status
+
+  ros2 topic echo /amr_sweeper/fsm_status
+
+
+5) Lifecycle services (state nodes)
+-----------------------------------
+
+Each state node is a ROS2 LifecycleNode and exposes standard lifecycle services, e.g.:
+  /amr_sweeper/running_state/get_state
+  /amr_sweeper/running_state/change_state
+  /amr_sweeper/running_state/get_available_transitions
+  ...
+
+Debug lifecycle state (do not use as primary control path):
+  ros2 lifecycle get /amr_sweeper/running_state
+  ros2 lifecycle get /amr_sweeper/idling_state
+
+
+Force a lifecycle transition directly (debug only; bypasses supervisor arbitration):
+  ros2 lifecycle set /amr_sweeper/running_state configure
+  ros2 lifecycle set /amr_sweeper/running_state activate
+
+
+
+5) Test script
+--------------
+File (from ws): ./src/tests/amr_sweeper_fsm/amr_sweeper_layer_0_fsm.tests.py
+
+A) Single request (wait for settle):
+  ./src/tests/amr_sweeper_fsm/amr_sweeper_layer_0_fsm.tests.py --namespace amr_sweeper --target RUNNING --wait
+
+B) Sequence with dwell times:
+  ./src/tests/amr_sweeper_fsm/amr_sweeper_layer_0_fsm.tests.py --namespace amr_sweeper --sequence IDLING:2,RUNNING:5,CHARGING:5 --wait
+
+C) Force FAULT with high priority:
+  ./src/tests/amr_sweeper_fsm/amr_sweeper_layer_0_fsm.tests.py --namespace amr_sweeper --target FAULT --priority 200 --force --reason "e-stop" --wait
+
+
+
+7) Troubleshooting
+------------------
+
+If service calls hang:
+  ros2 service list | grep request_state
+
+Verify namespace and that supervisor is running.
+
+If status topics are not present:
+  ros2 topic list | grep fsm_state
+
+If transitions fail:
+  Monitor fsm_status for transitioning_to_profile=FAILED
+  Inspect last_message for root cause.
