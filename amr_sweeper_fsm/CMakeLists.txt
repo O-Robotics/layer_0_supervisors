@@ -135,14 +135,23 @@ add_dependencies(fault_state_node ${PROJECT_NAME})
 # -----------------------------
 # FSM tester node executable (test utility)
 # -----------------------------
-add_executable(fsm_tester_node
-  ../../tests/amr_sweeper_fsm/fsm_tester_node.cpp
-)
+set(FSM_TESTER_NODE_SOURCE
+  "${CMAKE_CURRENT_SOURCE_DIR}/../../tests/amr_sweeper_fsm/fsm_tester_node.cpp")
 
-ament_target_dependencies(fsm_tester_node
-  rclcpp
-  std_msgs
-)
+if(EXISTS "${FSM_TESTER_NODE_SOURCE}")
+  add_executable(fsm_tester_node
+    "${FSM_TESTER_NODE_SOURCE}"
+  )
+
+  ament_target_dependencies(fsm_tester_node
+    rclcpp
+    std_msgs
+  )
+else()
+  message(WARNING
+    "Skipping fsm_tester_node because the shared test source was not found at "
+    "${FSM_TESTER_NODE_SOURCE}")
+endif()
 
 
 # -----------------------------
@@ -156,11 +165,19 @@ install(TARGETS
   running_state_node
   charging_state_node
   fault_state_node
-  fsm_tester_node
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
+
+if(TARGET fsm_tester_node)
+  install(TARGETS
+    fsm_tester_node
+    ARCHIVE DESTINATION lib
+    LIBRARY DESTINATION lib
+    RUNTIME DESTINATION lib/${PROJECT_NAME}
+  )
+endif()
 
 install(DIRECTORY include/
   DESTINATION include
