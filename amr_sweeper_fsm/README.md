@@ -43,9 +43,6 @@ amr_sweeper_layer_0_fsm/
 │   │   ├── state_node_base.cpp
 │   │   └── process_manager.cpp
 │   └── <state implementations>
-└── ../../tests/amr_sweeper_fsm/
-    ├── fsm_tester_node.cpp
-    └── amr_sweeper_layer_0_fsm.tests.py
 ```
 
 ---

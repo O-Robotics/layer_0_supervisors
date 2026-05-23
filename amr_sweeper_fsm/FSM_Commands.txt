@@ -153,23 +153,6 @@ Force a lifecycle transition directly (debug only; bypasses supervisor arbitrati
   ros2 lifecycle set /amr_sweeper/running_state configure
   ros2 lifecycle set /amr_sweeper/running_state activate
 
-
-
-5) Test script
---------------
-File (from ws): ./src/tests/amr_sweeper_fsm/amr_sweeper_layer_0_fsm.tests.py
-
-A) Single request (wait for settle):
-  ./src/tests/amr_sweeper_fsm/amr_sweeper_layer_0_fsm.tests.py --namespace amr_sweeper --target RUNNING --wait
-
-B) Sequence with dwell times:
-  ./src/tests/amr_sweeper_fsm/amr_sweeper_layer_0_fsm.tests.py --namespace amr_sweeper --sequence IDLING:2,RUNNING:5,CHARGING:5 --wait
-
-C) Force FAULT with high priority:
-  ./src/tests/amr_sweeper_fsm/amr_sweeper_layer_0_fsm.tests.py --namespace amr_sweeper --target FAULT --priority 200 --force --reason "e-stop" --wait
-
-
-
 7) Troubleshooting
 ------------------
 
