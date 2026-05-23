@@ -22,7 +22,7 @@ profiles:
         - name: "fsm_tester"
           importance: "critical"
           startup:
-            exec: "ros2 run amr_sweeper_layer_0_fsm fsm_tester_node"
+            exec: "ros2 run amr_sweeper_fsm fsm_tester_node"
             args:
               - "--ros-args -r __ns:=/amr_sweeper"
               - "-p exit_after_ms:=2000"

@@ -14,7 +14,7 @@
 #include <std_msgs/msg/string.hpp>
 #include <std_srvs/srv/trigger.hpp>
 
-#include "amr_sweeper_layer_0_fsm/srv/request_state.hpp"
+#include "amr_sweeper_fsm/srv/request_state.hpp"
 
 namespace amr_sweeper_scheduler
 {
@@ -142,7 +142,7 @@ private:
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr reload_srv_;
   rclcpp::AsyncParametersClient::SharedPtr mission_builder_parameter_client_;
   rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr mission_builder_build_client_;
-  rclcpp::Client<amr_sweeper_layer_0_fsm::srv::RequestState>::SharedPtr fsm_request_client_;
+  rclcpp::Client<amr_sweeper_fsm::srv::RequestState>::SharedPtr fsm_request_client_;
   std::unique_ptr<IcalParser> parser_;
   std::unique_ptr<ScheduleExpander> expander_;
   ScheduleModel schedule_;

@@ -8,7 +8,7 @@ endif()
 set(CMAKE_CXX_STANDARD 17)
 
 find_package(ament_cmake REQUIRED)
-find_package(amr_sweeper_layer_0_fsm REQUIRED)
+find_package(amr_sweeper_fsm REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
 find_package(rcl_interfaces REQUIRED)
@@ -23,7 +23,7 @@ target_include_directories(scheduler_node PUBLIC
   $<INSTALL_INTERFACE:include>
 )
 ament_target_dependencies(scheduler_node
-  amr_sweeper_layer_0_fsm
+  amr_sweeper_fsm
   rclcpp
   rclcpp_lifecycle
   rcl_interfaces

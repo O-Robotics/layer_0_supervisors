@@ -1,9 +1,9 @@
-# amr_sweeper_layer_0_fsm
+# amr_sweeper_fsm
 
 ROS 2 package that implements a **robot-level finite state machine (FSM)** using:
 
 ```bash
-ros2 launch amr_sweeper_layer_0_fsm amr_sweeper_layer_0_fsm.launch.py
+ros2 launch amr_sweeper_fsm amr_sweeper_fsm.launch.py
 ```
 
 - a non-lifecycle **supervisor** node (`supervisor_node`), and
@@ -21,9 +21,9 @@ The supervisor accepts state-change requests (with priority metadata), drives RO
 ## Repository layout (as shipped)
 
 ```
-amr_sweeper_layer_0_fsm/
+amr_sweeper_fsm/
 ├── launch/
-│   └── amr_sweeper_layer_0_fsm.launch.py
+│   └── amr_sweeper_fsm.launch.py
 ├── config/
 │   ├── state_parameters.yaml
 │   └── profiles/
@@ -52,12 +52,12 @@ amr_sweeper_layer_0_fsm/
 The primary launch file starts the supervisor and all lifecycle state nodes:
 
 ```bash
-ros2 launch amr_sweeper_layer_0_fsm amr_sweeper_layer_0_fsm.launch.py
+ros2 launch amr_sweeper_fsm amr_sweeper_fsm.launch.py
 ```
 
 ### Launch arguments
 
-`launch/amr_sweeper_layer_0_fsm.launch.py` defines the following launch arguments:
+`launch/amr_sweeper_fsm.launch.py` defines the following launch arguments:
 
 - `namespace` (default: `amr_sweeper`)  
   Top-level namespace for all nodes.
@@ -73,12 +73,12 @@ ros2 launch amr_sweeper_layer_0_fsm amr_sweeper_layer_0_fsm.launch.py
 
 - `state_params_file` (default: `<package_share>/config/state_parameters.yaml`)  
   ROS parameters file for supervisor + state nodes. The default is resolved with
-  `ament_index_python.get_package_share_directory("amr_sweeper_layer_0_fsm")`.
+  `ament_index_python.get_package_share_directory("amr_sweeper_fsm")`.
 
 Example (5 second tick, start profile 201, custom namespace):
 
 ```bash
-ros2 launch amr_sweeper_layer_0_fsm amr_sweeper_layer_0_fsm.launch.py \
+ros2 launch amr_sweeper_fsm amr_sweeper_fsm.launch.py \
   namespace:=robot1 \
   start_profile:=201 \
   tick_period_ms:=5000
@@ -95,8 +95,8 @@ This single ROS parameters file configures:
 - **Supervisor publish rules** under `/**/supervisor.ros__parameters.publish.rules`.
 
   In the provided default config, the supervisor publishes:
-  - `fsm_state` (`amr_sweeper_layer_0_fsm/msg/FSMState`)
-  - `fsm_status` (`amr_sweeper_layer_0_fsm/msg/FSMStatus`)
+  - `fsm_state` (`amr_sweeper_fsm/msg/FSMState`)
+  - `fsm_status` (`amr_sweeper_fsm/msg/FSMStatus`)
 
   (These are *relative* names; with the default namespace they become:
   `/amr_sweeper/fsm_state` and `/amr_sweeper/fsm_status`.)
@@ -140,12 +140,12 @@ The default profile wiring is now:
 
 Message definitions live in `msg/`:
 
-- `amr_sweeper_layer_0_fsm/msg/FSMState`
+- `amr_sweeper_fsm/msg/FSMState`
   - `stamp`
   - `current_state` (string like `"RUNNING"`)
   - `current_profile` (uint16)
 
-- `amr_sweeper_layer_0_fsm/msg/FSMStatus`
+- `amr_sweeper_fsm/msg/FSMStatus`
   - `stamp`
   - `current_state`
   - `current_lifecycle_state`
@@ -175,7 +175,7 @@ Request fields include:
 Example:
 
 ```bash
-ros2 service call /amr_sweeper/request_state amr_sweeper_layer_0_fsm/srv/RequestState "{target_state: 'RUNNING', target_lifecycle: 'Active', target_profile_id: 200, requester: 'cli', priority: 200, force: false, reason: 'manual switch', mission_execution_directory: '/abs/path/to/missions/order_20260523T120000Z/20260523T121500Z'}"
+ros2 service call /amr_sweeper/request_state amr_sweeper_fsm/srv/RequestState "{target_state: 'RUNNING', target_lifecycle: 'Active', target_profile_id: 200, requester: 'cli', priority: 200, force: false, reason: 'manual switch', mission_execution_directory: '/abs/path/to/missions/order_20260523T120000Z/20260523T121500Z'}"
 ```
 
 ---
@@ -216,7 +216,7 @@ ros2 lifecycle get /amr_sweeper/initializing_state
 Typical colcon build:
 
 ```bash
-colcon build --packages-select amr_sweeper_layer_0_fsm
+colcon build --packages-select amr_sweeper_fsm
 source install/setup.bash
 ```
 

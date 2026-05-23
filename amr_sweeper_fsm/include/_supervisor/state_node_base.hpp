@@ -1,6 +1,6 @@
 #pragma once
 
-#include "amr_sweeper_layer_0_fsm/srv/request_state.hpp"
+#include "amr_sweeper_fsm/srv/request_state.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -281,7 +281,7 @@ private:
   rclcpp::Subscription<rcl_interfaces::msg::Log>::SharedPtr rosout_sub_;
   bool fault_requested_{false};
 
-  rclcpp::Client<amr_sweeper_layer_0_fsm::srv::RequestState>::SharedPtr request_state_client_;
+  rclcpp::Client<amr_sweeper_fsm::srv::RequestState>::SharedPtr request_state_client_;
 
   std::string request_state_service_{"request_state"};
   uint8_t fault_priority_{250};

@@ -593,7 +593,7 @@ SchedulerNode::SchedulerNode(const rclcpp::NodeOptions & options)
     std::make_shared<rclcpp::AsyncParametersClient>(this, mission_builder_node_name_);
   mission_builder_build_client_ = create_client<std_srvs::srv::Trigger>(
     mission_builder_build_service_);
-  fsm_request_client_ = create_client<amr_sweeper_layer_0_fsm::srv::RequestState>(
+  fsm_request_client_ = create_client<amr_sweeper_fsm::srv::RequestState>(
     fsm_request_service_);
 
   reload_srv_ = create_service<std_srvs::srv::Trigger>(
@@ -1016,7 +1016,7 @@ void SchedulerNode::request_running_state(const TimeWindow & window)
   }
 
   running_request_in_flight_ = true;
-  auto request = std::make_shared<amr_sweeper_layer_0_fsm::srv::RequestState::Request>();
+  auto request = std::make_shared<amr_sweeper_fsm::srv::RequestState::Request>();
   request->target_state = "RUNNING";
   request->target_lifecycle = "Active";
   request->target_profile_id = static_cast<std::uint16_t>(running_profile_id_);
@@ -1032,7 +1032,7 @@ void SchedulerNode::request_running_state(const TimeWindow & window)
   fsm_request_client_->async_send_request(
     request,
     [this, window](
-      rclcpp::Client<amr_sweeper_layer_0_fsm::srv::RequestState>::SharedFuture response_future)
+      rclcpp::Client<amr_sweeper_fsm::srv::RequestState>::SharedFuture response_future)
     {
       running_request_in_flight_ = false;
       const auto response = response_future.get();

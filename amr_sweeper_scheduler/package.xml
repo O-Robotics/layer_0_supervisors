@@ -10,7 +10,7 @@
 
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
-  <depend>amr_sweeper_layer_0_fsm</depend>
+  <depend>amr_sweeper_fsm</depend>
   <depend>rclcpp</depend>
   <depend>rclcpp_lifecycle</depend>
   <depend>rcl_interfaces</depend>

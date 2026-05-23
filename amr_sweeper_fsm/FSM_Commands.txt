@@ -3,7 +3,7 @@ AMR Sweeper FSM - Commands and Interfaces
 
 Assumptions
 -----------
-- Package: amr_sweeper_layer_0_fsm  (folder: /layer_0_supervisors/amr_sweeper_fsm)
+- Package: amr_sweeper_fsm  (folder: /layer_0_supervisors/amr_sweeper_fsm)
 - Default namespace in launch: /amr_sweeper
 - Supervisor node name: supervisor (within namespace)
 - State nodes (LifecycleNodes): initializing_state, idling_state, running_state, charging_state, fault_state
@@ -15,9 +15,9 @@ If you launch with a different namespace, replace '/amr_sweeper' accordingly.
 Terminal A:
   cd ~/rob_ws
   source /opt/ros/jazzy/setup.bash
-  colcon build --packages-select amr_sweeper_layer_0_fsm
+  colcon build --packages-select amr_sweeper_fsm
   source install/setup.bash
-  ros2 launch amr_sweeper_layer_0_fsm amr_sweeper_layer_0_fsm.launch.py
+  ros2 launch amr_sweeper_fsm amr_sweeper_fsm.launch.py
 
 Arguments (pass arguments as '<name>:=<value>'):
     'namespace': Top-level namespace for all FSM nodes. (default: 'amr_sweeper')
@@ -25,10 +25,10 @@ Arguments (pass arguments as '<name>:=<value>'):
     'start_profile': Startup FSM profile id. (default: '001')
     'tick_period_ms': Supervisor tick period in milliseconds. (default: '100')
     'state_params_file': FSM state parameters YAML. Defines per-state profiles.
-      (default: '<package_share>/share/amr_sweeper_layer_0_fsm/config/state_parameters.yaml')
+      (default: '<package_share>/share/amr_sweeper_fsm/config/state_parameters.yaml')
 
 "TEST"
-ros2 launch amr_sweeper_layer_0_fsm amr_sweeper_layer_0_fsm.launch.py start_profile:=000
+ros2 launch amr_sweeper_fsm amr_sweeper_fsm.launch.py start_profile:=000
 
 2) Discover ROS graph
 ---------------------
@@ -51,7 +51,7 @@ Fully-qualified (default namespace):
   /amr_sweeper/request_state
 
 Type:
-  amr_sweeper_layer_0_fsm/srv/RequestState
+  amr_sweeper_fsm/srv/RequestState
 
 Request fields (srv/RequestState.srv):
 --------------------------------------
@@ -68,7 +68,7 @@ Request fields (srv/RequestState.srv):
 Example: request RUNNING default (profile 200)
 
   ros2 service call /amr_sweeper/request_state \
-    amr_sweeper_layer_0_fsm/srv/RequestState \
+    amr_sweeper_fsm/srv/RequestState \
     "{target_state: 'RUNNING',
       target_lifecycle: '',
       target_profile_id: 200,
@@ -82,7 +82,7 @@ Example: request RUNNING default (profile 200)
 Example: request RUNNING (profile 201)
 
   ros2 service call /amr_sweeper/request_state \
-    amr_sweeper_layer_0_fsm/srv/RequestState \
+    amr_sweeper_fsm/srv/RequestState \
     "{target_state: 'RUNNING',
       target_lifecycle: '',
       target_profile_id: 201,
@@ -102,7 +102,7 @@ Profile 201 runtime wiring:
 Example: request CHARGING default but keep lifecycle node Inactive (staging)
 
   ros2 service call /amr_sweeper/request_state \
-    amr_sweeper_layer_0_fsm/srv/RequestState \
+    amr_sweeper_fsm/srv/RequestState \
     "{target_state: 'CHARGING',
       target_lifecycle: 'Inactive',
       target_profile_id: 300,
@@ -122,14 +122,14 @@ Notes on priority / force
 ------------------------------------------
 
 Topic 1: fsm_state
-  Type: amr_sweeper_layer_0_fsm/msg/FSMState
+  Type: amr_sweeper_fsm/msg/FSMState
   Default fully-qualified: /amr_sweeper/fsm_state
 
   ros2 topic echo /amr_sweeper/fsm_state
 
 
 Topic 2: fsm_status
-  Type: amr_sweeper_layer_0_fsm/msg/FSMStatus
+  Type: amr_sweeper_fsm/msg/FSMStatus
   Default fully-qualified: /amr_sweeper/fsm_status
 
   ros2 topic echo /amr_sweeper/fsm_status
