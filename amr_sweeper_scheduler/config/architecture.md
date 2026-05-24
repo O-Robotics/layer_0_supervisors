@@ -15,11 +15,19 @@
   - expands time windows within `horizon_hours`
   - applies `NO_WORK` blackout filtering
   - resolves `X-MISSION-ID` values to VDA5050 mission files in `/missions`
-  - checks whether the selected mission artifacts are ready
-  - calls `amr_sweeper_mission_builder/build_current_mission` when the mission must be rebuilt
-  - requests the FSM transition to `RUNNING` when a valid WORK window is active and runnable
+  - asks `amr_sweeper_mission_executor/execute_mission` to handle scheduled mission activation
+  - exposes a compatibility `prepare_mission_execution` API that forwards manual preparation into `amr_sweeper_mission_executor/prepare_manual_mission`
   - publishes planned windows as JSON for downstream mission execution
   - emits FSM triggers on load and validation events
+
+- `MissionExecutorNode`
+  - accepts scheduled execution requests from the scheduler
+  - accepts external/manual mission activation requests
+  - classifies missions into scheduled, manual mapping, manual routed, and teleoperation flows
+  - checks whether VDA5050 mission artifacts are ready
+  - calls `amr_sweeper_vda5050_parser/build_current_mission` when a scheduled mission must be rebuilt
+  - prepares execution folders and active aliases
+  - requests the FSM transition to the correct `RUNNING` profile
 
 - `IcalParserMinimal`
   - parses the strict RFC 5545 subset used by the robot schedule
@@ -34,3 +42,4 @@
 - topic `planned_windows` (`std_msgs/String`): JSON payload of expanded schedule windows
 - topic `<trigger_topic_name>` (`std_msgs/String`): optional FSM monitoring events
 - service `reload_schedule` (`std_srvs/Trigger`): immediate schedule reload
+- service `prepare_mission_execution` (`amr_sweeper_scheduler/PrepareMissionExecution`): compatibility manual preparation API forwarded to the mission executor

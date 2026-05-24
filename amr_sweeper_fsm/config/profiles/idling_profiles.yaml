@@ -104,10 +104,10 @@ profiles:
             sigterm_timeout_ms: 1000
             sigkill_timeout_ms: 1000
 
-        - name: "amr_sweeper_mission_builder"
+        - name: "amr_sweeper_vda5050_parser"
           importance: "degraded"
           startup:
-            exec: "ros2 launch amr_sweeper_mission_builder mission_builder.launch.py"
+            exec: "ros2 launch amr_sweeper_vda5050_parser mission_parser.launch.py"
             args:
               - "namespace:={ns}"
               - "use_sim_time:=false"
@@ -116,11 +116,11 @@ profiles:
               - "watch_for_updates:=true"
             ready:
               - type: "service"
-                target: "mission_builder_node/get_parameters"
+                target: "mission_parser_node/get_parameters"
                 required: true
             window_ms: 6000
           rosout_triggers:
-            - "node=mission_builder_node;level>=ERROR;action=DEGRADED"
+            - "node=mission_parser_node;level>=ERROR;action=DEGRADED"
           errors:
             on_readiness_fail: "DEGRADED"
             on_unexpected_exit: "DEGRADED"

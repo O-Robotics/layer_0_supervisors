@@ -14,7 +14,8 @@
 #include <std_msgs/msg/string.hpp>
 #include <std_srvs/srv/trigger.hpp>
 
-#include "amr_sweeper_fsm/srv/request_state.hpp"
+#include "amr_sweeper_mission_executor/srv/execute_mission.hpp"
+#include "amr_sweeper_mission_executor/srv/prepare_manual_mission.hpp"
 #include "amr_sweeper_scheduler/srv/prepare_mission_execution.hpp"
 
 namespace amr_sweeper_scheduler
@@ -23,7 +24,8 @@ namespace amr_sweeper_scheduler
 enum class ScheduleType
 {
   WORK,
-  NO_WORK
+  NO_WORK,
+  SAFETY
 };
 
 std::optional<ScheduleType> schedule_type_from_string(const std::string & value);
@@ -116,23 +118,8 @@ private:
   void refresh_mission_catalog();
   void publish_windows(const std::vector<TimeWindow> & windows);
   void maybe_promote_mission(const std::vector<TimeWindow> & windows);
-  void request_mission_build(const std::string & mission_path);
   [[nodiscard]] bool mission_json_or_folder_exists(const std::string & mission_id) const;
-  [[nodiscard]] bool prepare_active_mission_execution(const TimeWindow & window);
-  [[nodiscard]] bool prepare_mission_execution(
-    const std::string & mission_id,
-    const std::string & mission_path,
-    const std::string & window_start,
-    const std::string & window_end);
-  void request_running_state(const TimeWindow & window);
-  [[nodiscard]] bool mission_artifacts_ready(const std::string & mission_path) const;
-  [[nodiscard]] std::string mission_costmap_yaml_path(const std::string & mission_path) const;
-  [[nodiscard]] std::string mission_route_path(const std::string & mission_path) const;
-  [[nodiscard]] std::filesystem::path mission_folder_path(const std::string & mission_path) const;
-  [[nodiscard]] std::string mission_costmap_image_path(const std::string & mission_path) const;
-  [[nodiscard]] std::string active_costmap_image_path() const;
-  [[nodiscard]] std::string active_route_path() const;
-  [[nodiscard]] std::string active_costmap_yaml_path() const;
+  void request_mission_execution(const TimeWindow & window);
   [[nodiscard]] std::string resolved_schedule_path() const;
   [[nodiscard]] std::optional<std::filesystem::path> discover_latest_schedule_path() const;
   [[nodiscard]] std::optional<std::string> resolve_mission_path(
@@ -148,9 +135,10 @@ private:
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr reload_srv_;
   rclcpp::Service<amr_sweeper_scheduler::srv::PrepareMissionExecution>::SharedPtr
     prepare_mission_execution_srv_;
-  rclcpp::AsyncParametersClient::SharedPtr mission_builder_parameter_client_;
-  rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr mission_builder_build_client_;
-  rclcpp::Client<amr_sweeper_fsm::srv::RequestState>::SharedPtr fsm_request_client_;
+  rclcpp::Client<amr_sweeper_mission_executor::srv::ExecuteMission>::SharedPtr
+    mission_executor_execute_client_;
+  rclcpp::Client<amr_sweeper_mission_executor::srv::PrepareManualMission>::SharedPtr
+    mission_executor_prepare_client_;
   std::unique_ptr<IcalParser> parser_;
   std::unique_ptr<ScheduleExpander> expander_;
   ScheduleModel schedule_;
@@ -160,14 +148,9 @@ private:
   std::string default_schedule_filename_;
   std::string mission_file_extension_;
   std::string robot_id_;
-  std::string mission_builder_node_name_;
-  std::string mission_builder_build_service_;
-  std::string fsm_request_service_;
-  std::string active_costmap_output_basename_;
-  std::string active_route_output_basename_;
-  std::string active_execution_pointer_filename_;
+  std::string mission_executor_execute_service_;
+  std::string mission_executor_prepare_service_;
   int horizon_hours_{72};
-  int running_profile_id_{201};
   double tick_seconds_{1.0};
   bool trigger_running_on_work_window_{true};
   double schedule_poll_interval_sec_{60.0};
@@ -177,12 +160,7 @@ private:
   std::string rosout_trigger_prefix_{"FSM_TRIGGER"};
   bool emit_trigger_topic_{true};
   std::string trigger_topic_name_{"scheduler_triggers"};
-  bool mission_build_in_flight_{false};
   bool running_request_in_flight_{false};
-  std::string mission_build_target_;
-  std::string prepared_active_mission_;
-  std::string prepared_active_window_uid_;
-  std::string prepared_execution_directory_;
   std::string running_request_window_uid_;
   std::optional<std::time_t> last_mtime_;
   std::unordered_map<std::string, std::string> mission_catalog_;

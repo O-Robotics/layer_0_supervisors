@@ -1,4 +1,4 @@
-mission_builder_node:
+mission_parser_node:
   ros__parameters:
     # -- Mission Sources And Outputs ------------------------------------------
     mission_path:                 ''                             # Optional active mission path. Leave empty for auto-discovery until the scheduler selects a mission. Default: empty string

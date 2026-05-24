@@ -14,13 +14,8 @@ def generate_launch_description():
     default_schedule_filename = LaunchConfiguration("default_schedule_filename")
     mission_file_extension = LaunchConfiguration("mission_file_extension")
     robot_id = LaunchConfiguration("robot_id")
-    mission_builder_node_name = LaunchConfiguration("mission_builder_node_name")
-    mission_builder_build_service = LaunchConfiguration("mission_builder_build_service")
-    fsm_request_service = LaunchConfiguration("fsm_request_service")
-    active_costmap_output_basename = LaunchConfiguration("active_costmap_output_basename")
-    active_route_output_basename = LaunchConfiguration("active_route_output_basename")
-    active_execution_pointer_filename = LaunchConfiguration("active_execution_pointer_filename")
-    running_profile_id = LaunchConfiguration("running_profile_id")
+    mission_executor_execute_service = LaunchConfiguration("mission_executor_execute_service")
+    mission_executor_prepare_service = LaunchConfiguration("mission_executor_prepare_service")
     trigger_running_on_work_window = LaunchConfiguration("trigger_running_on_work_window")
     config_file = PathJoinSubstitution(
         [FindPackageShare("amr_sweeper_scheduler"), "config", "scheduler.yaml"]
@@ -34,13 +29,8 @@ def generate_launch_description():
         DeclareLaunchArgument("default_schedule_filename", default_value=""),
         DeclareLaunchArgument("mission_file_extension", default_value=".json"),
         DeclareLaunchArgument("robot_id", default_value="RBT-01"),
-        DeclareLaunchArgument("mission_builder_node_name", default_value="mission_builder_node"),
-        DeclareLaunchArgument("mission_builder_build_service", default_value="build_current_mission"),
-        DeclareLaunchArgument("fsm_request_service", default_value="request_state"),
-        DeclareLaunchArgument("active_costmap_output_basename", default_value="global_costmap"),
-        DeclareLaunchArgument("active_route_output_basename", default_value="active_mission_path"),
-        DeclareLaunchArgument("active_execution_pointer_filename", default_value="active_execution.json"),
-        DeclareLaunchArgument("running_profile_id", default_value="201"),
+        DeclareLaunchArgument("mission_executor_execute_service", default_value="execute_mission"),
+        DeclareLaunchArgument("mission_executor_prepare_service", default_value="prepare_manual_mission"),
         DeclareLaunchArgument("trigger_running_on_work_window", default_value="true"),
         Node(
             package="amr_sweeper_scheduler",
@@ -57,13 +47,8 @@ def generate_launch_description():
                     "default_schedule_filename": default_schedule_filename,
                     "mission_file_extension": mission_file_extension,
                     "robot_id": robot_id,
-                    "mission_builder_node_name": mission_builder_node_name,
-                    "mission_builder_build_service": mission_builder_build_service,
-                    "fsm_request_service": fsm_request_service,
-                    "active_costmap_output_basename": active_costmap_output_basename,
-                    "active_route_output_basename": active_route_output_basename,
-                    "active_execution_pointer_filename": active_execution_pointer_filename,
-                    "running_profile_id": running_profile_id,
+                    "mission_executor_execute_service": mission_executor_execute_service,
+                    "mission_executor_prepare_service": mission_executor_prepare_service,
                     "trigger_running_on_work_window": trigger_running_on_work_window,
                 },
             ],

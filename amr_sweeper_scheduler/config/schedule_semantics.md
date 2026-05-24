@@ -26,7 +26,7 @@
 
 - A WORK window is actionable only when its mission file resolves in `/missions`.
 - If the mission exists but its generated artifacts are missing or stale, the scheduler asks
-  `amr_sweeper_mission_builder` to rebuild the mission before requesting `RUNNING`.
+  `amr_sweeper_vda5050_parser` to rebuild the mission before requesting `RUNNING`.
 
 ## Time zone
 

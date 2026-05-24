@@ -14,7 +14,7 @@
 #include <std_msgs/msg/string.hpp>
 #include <std_srvs/srv/trigger.hpp>
 
-namespace amr_sweeper_mission_builder
+namespace amr_sweeper_vda5050_parser
 {
 
 struct GeoPoint
@@ -86,7 +86,7 @@ struct MissionIdentity
   std::string stem;
 };
 
-class Vda5050MissionBuilder
+class Vda5050MissionParser
 {
 public:
   void loadMission(const Vda5050MissionBuildConfig & config);
@@ -144,10 +144,10 @@ private:
   GeographicLib::LocalCartesian projector_;
 };
 
-class MissionBuilderNode : public rclcpp::Node
+class MissionParserNode : public rclcpp::Node
 {
 public:
-  explicit MissionBuilderNode(const rclcpp::NodeOptions & options = rclcpp::NodeOptions());
+  explicit MissionParserNode(const rclcpp::NodeOptions & options = rclcpp::NodeOptions());
 
 private:
   void buildIfNeeded();
@@ -187,10 +187,10 @@ private:
   bool watch_for_updates_{true};
   std::filesystem::path last_active_alias_mission_;
   std::map<std::string, std::filesystem::file_time_type> mission_build_stamps_;
-  std::unique_ptr<Vda5050MissionBuilder> mission_builder_;
+  std::unique_ptr<Vda5050MissionParser> mission_parser_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr status_publisher_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr build_current_mission_service_;
   rclcpp::TimerBase::SharedPtr build_timer_;
 };
 
-}  // namespace amr_sweeper_mission_builder
+}  // namespace amr_sweeper_vda5050_parser

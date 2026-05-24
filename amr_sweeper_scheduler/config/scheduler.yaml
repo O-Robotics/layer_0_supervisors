@@ -6,16 +6,11 @@ amr_sweeper_scheduler:
     default_schedule_filename:      ''                   # Legacy fallback schedule filename if auto-discovery finds no schedule_<timestamp>.ics files. Default: empty string
     mission_file_extension:         .json                # File suffix used when cataloging VDA5050 mission files. Default: .json
     robot_id:                       RBT-01               # Robot identifier used to filter schedule entries. Default: RBT-01
-    mission_builder_node_name:      mission_builder_node # Mission builder node name used by the async parameter client. Default: mission_builder_node
-    mission_builder_build_service:  build_current_mission # Trigger service called when the active mission must be rebuilt. Default: build_current_mission
-    fsm_request_service:            request_state        # FSM service used to request the RUNNING transition. Default: request_state
-    active_costmap_output_basename: global_costmap       # Active runtime costmap alias basename expected at the /missions root. Default: global_costmap
-    active_route_output_basename:   active_mission_path  # Active runtime route alias basename expected at the /missions root. Default: active_mission_path
-    active_execution_pointer_filename: active_execution.json # Active runtime execution pointer written at the /missions root so RUNNING uses the exact scheduler-selected execution folder. Default: active_execution.json
+    mission_executor_execute_service: execute_mission    # Mission executor service used to build, prepare, and activate scheduled missions in the correct RUNNING profile. Default: execute_mission
+    mission_executor_prepare_service: prepare_manual_mission # Mission executor service used by the compatibility prepare_mission_execution API for manual missions. Default: prepare_manual_mission
 
     # -- Runtime Cadence And FSM Handoff --------------------------------------
     horizon_hours:                  72                   # Recurrence expansion horizon measured forward from now. Default: 72
-    running_profile_id:             201                  # FSM RUNNING profile requested when a mission window becomes runnable. Default: 201
     tick_seconds:                   2.0                  # Scheduler publish and decision tick in seconds. Default: 2.0
     trigger_running_on_work_window: true                 # Request RUNNING automatically when a valid WORK window is active. Default: true
 

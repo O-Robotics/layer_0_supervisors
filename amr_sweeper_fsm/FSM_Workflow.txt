@@ -62,15 +62,17 @@ State behaviour (design intent)
 INITIALIZING
   - Perform a full startup systems check.
   - The default startup profile validates layer 1 hardware, layer 2 controllers, layer 3 localization/navigation/mapping,
-    plus mission-builder and scheduler readiness.
+    plus mission-parser and scheduler readiness.
   - Only requests the next FSM-state (typically IDLING) when those required checks pass; otherwise requests FAULT.
 
 IDLING
   - Robot is safe and ready.
   - Runs mission preparation in the background.
-  - `amr_sweeper_mission_builder` watches `/missions` for new or changed VDA5050 missions and keeps artifacts updated.
-  - `amr_sweeper_scheduler` watches the `/missions` schedule, checks mission readiness, requests a mission build when needed,
-    and asks the supervisor to enter RUNNING when a valid WORK window becomes active.
+  - `amr_sweeper_vda5050_parser` watches `/missions` for new or changed VDA5050 missions and keeps artifacts updated.
+  - `amr_sweeper_scheduler` watches the `/missions` schedule and asks the supervisor to enter RUNNING when a valid
+    WORK window becomes active.
+  - `amr_sweeper_mission_executor` owns build-on-demand, execution-folder preparation, active-alias refresh, and
+    RUNNING-profile routing for both scheduled and manual missions.
 
 RUNNING
   - Autonomous mission execution / sweeping behavior.

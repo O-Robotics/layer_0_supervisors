@@ -1,0 +1,7 @@
+---
+bool success
+string message
+string[] mission_ids
+string[] mission_types
+string[] execution_modes
+uint16[] running_profile_ids

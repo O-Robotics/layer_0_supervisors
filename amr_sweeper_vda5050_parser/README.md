@@ -1,4 +1,4 @@
-# amr_sweeper_mission_builder
+# amr_sweeper_vda5050_parser
 
 Builds mission artifacts from VDA5050 mission files in `/missions`.
 
@@ -18,15 +18,15 @@ mission artifacts up to date before the scheduler asks the FSM to enter `RUNNING
   - `global_costmap.pgm`
   - `global_costmap.yaml`
   - `active_mission_path.geojson`
-- Exposes `build_current_mission` so the scheduler can force-build the selected mission
+- Exposes `build_current_mission` so the mission executor can force-parse and build the selected mission
 
 ## Launch
 
 ```bash
-ros2 launch amr_sweeper_mission_builder mission_builder.launch.py
+ros2 launch amr_sweeper_vda5050_parser mission_parser.launch.py
 ```
 
-The maintained parameter defaults live in `config/mission_builder.yaml`.
+The maintained parameter defaults live in `config/mission_parser.yaml`.
 
 YAML style guide for package config:
 - Match the formatting pattern used in `amr_sweeper_gnss/config/amr_sweeper_gnss_ntrip_client.yaml`.

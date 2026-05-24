@@ -113,14 +113,14 @@ profiles:
             args:
               - "namespace:={ns}"
               - "use_amr_sweeper_joystick:=false"
-              - "use_amr_sweeper_twist_mux:=true"
+              - "use_amr_sweeper_sweeping_controller:=true"
               - "use_amr_sweeper_wheel_controller:=true"
               - "use_amr_sweeper_tool_controller:=true"
               - "use_amr_sweeper_attitude_controller:=true"
               - "use_amr_sweeper_safety_controller:=true"
             ready:
               - type: "topic"
-                target: "cmd_vel"
+                target: "cmd_vel_sweep_wheels"
                 required: true
               - type: "topic"
                 target: "controller_steadydrive/commands"
@@ -181,10 +181,10 @@ profiles:
             sigkill_timeout_ms: 2000
 
         # Logic block: mission builder (critical)
-        - name: "amr_sweeper_mission_builder"
+        - name: "amr_sweeper_vda5050_parser"
           importance: "critical"
           startup:
-            exec: "ros2 launch amr_sweeper_mission_builder mission_builder.launch.py"
+            exec: "ros2 launch amr_sweeper_vda5050_parser mission_parser.launch.py"
             args:
               - "namespace:={ns}"
               - "use_sim_time:=false"
@@ -193,14 +193,14 @@ profiles:
               - "watch_for_updates:=true"
             ready:
               - type: "service"
-                target: "mission_builder_node/get_parameters"
+                target: "mission_parser_node/get_parameters"
                 required: true
               - type: "service"
                 target: "build_current_mission"
                 required: true
             window_ms: 8000
           rosout_triggers:
-            - "node=mission_builder_node;level>=ERROR;action=FAULT"
+            - "node=mission_parser_node;level>=ERROR;action=FAULT"
           errors:
             on_readiness_fail: "FAULT"
             on_unexpected_exit: "FAULT"

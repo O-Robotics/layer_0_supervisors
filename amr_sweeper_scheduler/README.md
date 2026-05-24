@@ -14,7 +14,7 @@ To support FSM supervision, the node provides:
 - **Tunable parameters** (launch arguments) controlling reload intervals, strictness, and publishing.
 - **ROS logs ("rosout triggers")** with a configurable prefix for machine parsing by the FSM.
 - Optional **trigger topic** publishing string events for FSM monitoring.
-- A `prepare_mission_execution` service for manual mission context creation outside schedule windows.
+- A compatibility `prepare_mission_execution` service that forwards manual mission preparation into the mission executor.
 
 See `config/architecture.md` and `config/schedule_semantics.md`.
 
@@ -22,21 +22,27 @@ See `config/architecture.md` and `config/schedule_semantics.md`.
 
 - Default schedule discovery: newest `src/missions/schedule_<timestamp>.ics`
 - Default mission search directory: `src/missions`
+- `/missions` is treated as the runtime ledger: schedules, active aliases, and per-mission execution history
 - Each mission is staged under its own folder, for example `src/missions/polygon_test_20260523T000000Z/polygon_test_20260523T000000Z.json`
+- Each execution creates a timestamped subfolder, for example `src/missions/polygon_test_20260523T000000Z/20260524T211500Z/`
 - Work windows publish both `mission_id` and resolved `mission_path` when a matching VDA5050 JSON file is found.
 - If exactly one mission JSON exists in `/missions`, the scheduler will use it as a fallback during initial testing.
 - The recommended convention is for `X-MISSION-ID` to match the mission folder and mission filename stem, for example `polygon_test_20260523T000000Z` for `src/missions/polygon_test_20260523T000000Z/polygon_test_20260523T000000Z.json`.
 - When a WORK window becomes active, the scheduler:
   - checks whether `/missions/<order_id>_<timestamp>.json` or `/missions/<order_id>_<timestamp>/` exists for that mission
-  - asks `amr_sweeper_mission_builder` to build the active mission if needed
-  - creates `/missions/<order_id>_<timestamp>/<execution_timestamp>/` and writes `execution_context.json` there
-  - writes `src/missions/active_execution.json` so `RUNNING` uses the exact scheduler-selected execution folder
-  - writes fresh root-level active aliases for the selected mission
-  - requests the FSM transition to `RUNNING` once the mission is runnable
+  - asks `amr_sweeper_mission_executor/execute_mission` to execute the selected mission
+  - the mission executor builds VDA5050 artifacts when needed, prepares the execution folder, refreshes active aliases, and requests the FSM transition to the correct RUNNING profile
 
-For manual operation, call `prepare_mission_execution` with a `mission_id` to create a fresh
-`<mission>/<execution_timestamp>/execution_context.json` and update `src/missions/active_execution.json`.
-That prepared execution directory can then be passed into the FSM `request_state` call.
+For manual operation, prefer the mission executor APIs directly:
+- `list_manual_missions`
+- `prepare_manual_mission`
+- `execute_mission`
+
+Built-in manual missions such as `3x3Sweep`, `SpotSweep`, `RecordMap`, and `Teleop` are now sourced from
+`amr_sweeper_default_missions` instead of living directly under `/missions`.
+
+The scheduler still exposes `prepare_mission_execution` as a compatibility API, but it now delegates
+the real preparation work to `amr_sweeper_mission_executor/prepare_manual_mission`.
 
 Example:
 
@@ -57,8 +63,12 @@ Each `VEVENT` should include:
 ### Project-specific X-properties
 
 - `X-ROBOT-ID`: e.g. `RBT-01`
-- `X-SCHEDULE-TYPE`: `WORK` or `NO_WORK`
+- `X-SCHEDULE-TYPE`: `WORK`, `NO_WORK`, or `SAFETY`
 - `X-MISSION-ID`: e.g. `polygon_test_20260523T000000Z` (for `WORK` only)
+
+Runtime log notes:
+- mission execution events may be enriched with `X-ACTUAL-START-UTC`, `X-ACTUAL-END-UTC`, `X-ACTUAL-DURATION-SECONDS`, and `X-RUNTIME-STATUS`
+- safety-stop events are appended as dedicated `SAFETY` VEVENTs so the same schedule file acts as both future plan and runtime log
 
 ## Build (standard colcon)
 

@@ -19,8 +19,6 @@
 #include <utility>
 #include <vector>
 
-#include <nlohmann/json.hpp>
-
 namespace amr_sweeper_scheduler
 {
 
@@ -76,15 +74,6 @@ std::string format_local_timestamp(const std::tm & tm)
 {
   char buffer[32];
   std::strftime(buffer, sizeof(buffer), "%Y%m%dT%H%M%S", &tm);
-  return buffer;
-}
-
-std::string format_utc_timestamp(const std::chrono::system_clock::time_point & time_point)
-{
-  const std::time_t as_time_t = std::chrono::system_clock::to_time_t(time_point);
-  const std::tm utc_tm = *std::gmtime(&as_time_t);
-  char buffer[32];
-  std::strftime(buffer, sizeof(buffer), "%Y%m%dT%H%M%SZ", &utc_tm);
   return buffer;
 }
 
@@ -291,12 +280,24 @@ std::optional<ScheduleType> schedule_type_from_string(const std::string & value)
   if (value == "NO_WORK") {
     return ScheduleType::NO_WORK;
   }
+  if (value == "SAFETY") {
+    return ScheduleType::SAFETY;
+  }
   return std::nullopt;
 }
 
 const char * schedule_type_to_cstr(const ScheduleType type)
 {
-  return type == ScheduleType::WORK ? "WORK" : "NO_WORK";
+  switch (type) {
+    case ScheduleType::WORK:
+      return "WORK";
+    case ScheduleType::NO_WORK:
+      return "NO_WORK";
+    case ScheduleType::SAFETY:
+      return "SAFETY";
+    default:
+      return "UNKNOWN";
+  }
 }
 
 ScheduleModel IcalParserMinimal::parse_file(const std::string & ics_path, const ParserConfig & config)
@@ -431,6 +432,9 @@ std::vector<TimeWindow> ScheduleExpanderStub::expand(
   const auto horizon_end = now + horizon;
 
   for (const auto & event : model.events) {
+    if (event.type == ScheduleType::SAFETY) {
+      continue;
+    }
     if (!event.robot_id.empty() && event.robot_id != robot_id) {
       continue;
     }
@@ -512,7 +516,7 @@ std::vector<TimeWindow> apply_blackout_overlay(const std::vector<TimeWindow> & w
   for (const auto & window : windows) {
     if (window.type == ScheduleType::NO_WORK) {
       no_work_windows.push_back(window);
-    } else {
+    } else if (window.type == ScheduleType::WORK) {
       work_windows.push_back(window);
     }
   }
@@ -545,24 +549,13 @@ SchedulerNode::SchedulerNode(const rclcpp::NodeOptions & options)
     "");
   mission_file_extension_ = declare_parameter<std::string>("mission_file_extension", ".json");
   robot_id_ = declare_parameter<std::string>("robot_id", "");
-  mission_builder_node_name_ = declare_parameter<std::string>(
-    "mission_builder_node_name",
-    "mission_builder_node");
-  mission_builder_build_service_ = declare_parameter<std::string>(
-    "mission_builder_build_service",
-    "build_current_mission");
-  fsm_request_service_ = declare_parameter<std::string>("fsm_request_service", "request_state");
-  active_costmap_output_basename_ = declare_parameter<std::string>(
-    "active_costmap_output_basename",
-    "global_costmap");
-  active_route_output_basename_ = declare_parameter<std::string>(
-    "active_route_output_basename",
-    "active_mission_path");
-  active_execution_pointer_filename_ = declare_parameter<std::string>(
-    "active_execution_pointer_filename",
-    "active_execution.json");
+  mission_executor_execute_service_ = declare_parameter<std::string>(
+    "mission_executor_execute_service",
+    "execute_mission");
+  mission_executor_prepare_service_ = declare_parameter<std::string>(
+    "mission_executor_prepare_service",
+    "prepare_manual_mission");
   horizon_hours_ = declare_parameter<int>("horizon_hours", 72);
-  running_profile_id_ = declare_parameter<int>("running_profile_id", 201);
   tick_seconds_ = declare_parameter<double>("tick_seconds", 2.0);
   trigger_running_on_work_window_ = declare_parameter<bool>(
     "trigger_running_on_work_window",
@@ -589,12 +582,12 @@ SchedulerNode::SchedulerNode(const rclcpp::NodeOptions & options)
     trigger_pub_ = create_publisher<std_msgs::msg::String>(trigger_topic_name_, 10);
   }
 
-  mission_builder_parameter_client_ =
-    std::make_shared<rclcpp::AsyncParametersClient>(this, mission_builder_node_name_);
-  mission_builder_build_client_ = create_client<std_srvs::srv::Trigger>(
-    mission_builder_build_service_);
-  fsm_request_client_ = create_client<amr_sweeper_fsm::srv::RequestState>(
-    fsm_request_service_);
+  mission_executor_execute_client_ =
+    create_client<amr_sweeper_mission_executor::srv::ExecuteMission>(
+    mission_executor_execute_service_);
+  mission_executor_prepare_client_ =
+    create_client<amr_sweeper_mission_executor::srv::PrepareManualMission>(
+    mission_executor_prepare_service_);
 
   reload_srv_ = create_service<std_srvs::srv::Trigger>(
     "reload_schedule",
@@ -636,26 +629,36 @@ SchedulerNode::SchedulerNode(const rclcpp::NodeOptions & options)
         return;
       }
 
-      if (!mission_artifacts_ready(*mission_path)) {
+      if (!mission_executor_prepare_client_->wait_for_service(std::chrono::seconds(5))) {
         response->success = false;
-        response->message =
-          "Mission artifacts are missing or stale; build the mission before preparing execution.";
-        trigger_warn("SCHED_MANUAL_MISSION_NOT_READY", "mission_id=" + request->mission_id);
+        response->message = "Mission executor prepare_manual_mission service is unavailable";
+        trigger_warn("SCHED_MISSION_EXECUTOR_UNAVAILABLE", mission_executor_prepare_service_);
         return;
       }
 
-      if (!prepare_mission_execution(request->mission_id, *mission_path, "", "")) {
+      auto prepare_request =
+        std::make_shared<amr_sweeper_mission_executor::srv::PrepareManualMission::Request>();
+      prepare_request->mission_id = request->mission_id;
+      auto prepare_future = mission_executor_prepare_client_->async_send_request(prepare_request);
+      if (prepare_future.wait_for(std::chrono::seconds(15)) != std::future_status::ready) {
         response->success = false;
-        response->message = "Failed to prepare mission execution context";
+        response->message = "Mission executor prepare_manual_mission request timed out";
+        trigger_error("SCHED_MANUAL_MISSION_PREP_FAILED", "mission_id=" + request->mission_id);
+        return;
+      }
+
+      const auto prepare_response = prepare_future.get();
+      if (!prepare_response->success) {
+        response->success = false;
+        response->message = prepare_response->message;
         trigger_error("SCHED_MANUAL_MISSION_PREP_FAILED", "mission_id=" + request->mission_id);
         return;
       }
 
       response->success = true;
       response->message = "Mission execution context prepared";
-      response->mission_execution_directory = prepared_execution_directory_;
-      response->execution_context_file =
-        (std::filesystem::path(prepared_execution_directory_) / "execution_context.json").string();
+      response->mission_execution_directory = prepare_response->mission_execution_directory;
+      response->execution_context_file = prepare_response->execution_context_file;
       trigger_info("SCHED_MANUAL_MISSION_PREPARED", "mission_id=" + request->mission_id);
     });
 
@@ -870,83 +873,13 @@ void SchedulerNode::maybe_promote_mission(const std::vector<TimeWindow> & window
       continue;
     }
 
-    if (!mission_artifacts_ready(*window.mission_path)) {
-      request_mission_build(*window.mission_path);
-      return;
-    }
-
-    if (prepared_active_mission_ != *window.mission_path ||
-      prepared_active_window_uid_ != window.uid)
-    {
-      if (!prepare_active_mission_execution(window)) {
-        trigger_error("SCHED_MISSION_EXECUTION_PREP_FAILED", *window.mission_path);
-        return;
-      }
-      prepared_active_mission_ = *window.mission_path;
-      prepared_active_window_uid_ = window.uid;
-    }
-
     if (!running_request_in_flight_ && running_request_window_uid_ != window.uid) {
-      request_running_state(window);
+      request_mission_execution(window);
     }
     return;
   }
 
   running_request_window_uid_.clear();
-}
-
-void SchedulerNode::request_mission_build(const std::string & mission_path)
-{
-  if (mission_build_in_flight_ || mission_build_target_ == mission_path) {
-    return;
-  }
-  if (!mission_builder_parameter_client_->service_is_ready()) {
-    trigger_warn("SCHED_MISSION_BUILDER_UNAVAILABLE", mission_builder_node_name_);
-    return;
-  }
-
-  mission_build_in_flight_ = true;
-  mission_build_target_ = mission_path;
-  mission_builder_parameter_client_->set_parameters(
-    {rclcpp::Parameter("mission_path", mission_path)},
-    [this, mission_path](
-      std::shared_future<std::vector<rcl_interfaces::msg::SetParametersResult>> result_future)
-    {
-      bool accepted = true;
-      for (const auto & result : result_future.get()) {
-        if (!result.successful) {
-          accepted = false;
-          trigger_error("SCHED_MISSION_BUILD_SET_PARAM_FAILED", result.reason);
-        }
-      }
-      if (!accepted) {
-        mission_build_in_flight_ = false;
-        mission_build_target_.clear();
-        return;
-      }
-
-      if (!mission_builder_build_client_->service_is_ready()) {
-        trigger_warn("SCHED_MISSION_BUILD_SERVICE_UNAVAILABLE", mission_builder_build_service_);
-        mission_build_in_flight_ = false;
-        mission_build_target_.clear();
-        return;
-      }
-
-      auto request = std::make_shared<std_srvs::srv::Trigger::Request>();
-      mission_builder_build_client_->async_send_request(
-        request,
-        [this, mission_path](rclcpp::Client<std_srvs::srv::Trigger>::SharedFuture response_future)
-        {
-          const auto response = response_future.get();
-          mission_build_in_flight_ = false;
-          mission_build_target_.clear();
-          if (response->success) {
-            trigger_info("SCHED_MISSION_BUILD_OK", mission_path);
-          } else {
-            trigger_error("SCHED_MISSION_BUILD_FAILED", response->message);
-          }
-        });
-    });
 }
 
 bool SchedulerNode::mission_json_or_folder_exists(const std::string & mission_id) const
@@ -959,126 +892,19 @@ bool SchedulerNode::mission_json_or_folder_exists(const std::string & mission_id
          (std::filesystem::exists(mission_folder) && std::filesystem::exists(mission_folder_file));
 }
 
-bool SchedulerNode::prepare_active_mission_execution(const TimeWindow & window)
+void SchedulerNode::request_mission_execution(const TimeWindow & window)
 {
-  if (!window.mission_path || !window.mission_id) {
-    return false;
-  }
-
-  return prepare_mission_execution(
-    *window.mission_id,
-    *window.mission_path,
-    window.start_local,
-    window.end_local);
-}
-
-bool SchedulerNode::prepare_mission_execution(
-  const std::string & mission_id,
-  const std::string & mission_path,
-  const std::string & window_start,
-  const std::string & window_end)
-{
-  const std::filesystem::path mission_file(mission_path);
-  const std::filesystem::path mission_folder = mission_folder_path(mission_path);
-  const std::filesystem::path mission_costmap_yaml(mission_costmap_yaml_path(mission_path));
-  const std::filesystem::path mission_costmap_image(mission_costmap_image_path(mission_path));
-  const std::filesystem::path mission_route(mission_route_path(mission_path));
-
-  if (!std::filesystem::exists(mission_file) ||
-    !std::filesystem::exists(mission_costmap_yaml) ||
-    !std::filesystem::exists(mission_costmap_image) ||
-    !std::filesystem::exists(mission_route))
-  {
-    return false;
-  }
-
-  const std::chrono::system_clock::time_point run_start = std::chrono::system_clock::now();
-  const std::string run_timestamp = format_utc_timestamp(run_start);
-  const std::filesystem::path mission_run_directory = mission_folder / run_timestamp;
-  std::filesystem::create_directories(mission_run_directory);
-
-  std::filesystem::copy_file(
-    mission_costmap_yaml,
-    active_costmap_yaml_path(),
-    std::filesystem::copy_options::overwrite_existing);
-  std::filesystem::copy_file(
-    mission_costmap_image,
-    active_costmap_image_path(),
-    std::filesystem::copy_options::overwrite_existing);
-  std::filesystem::copy_file(
-    mission_route,
-    active_route_path(),
-    std::filesystem::copy_options::overwrite_existing);
-
-  {
-    std::ifstream yaml_input(active_costmap_yaml_path());
-    if (!yaml_input.is_open()) {
-      return false;
-    }
-    std::ostringstream yaml_buffer;
-    std::string yaml_line;
-    while (std::getline(yaml_input, yaml_line)) {
-      if (yaml_line.rfind("image:", 0) == 0) {
-        yaml_buffer << "image: " << active_costmap_output_basename_ << ".pgm\n";
-      } else {
-        yaml_buffer << yaml_line << "\n";
-      }
-    }
-    std::ofstream yaml_output(active_costmap_yaml_path(), std::ios::trunc);
-    if (!yaml_output.is_open()) {
-      return false;
-    }
-    yaml_output << yaml_buffer.str();
-  }
-
-  nlohmann::json context{
-    {"mission_id", mission_id},
-    {"mission_file", mission_file.string()},
-    {"mission_folder", mission_folder.string()},
-    {"mission_route_file", mission_route.string()},
-    {"mission_costmap_yaml", mission_costmap_yaml.string()},
-    {"mission_run_directory", mission_run_directory.string()},
-    {"mission_window_start", window_start},
-    {"mission_window_end", window_end},
-    {"run_started_at", run_timestamp}};
-
-  std::ofstream context_stream(mission_run_directory / "execution_context.json");
-  if (!context_stream.is_open()) {
-    return false;
-  }
-  context_stream << std::setw(2) << context << '\n';
-
-  const nlohmann::json execution_pointer{
-    {"mission_id", mission_id},
-    {"mission_folder", mission_folder.string()},
-    {"mission_run_directory", mission_run_directory.string()},
-    {"execution_context_file", (mission_run_directory / "execution_context.json").string()},
-    {"mission_window_start", window_start},
-    {"mission_window_end", window_end}};
-  std::ofstream pointer_stream(
-    resolve_path(missions_directory_) / active_execution_pointer_filename_,
-    std::ios::trunc);
-  if (!pointer_stream.is_open()) {
-    return false;
-  }
-  pointer_stream << std::setw(2) << execution_pointer << '\n';
-
-  prepared_execution_directory_ = mission_run_directory.string();
-  return true;
-}
-
-void SchedulerNode::request_running_state(const TimeWindow & window)
-{
-  if (!fsm_request_client_->service_is_ready()) {
-    trigger_warn("SCHED_FSM_SERVICE_UNAVAILABLE", fsm_request_service_);
+  if (!mission_executor_execute_client_->service_is_ready()) {
+    trigger_warn("SCHED_MISSION_EXECUTOR_UNAVAILABLE", mission_executor_execute_service_);
     return;
   }
 
   running_request_in_flight_ = true;
-  auto request = std::make_shared<amr_sweeper_fsm::srv::RequestState::Request>();
-  request->target_state = "RUNNING";
-  request->target_lifecycle = "Active";
-  request->target_profile_id = static_cast<std::uint16_t>(running_profile_id_);
+  auto request = std::make_shared<amr_sweeper_mission_executor::srv::ExecuteMission::Request>();
+  request->mission_id = window.mission_id.value_or(std::string("unknown"));
+  request->mission_execution_directory = "";
+  request->mission_window_start = window.start_local;
+  request->mission_window_end = window.end_local;
   request->requester = "amr_sweeper_scheduler";
   request->priority = 210;
   request->force = false;
@@ -1087,80 +913,23 @@ void SchedulerNode::request_running_state(const TimeWindow & window)
     window.mission_id.value_or(std::string("unknown")) +
     "; start=" + window.start_local +
     "; end=" + window.end_local;
-  request->mission_execution_directory = prepared_execution_directory_;
-  fsm_request_client_->async_send_request(
+  mission_executor_execute_client_->async_send_request(
     request,
     [this, window](
-      rclcpp::Client<amr_sweeper_fsm::srv::RequestState>::SharedFuture response_future)
+      rclcpp::Client<amr_sweeper_mission_executor::srv::ExecuteMission>::SharedFuture response_future)
     {
       running_request_in_flight_ = false;
       const auto response = response_future.get();
-      if (response->accepted) {
+      if (response->success) {
         running_request_window_uid_ = window.uid;
         trigger_info(
           "SCHED_PROMOTED_TO_RUNNING",
-          "mission_id=" + window.mission_id.value_or(std::string("unknown")));
+          "mission_id=" + window.mission_id.value_or(std::string("unknown")) +
+          "; profile=" + std::to_string(response->running_profile_id));
       } else {
-        trigger_warn("SCHED_RUNNING_REQUEST_REJECTED", response->message);
+        trigger_warn("SCHED_MISSION_EXECUTION_REJECTED", response->message);
       }
     });
-}
-
-bool SchedulerNode::mission_artifacts_ready(const std::string & mission_path) const
-{
-  const std::filesystem::path mission_file(mission_path);
-  const std::filesystem::path mission_costmap(mission_costmap_yaml_path(mission_path));
-  const std::filesystem::path mission_route(mission_route_path(mission_path));
-
-  if (!std::filesystem::exists(mission_file) ||
-    !std::filesystem::exists(mission_costmap) ||
-    !std::filesystem::exists(mission_route))
-  {
-    return false;
-  }
-
-  const auto mission_stamp = std::filesystem::last_write_time(mission_file);
-  return std::filesystem::last_write_time(mission_costmap) >= mission_stamp &&
-         std::filesystem::last_write_time(mission_route) >= mission_stamp;
-}
-
-std::string SchedulerNode::mission_costmap_yaml_path(const std::string & mission_path) const
-{
-  const std::filesystem::path path(mission_path);
-  return (mission_folder_path(mission_path) / (path.stem().string() + "_costmap.yaml")).string();
-}
-
-std::string SchedulerNode::mission_route_path(const std::string & mission_path) const
-{
-  const std::filesystem::path path(mission_path);
-  return (mission_folder_path(mission_path) / (path.stem().string() + "_path.geojson")).string();
-}
-
-std::filesystem::path SchedulerNode::mission_folder_path(const std::string & mission_path) const
-{
-  const std::filesystem::path path(mission_path);
-  return path.parent_path();
-}
-
-std::string SchedulerNode::mission_costmap_image_path(const std::string & mission_path) const
-{
-  const std::filesystem::path path(mission_path);
-  return (mission_folder_path(mission_path) / (path.stem().string() + "_costmap.pgm")).string();
-}
-
-std::string SchedulerNode::active_route_path() const
-{
-  return (resolve_path(missions_directory_) / (active_route_output_basename_ + ".geojson")).string();
-}
-
-std::string SchedulerNode::active_costmap_yaml_path() const
-{
-  return (resolve_path(missions_directory_) / (active_costmap_output_basename_ + ".yaml")).string();
-}
-
-std::string SchedulerNode::active_costmap_image_path() const
-{
-  return (resolve_path(missions_directory_) / (active_costmap_output_basename_ + ".pgm")).string();
 }
 
 std::string SchedulerNode::resolved_schedule_path() const

@@ -1,0 +1,12 @@
+string mission_id
+string reason
+string outcome
+string requester
+uint8 priority
+bool force
+bool request_idling
+---
+bool success
+string message
+string mission_execution_directory
+string execution_context_file

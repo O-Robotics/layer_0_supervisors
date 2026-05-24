@@ -1,4 +1,4 @@
-#include "mission_builder_node.hpp"
+#include "mission_parser_node.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -15,7 +15,7 @@
 
 #include <nlohmann/json.hpp>
 
-namespace amr_sweeper_mission_builder
+namespace amr_sweeper_vda5050_parser
 {
 
 namespace
@@ -190,7 +190,7 @@ std::vector<MissionPathWaypoint> buildCoverageWaypoints(
 
 }  // namespace
 
-void Vda5050MissionBuilder::loadMission(const Vda5050MissionBuildConfig & config)
+void Vda5050MissionParser::loadMission(const Vda5050MissionBuildConfig & config)
 {
   config_ = config;
   working_zones_.clear();
@@ -220,12 +220,12 @@ void Vda5050MissionBuilder::loadMission(const Vda5050MissionBuildConfig & config
   }
 }
 
-MissionIdentity Vda5050MissionBuilder::inspectMissionIdentity(const std::string & mission_path) const
+MissionIdentity Vda5050MissionParser::inspectMissionIdentity(const std::string & mission_path) const
 {
   return extractMissionIdentity(loadJsonDocument(resolveMissionPath(mission_path)));
 }
 
-void Vda5050MissionBuilder::loadFromLegacyGeoJson(const nlohmann::json & document)
+void Vda5050MissionParser::loadFromLegacyGeoJson(const nlohmann::json & document)
 {
   for (const auto & feature : document.at("features")) {
     auto zone_type = config_.working_zone_value;
@@ -245,7 +245,7 @@ void Vda5050MissionBuilder::loadFromLegacyGeoJson(const nlohmann::json & documen
   }
 }
 
-void Vda5050MissionBuilder::loadFromVda5050Mission(const nlohmann::json & document)
+void Vda5050MissionParser::loadFromVda5050Mission(const nlohmann::json & document)
 {
   std::unordered_map<std::string, GeoPoint> nodes_by_id;
   std::unordered_map<std::string, double> node_theta_by_id;
@@ -293,7 +293,7 @@ void Vda5050MissionBuilder::loadFromVda5050Mission(const nlohmann::json & docume
   }
 }
 
-RasterizedMap Vda5050MissionBuilder::buildSuggestedGlobalCostmap(
+RasterizedMap Vda5050MissionParser::buildSuggestedGlobalCostmap(
   const double resolution,
   const double padding_meters) const
 {
@@ -307,7 +307,7 @@ RasterizedMap Vda5050MissionBuilder::buildSuggestedGlobalCostmap(
   return buildGlobalCostmap(extent.min_x, extent.min_y, width_cells, height_cells, resolution);
 }
 
-RasterizedMap Vda5050MissionBuilder::buildGlobalCostmap(
+RasterizedMap Vda5050MissionParser::buildGlobalCostmap(
   const double origin_x,
   const double origin_y,
   const unsigned int width_cells,
@@ -338,7 +338,7 @@ RasterizedMap Vda5050MissionBuilder::buildGlobalCostmap(
   return result;
 }
 
-MapExtent Vda5050MissionBuilder::computeExtent(const double padding_meters) const
+MapExtent Vda5050MissionParser::computeExtent(const double padding_meters) const
 {
   MapExtent extent{
     std::numeric_limits<double>::max(),
@@ -369,7 +369,7 @@ MapExtent Vda5050MissionBuilder::computeExtent(const double padding_meters) cons
   return extent;
 }
 
-void Vda5050MissionBuilder::saveGlobalCostmapArtifacts(
+void Vda5050MissionParser::saveGlobalCostmapArtifacts(
   const RasterizedMap & map,
   const std::string & image_path,
   const std::string & yaml_path) const
@@ -399,7 +399,7 @@ void Vda5050MissionBuilder::saveGlobalCostmapArtifacts(
     << "mode: trinary\n";
 }
 
-void Vda5050MissionBuilder::saveMissionWaypointsArtifact(const std::string & path) const
+void Vda5050MissionParser::saveMissionWaypointsArtifact(const std::string & path) const
 {
   namespace fs = std::filesystem;
   fs::create_directories(fs::path(path).parent_path());
@@ -422,17 +422,17 @@ void Vda5050MissionBuilder::saveMissionWaypointsArtifact(const std::string & pat
   output_stream << document.dump(2) << "\n";
 }
 
-bool Vda5050MissionBuilder::hasWorkingZones() const
+bool Vda5050MissionParser::hasWorkingZones() const
 {
   return !working_zones_.empty();
 }
 
-bool Vda5050MissionBuilder::hasMissionWaypoints() const
+bool Vda5050MissionParser::hasMissionWaypoints() const
 {
   return mission_waypoints_.size() >= 2U;
 }
 
-void Vda5050MissionBuilder::projectAndStoreZone(
+void Vda5050MissionParser::projectAndStoreZone(
   const std::vector<GeoPoint> & geo_vertices,
   const std::string & zone_name,
   const std::string & zone_type)
@@ -470,7 +470,7 @@ void Vda5050MissionBuilder::projectAndStoreZone(
   }
 }
 
-void Vda5050MissionBuilder::loadCoveragePath(
+void Vda5050MissionParser::loadCoveragePath(
   const nlohmann::json & coverage_edge_ids,
   const std::unordered_map<std::string, GeoPoint> & nodes_by_id,
   const std::unordered_map<std::string, double> & node_theta_by_id,
@@ -483,7 +483,7 @@ void Vda5050MissionBuilder::loadCoveragePath(
     edges_by_id);
 }
 
-bool Vda5050MissionBuilder::pointInPolygon(const MapPoint & point, const PolygonZone & polygon) const
+bool Vda5050MissionParser::pointInPolygon(const MapPoint & point, const PolygonZone & polygon) const
 {
   bool inside = false;
   const std::size_t vertex_count = polygon.vertices.size();
@@ -501,7 +501,7 @@ bool Vda5050MissionBuilder::pointInPolygon(const MapPoint & point, const Polygon
   return inside;
 }
 
-double Vda5050MissionBuilder::signedDistanceToPolygon(
+double Vda5050MissionParser::signedDistanceToPolygon(
   const MapPoint & point,
   const PolygonZone & polygon) const
 {
@@ -518,7 +518,7 @@ double Vda5050MissionBuilder::signedDistanceToPolygon(
   return pointInPolygon(point, polygon) ? min_distance : -min_distance;
 }
 
-double Vda5050MissionBuilder::distanceToSegment(
+double Vda5050MissionParser::distanceToSegment(
   const MapPoint & point,
   const MapPoint & start,
   const MapPoint & end) const
@@ -542,7 +542,7 @@ double Vda5050MissionBuilder::distanceToSegment(
   return std::sqrt((distance_x * distance_x) + (distance_y * distance_y));
 }
 
-unsigned char Vda5050MissionBuilder::costForPoint(const MapPoint & point) const
+unsigned char Vda5050MissionParser::costForPoint(const MapPoint & point) const
 {
   bool inside_any_working_zone = false;
   double nearest_working_zone_distance = -std::numeric_limits<double>::max();
@@ -571,7 +571,7 @@ unsigned char Vda5050MissionBuilder::costForPoint(const MapPoint & point) const
   return static_cast<unsigned char>(config_.outside_cost);
 }
 
-std::string Vda5050MissionBuilder::resolveMissionPath(const std::string & configured_path) const
+std::string Vda5050MissionParser::resolveMissionPath(const std::string & configured_path) const
 {
   namespace fs = std::filesystem;
   const fs::path configured(configured_path);
@@ -585,7 +585,7 @@ std::string Vda5050MissionBuilder::resolveMissionPath(const std::string & config
   return configured.string();
 }
 
-MissionIdentity Vda5050MissionBuilder::extractMissionIdentity(const nlohmann::json & document) const
+MissionIdentity Vda5050MissionParser::extractMissionIdentity(const nlohmann::json & document) const
 {
   if (!document.contains("orderId") || !document.at("orderId").is_string()) {
     throw std::runtime_error("VDA5050 mission is missing string orderId");
@@ -607,7 +607,7 @@ MissionIdentity Vda5050MissionBuilder::extractMissionIdentity(const nlohmann::js
   return identity;
 }
 
-std::string Vda5050MissionBuilder::sanitizeTimestamp(const std::string & timestamp)
+std::string Vda5050MissionParser::sanitizeTimestamp(const std::string & timestamp)
 {
   std::string sanitized;
   sanitized.reserve(timestamp.size());
@@ -619,12 +619,12 @@ std::string Vda5050MissionBuilder::sanitizeTimestamp(const std::string & timesta
   return sanitized;
 }
 
-std::string Vda5050MissionBuilder::sanitizeStemToken(const std::string & value)
+std::string Vda5050MissionParser::sanitizeStemToken(const std::string & value)
 {
   return sanitize_token(value);
 }
 
-std::string Vda5050MissionBuilder::normalizeZoneType(const std::string & zone_type)
+std::string Vda5050MissionParser::normalizeZoneType(const std::string & zone_type)
 {
   std::string normalized = zone_type;
   std::transform(
@@ -635,8 +635,8 @@ std::string Vda5050MissionBuilder::normalizeZoneType(const std::string & zone_ty
   return normalized;
 }
 
-MissionBuilderNode::MissionBuilderNode(const rclcpp::NodeOptions & options)
-: rclcpp::Node("mission_builder_node", options)
+MissionParserNode::MissionParserNode(const rclcpp::NodeOptions & options)
+: rclcpp::Node("mission_parser_node", options)
 {
   mission_path_ = declare_parameter<std::string>("mission_path", "");
   missions_directory_ = declare_parameter<std::string>("missions_directory", "src/missions");
@@ -650,22 +650,22 @@ MissionBuilderNode::MissionBuilderNode(const rclcpp::NodeOptions & options)
   auto_build_on_start_ = declare_parameter<bool>("auto_build_on_start", true);
   watch_for_updates_ = declare_parameter<bool>("watch_for_updates", true);
 
-  mission_builder_ = std::make_unique<Vda5050MissionBuilder>();
-  status_publisher_ = create_publisher<std_msgs::msg::String>("mission_builder/status", 10);
+  mission_parser_ = std::make_unique<Vda5050MissionParser>();
+  status_publisher_ = create_publisher<std_msgs::msg::String>("mission_parser/status", 10);
   build_current_mission_service_ = create_service<std_srvs::srv::Trigger>(
     "build_current_mission",
     std::bind(
-      &MissionBuilderNode::handleBuildCurrentMission,
+      &MissionParserNode::handleBuildCurrentMission,
       this,
       std::placeholders::_1,
       std::placeholders::_2));
   build_timer_ = create_wall_timer(
     std::chrono::seconds(2),
-    std::bind(&MissionBuilderNode::buildIfNeeded, this));
+    std::bind(&MissionParserNode::buildIfNeeded, this));
 
   RCLCPP_INFO(
     get_logger(),
-    "MissionBuilderNode watching %s and writing artifacts to %s",
+    "MissionParserNode watching %s and writing artifacts to %s",
     mission_path_.empty() ? "<auto-discovery>" : mission_path_.c_str(),
     missions_directory_.c_str());
 
@@ -674,7 +674,7 @@ MissionBuilderNode::MissionBuilderNode(const rclcpp::NodeOptions & options)
   }
 }
 
-void MissionBuilderNode::buildIfNeeded()
+void MissionParserNode::buildIfNeeded()
 {
   if (!watch_for_updates_ && !mission_build_stamps_.empty()) {
     return;
@@ -684,7 +684,7 @@ void MissionBuilderNode::buildIfNeeded()
   (void)buildCurrentMissionArtifacts();
 }
 
-bool MissionBuilderNode::buildCurrentMissionArtifacts()
+bool MissionParserNode::buildCurrentMissionArtifacts()
 {
   const auto mission_path = selectActiveMissionPath();
   if (!mission_path) {
@@ -706,7 +706,7 @@ bool MissionBuilderNode::buildCurrentMissionArtifacts()
   return buildArtifactsForMission(*mission_path, true);
 }
 
-void MissionBuilderNode::buildDiscoveredMissionArtifacts()
+void MissionParserNode::buildDiscoveredMissionArtifacts()
 {
   const std::filesystem::path missions_directory = resolvePath(missions_directory_);
   if (!std::filesystem::exists(missions_directory) || !std::filesystem::is_directory(missions_directory)) {
@@ -725,7 +725,7 @@ void MissionBuilderNode::buildDiscoveredMissionArtifacts()
   }
 }
 
-std::vector<std::filesystem::path> MissionBuilderNode::discoverMissionPaths()
+std::vector<std::filesystem::path> MissionParserNode::discoverMissionPaths()
 {
   std::vector<std::filesystem::path> mission_paths;
   const std::filesystem::path missions_directory = resolvePath(missions_directory_);
@@ -770,7 +770,7 @@ std::vector<std::filesystem::path> MissionBuilderNode::discoverMissionPaths()
   return mission_paths;
 }
 
-std::optional<std::filesystem::path> MissionBuilderNode::selectActiveMissionPath()
+std::optional<std::filesystem::path> MissionParserNode::selectActiveMissionPath()
 {
   if (!mission_path_.empty()) {
     const std::filesystem::path configured_path = resolveMissionPath();
@@ -796,9 +796,9 @@ std::optional<std::filesystem::path> MissionBuilderNode::selectActiveMissionPath
   return std::nullopt;
 }
 
-std::filesystem::path MissionBuilderNode::stageMissionFile(const std::filesystem::path & mission_path)
+std::filesystem::path MissionParserNode::stageMissionFile(const std::filesystem::path & mission_path)
 {
-  const MissionIdentity identity = mission_builder_->inspectMissionIdentity(mission_path.string());
+  const MissionIdentity identity = mission_parser_->inspectMissionIdentity(mission_path.string());
   const std::filesystem::path mission_folder = resolvePath(missions_directory_) / identity.stem;
   const std::filesystem::path staged_path = mission_folder / (identity.stem + mission_file_extension_);
   std::filesystem::create_directories(mission_folder);
@@ -820,7 +820,7 @@ std::filesystem::path MissionBuilderNode::stageMissionFile(const std::filesystem
   return staged_path;
 }
 
-bool MissionBuilderNode::buildArtifactsForMission(
+bool MissionParserNode::buildArtifactsForMission(
   const std::filesystem::path & mission_path,
   const bool write_active_aliases)
 {
@@ -828,8 +828,8 @@ bool MissionBuilderNode::buildArtifactsForMission(
     const std::filesystem::path staged_mission_path = stageMissionFile(mission_path);
     Vda5050MissionBuildConfig config;
     config.mission_path = staged_mission_path.string();
-    mission_builder_->loadMission(config);
-    const RasterizedMap rasterized_map = mission_builder_->buildSuggestedGlobalCostmap(
+    mission_parser_->loadMission(config);
+    const RasterizedMap rasterized_map = mission_parser_->buildSuggestedGlobalCostmap(
       mission_build_resolution_,
       mission_build_padding_meters_);
 
@@ -841,12 +841,12 @@ bool MissionBuilderNode::buildArtifactsForMission(
     const std::filesystem::path mission_yaml_path = mission_directory / (costmap_basename + ".yaml");
     const std::filesystem::path mission_coverage_path = mission_directory / (coverage_basename + ".geojson");
 
-    mission_builder_->saveGlobalCostmapArtifacts(
+    mission_parser_->saveGlobalCostmapArtifacts(
       rasterized_map,
       mission_image_path.string(),
       mission_yaml_path.string());
-    if (mission_builder_->hasMissionWaypoints()) {
-      mission_builder_->saveMissionWaypointsArtifact(mission_coverage_path.string());
+    if (mission_parser_->hasMissionWaypoints()) {
+      mission_parser_->saveMissionWaypointsArtifact(mission_coverage_path.string());
     }
 
     const std::filesystem::path legacy_image_path = missions_directory / (costmap_basename + ".pgm");
@@ -869,12 +869,12 @@ bool MissionBuilderNode::buildArtifactsForMission(
         missions_directory / (costmap_output_basename_ + ".yaml");
       const std::filesystem::path active_coverage_path =
         missions_directory / (coverage_path_basename_ + ".geojson");
-      mission_builder_->saveGlobalCostmapArtifacts(
+      mission_parser_->saveGlobalCostmapArtifacts(
         rasterized_map,
         active_image_path.string(),
         active_yaml_path.string());
-      if (mission_builder_->hasMissionWaypoints()) {
-        mission_builder_->saveMissionWaypointsArtifact(active_coverage_path.string());
+      if (mission_parser_->hasMissionWaypoints()) {
+        mission_parser_->saveMissionWaypointsArtifact(active_coverage_path.string());
       }
       last_active_alias_mission_ = staged_mission_path;
     }
@@ -894,7 +894,7 @@ bool MissionBuilderNode::buildArtifactsForMission(
   }
 }
 
-void MissionBuilderNode::handleBuildCurrentMission(
+void MissionParserNode::handleBuildCurrentMission(
   const std::shared_ptr<std_srvs::srv::Trigger::Request>,
   std::shared_ptr<std_srvs::srv::Trigger::Response> response)
 {
@@ -906,7 +906,7 @@ void MissionBuilderNode::handleBuildCurrentMission(
     ("Failed to build " + (mission_path_.empty() ? std::string("<auto-selected>") : resolveMissionPath().string()));
 }
 
-std::filesystem::path MissionBuilderNode::resolveMissionPath() const
+std::filesystem::path MissionParserNode::resolveMissionPath() const
 {
   if (mission_path_.empty()) {
     return {};
@@ -914,7 +914,7 @@ std::filesystem::path MissionBuilderNode::resolveMissionPath() const
   return resolvePath(mission_path_);
 }
 
-std::filesystem::path MissionBuilderNode::resolvePath(const std::string & path) const
+std::filesystem::path MissionParserNode::resolvePath(const std::string & path) const
 {
   const std::filesystem::path configured(path);
   if (configured.is_absolute()) {
@@ -927,19 +927,19 @@ std::filesystem::path MissionBuilderNode::resolvePath(const std::string & path) 
   return configured;
 }
 
-std::filesystem::file_time_type MissionBuilderNode::currentMissionStamp(
+std::filesystem::file_time_type MissionParserNode::currentMissionStamp(
   const std::filesystem::path & mission_path) const
 {
   return std::filesystem::last_write_time(mission_path);
 }
 
-std::filesystem::path MissionBuilderNode::missionFolderPath(
+std::filesystem::path MissionParserNode::missionFolderPath(
   const std::filesystem::path & mission_path) const
 {
   return mission_path.parent_path();
 }
 
-std::string MissionBuilderNode::missionStemForPath(const std::filesystem::path & mission_path) const
+std::string MissionParserNode::missionStemForPath(const std::filesystem::path & mission_path) const
 {
   if (mission_path.has_parent_path() && mission_path.parent_path() != resolvePath(missions_directory_)) {
     return mission_path.parent_path().filename().string();
@@ -947,19 +947,19 @@ std::string MissionBuilderNode::missionStemForPath(const std::filesystem::path &
   return mission_path.stem().string();
 }
 
-std::string MissionBuilderNode::coverageBasenameForMission(
+std::string MissionParserNode::coverageBasenameForMission(
   const std::filesystem::path & mission_path) const
 {
   return missionStemForPath(mission_path) + "_path";
 }
 
-std::string MissionBuilderNode::costmapBasenameForMission(
+std::string MissionParserNode::costmapBasenameForMission(
   const std::filesystem::path & mission_path) const
 {
   return missionStemForPath(mission_path) + "_costmap";
 }
 
-void MissionBuilderNode::publishStatus(const std::string & state, const std::string & detail) const
+void MissionParserNode::publishStatus(const std::string & state, const std::string & detail) const
 {
   std_msgs::msg::String message;
   std::ostringstream stream;
@@ -970,12 +970,12 @@ void MissionBuilderNode::publishStatus(const std::string & state, const std::str
   status_publisher_->publish(message);
 }
 
-}  // namespace amr_sweeper_mission_builder
+}  // namespace amr_sweeper_vda5050_parser
 
 int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<amr_sweeper_mission_builder::MissionBuilderNode>());
+  rclcpp::spin(std::make_shared<amr_sweeper_vda5050_parser::MissionParserNode>());
   rclcpp::shutdown();
   return 0;
 }

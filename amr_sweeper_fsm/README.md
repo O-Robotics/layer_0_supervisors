@@ -3,7 +3,7 @@
 ROS 2 package that implements a **robot-level finite state machine (FSM)** using:
 
 ```bash
-ros2 launch amr_sweeper_fsm amr_sweeper_fsm.launch.py
+ros2 launch amr_sweeper_fsm amr_sweeper_layer_0_fsm.launch.py
 ```
 
 - a non-lifecycle **supervisor** node (`supervisor_node`), and
@@ -23,7 +23,7 @@ The supervisor accepts state-change requests (with priority metadata), drives RO
 ```
 amr_sweeper_fsm/
 ├── launch/
-│   └── amr_sweeper_fsm.launch.py
+│   └── amr_sweeper_layer_0_fsm.launch.py
 ├── config/
 │   ├── state_parameters.yaml
 │   └── profiles/
@@ -52,12 +52,12 @@ amr_sweeper_fsm/
 The primary launch file starts the supervisor and all lifecycle state nodes:
 
 ```bash
-ros2 launch amr_sweeper_fsm amr_sweeper_fsm.launch.py
+ros2 launch amr_sweeper_fsm amr_sweeper_layer_0_fsm.launch.py
 ```
 
 ### Launch arguments
 
-`launch/amr_sweeper_fsm.launch.py` defines the following launch arguments:
+`launch/amr_sweeper_layer_0_fsm.launch.py` defines the following launch arguments:
 
 - `namespace` (default: `amr_sweeper`)  
   Top-level namespace for all nodes.
@@ -78,7 +78,7 @@ ros2 launch amr_sweeper_fsm amr_sweeper_fsm.launch.py
 Example (5 second tick, start profile 201, custom namespace):
 
 ```bash
-ros2 launch amr_sweeper_fsm amr_sweeper_fsm.launch.py \
+ros2 launch amr_sweeper_fsm amr_sweeper_layer_0_fsm.launch.py \
   namespace:=robot1 \
   start_profile:=201 \
   tick_period_ms:=5000
@@ -123,8 +123,8 @@ Each state has its own profile file with a list of profiles:
 
 The default profile wiring is now:
 
-- `001`: full-stack startup validation across layer 1 hardware, layer 2 controllers, layer 3 localization/navigation/mapping, plus `amr_sweeper_mission_builder` and `amr_sweeper_scheduler`
-- `101`: layer 1 hardware bringup plus `amr_sweeper_mission_builder` and `amr_sweeper_scheduler`
+- `001`: full-stack startup validation across layer 1 hardware, layer 2 controllers, layer 3 localization/navigation/mapping, plus `amr_sweeper_vda5050_parser` and `amr_sweeper_scheduler`
+- `101`: layer 1 hardware bringup plus `amr_sweeper_vda5050_parser` and `amr_sweeper_scheduler`
 - `201`: layer 1 hardware bringup, layer 2 controller bringup, layer 3 localization/navigation/mapping bringup, and optional joystick
 - `301`: layer 1 hardware bringup
 - `400`: reduced layer 1 hardware bringup for fault handling

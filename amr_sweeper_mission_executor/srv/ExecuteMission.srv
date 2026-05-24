@@ -1,0 +1,14 @@
+string mission_id
+string mission_execution_directory
+string mission_window_start
+string mission_window_end
+string requester
+uint8 priority
+bool force
+string reason
+---
+bool success
+string message
+string mission_execution_directory
+string execution_context_file
+uint16 running_profile_id

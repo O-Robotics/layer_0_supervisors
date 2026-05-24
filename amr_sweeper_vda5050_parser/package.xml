@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package format="3">
-  <name>amr_sweeper_mission_builder</name>
+  <name>amr_sweeper_vda5050_parser</name>
   <version>0.1.0</version>
-  <description>Asynchronous VDA5050 mission artifact builder for AMR Sweeper.</description>
+  <description>Asynchronous VDA5050 mission artifact parser for AMR Sweeper.</description>
   <maintainer email="info@O-Robotics.com">O-Robotics</maintainer>
   <license>Apache-2.0</license>
 

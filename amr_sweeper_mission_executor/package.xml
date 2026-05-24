@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package format="3">
-  <name>amr_sweeper_scheduler</name>
+  <name>amr_sweeper_mission_executor</name>
   <version>0.1.0</version>
-  <description>ROS 2 scheduler that parses iCalendar (.ics) schedules and resolves VDA5050 mission windows.</description>
+  <description>Mission activation APIs that route scheduled and manual missions into the correct RUNNING profiles.</description>
   <maintainer email="devnull@example.com">AMR Team</maintainer>
   <license>Apache-2.0</license>
 
@@ -11,14 +11,17 @@
   <exec_depend>rosidl_default_runtime</exec_depend>
   <member_of_group>rosidl_interface_packages</member_of_group>
 
+  <depend>ament_index_cpp</depend>
+  <exec_depend>amr_sweeper_default_missions</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
   <depend>amr_sweeper_fsm</depend>
-  <depend>amr_sweeper_mission_executor</depend>
+  <depend>amr_sweeper_safety_msgs</depend>
+  <depend>amr_sweeper_vda5050_parser</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
   <depend>rclcpp</depend>
-  <depend>rclcpp_lifecycle</depend>
   <depend>rcl_interfaces</depend>
-  <depend>std_msgs</depend>
   <depend>std_srvs</depend>
 
   <export>
