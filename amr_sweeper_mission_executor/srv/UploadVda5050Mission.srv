@@ -1,0 +1,11 @@
+string mission_id
+string mission_json
+bool overwrite_existing
+---
+bool success
+string message
+string mission_id
+string mission_file
+string mission_folder
+string mission_type
+uint16 running_profile_id

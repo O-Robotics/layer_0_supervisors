@@ -22,8 +22,10 @@ find_package(std_srvs REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/EndMission.srv"
   "srv/ExecuteMission.srv"
+  "srv/ListExecutableMissions.srv"
   "srv/ListManualMissions.srv"
   "srv/PrepareManualMission.srv"
+  "srv/UploadVda5050Mission.srv"
 )
 
 rosidl_get_typesupport_target(cpp_typesupport_target
@@ -59,11 +61,20 @@ install(TARGETS
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
+install(PROGRAMS
+  scripts/mission_web_server.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 install(DIRECTORY include/
   DESTINATION include/
 )
 
 install(DIRECTORY launch
+  DESTINATION share/${PROJECT_NAME}
+)
+
+install(DIRECTORY config
   DESTINATION share/${PROJECT_NAME}
 )
 

@@ -3,10 +3,19 @@
 Provides mission activation APIs that choose the correct RUNNING profile for scheduled and manual missions.
 
 Services:
+- `list_executable_missions`
 - `list_manual_missions`
+- `upload_vda5050_mission`
 - `prepare_manual_mission`
 - `execute_mission`
 - `end_mission`
+
+HTTP operator UI:
+- launch `mission_web_server.py` alongside the executor to expose a local dashboard over HTTP
+- shows FSM state, GNSS latitude/longitude, battery state, and the active mission run folder
+- can execute built-in manual missions and saved autonomous missions
+- can stop the active mission
+- can upload a VDA5050 mission JSON payload into the runtime missions directory so it becomes executable
 
 Profile routing:
 - scheduled VDA5050 missions -> RUNNING profile `201`

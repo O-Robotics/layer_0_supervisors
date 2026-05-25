@@ -39,6 +39,7 @@ constexpr char kSafetyScheduleType[] = "SAFETY";
 constexpr char kTeleopInactivityEndReason[] = "teleop mission auto-ended after 5 minutes without motion";
 constexpr char kManualMappingInactivityEndReason[] =
   "manual mapping mission auto-ended after 5 minutes without motion";
+constexpr char kScheduledMissionType[] = "vda5050_scheduled_mission";
 
 std::string toLower(std::string value)
 {
@@ -246,10 +247,24 @@ MissionExecutorNode::MissionExecutorNode(const rclcpp::NodeOptions & options)
     rmw_qos_profile_services_default,
     client_callback_group_);
 
+  list_executable_missions_service_ = create_service<srv::ListExecutableMissions>(
+    "list_executable_missions",
+    std::bind(
+      &MissionExecutorNode::handleListExecutableMissions,
+      this,
+      std::placeholders::_1,
+      std::placeholders::_2));
   list_manual_missions_service_ = create_service<srv::ListManualMissions>(
     "list_manual_missions",
     std::bind(
       &MissionExecutorNode::handleListManualMissions,
+      this,
+      std::placeholders::_1,
+      std::placeholders::_2));
+  upload_vda5050_mission_service_ = create_service<srv::UploadVda5050Mission>(
+    "upload_vda5050_mission",
+    std::bind(
+      &MissionExecutorNode::handleUploadVda5050Mission,
       this,
       std::placeholders::_1,
       std::placeholders::_2));
@@ -303,6 +318,23 @@ MissionExecutorNode::MissionExecutorNode(const rclcpp::NodeOptions & options)
     manual_mapping_odometry_topic_.c_str());
 }
 
+void MissionExecutorNode::handleListExecutableMissions(
+  const std::shared_ptr<srv::ListExecutableMissions::Request>,
+  std::shared_ptr<srv::ListExecutableMissions::Response> response)
+{
+  const auto missions = discoverManualMissions();
+  response->success = true;
+  response->message = "Executable missions listed";
+  for (const auto & mission : missions) {
+    response->mission_ids.push_back(mission.mission_id);
+    response->mission_types.push_back(mission.mission_type);
+    response->execution_modes.push_back(mission.execution_mode);
+    response->running_profile_ids.push_back(mission.running_profile_id);
+    response->is_manual.push_back(mission.is_manual);
+    response->artifacts_ready.push_back(mission.artifacts_ready);
+  }
+}
+
 void MissionExecutorNode::handleListManualMissions(
   const std::shared_ptr<srv::ListManualMissions::Request>,
   std::shared_ptr<srv::ListManualMissions::Response> response)
@@ -311,7 +343,7 @@ void MissionExecutorNode::handleListManualMissions(
   response->success = true;
   response->message = "Manual missions listed";
   for (const auto & mission : missions) {
-    if (mission.mission_type == "vda5050_scheduled_mission") {
+    if (!mission.is_manual) {
       continue;
     }
     response->mission_ids.push_back(mission.mission_id);
@@ -321,12 +353,81 @@ void MissionExecutorNode::handleListManualMissions(
   }
 }
 
+void MissionExecutorNode::handleUploadVda5050Mission(
+  const std::shared_ptr<srv::UploadVda5050Mission::Request> request,
+  std::shared_ptr<srv::UploadVda5050Mission::Response> response)
+{
+  if (request->mission_json.empty()) {
+    response->success = false;
+    response->message = "mission_json is required";
+    return;
+  }
+
+  try {
+    auto mission_document = nlohmann::json::parse(request->mission_json);
+    if (!mission_document.is_object()) {
+      throw std::runtime_error("mission_json must describe a JSON object");
+    }
+
+    const std::string mission_id = deriveMissionId(mission_document, request->mission_id);
+    const auto missions_root = resolvePath(missions_directory_);
+    const auto mission_folder = missions_root / mission_id;
+    const auto mission_file = mission_folder / (mission_id + mission_file_extension_);
+
+    if ((std::filesystem::exists(mission_folder) || std::filesystem::exists(mission_file)) &&
+      !request->overwrite_existing)
+    {
+      response->success = false;
+      response->message = "Mission already exists for mission_id=" + mission_id;
+      return;
+    }
+
+    std::filesystem::create_directories(mission_folder);
+
+    if (mission_document.contains("mission_type") &&
+      mission_document.at("mission_type").is_string() &&
+      toLower(mission_document.at("mission_type").get<std::string>()) != kScheduledMissionType)
+    {
+      throw std::runtime_error("upload_vda5050_mission only accepts autonomous VDA5050 missions");
+    }
+
+    mission_document["mission_type"] = kScheduledMissionType;
+
+    std::ofstream mission_stream(mission_file, std::ios::trunc);
+    if (!mission_stream.is_open()) {
+      throw std::runtime_error("Failed to write mission file: " + mission_file.string());
+    }
+    mission_stream << std::setw(2) << mission_document << '\n';
+
+    // Clear stale generated artifacts so the parser rebuilds from the new VDA5050 payload on execution.
+    std::filesystem::remove(mission_folder / (mission_id + "_costmap.yaml"));
+    std::filesystem::remove(mission_folder / (mission_id + "_costmap.pgm"));
+    std::filesystem::remove(mission_folder / (mission_id + "_path.geojson"));
+
+    const auto mission = classifyMissionFile(mission_file);
+    if (!mission) {
+      throw std::runtime_error("Stored mission could not be classified");
+    }
+
+    response->success = true;
+    response->message = "VDA5050 mission uploaded";
+    response->mission_id = mission->mission_id;
+    response->mission_file = mission->mission_path;
+    response->mission_folder = mission_folder.string();
+    response->mission_type = mission->mission_type;
+    response->running_profile_id = mission->running_profile_id;
+  } catch (const std::exception & exception) {
+    response->success = false;
+    response->message = exception.what();
+  }
+}
+
 void MissionExecutorNode::handlePrepareManualMission(
   const std::shared_ptr<srv::PrepareManualMission::Request> request,
   std::shared_ptr<srv::PrepareManualMission::Response> response)
 {
   const auto mission = findManualMission(request->mission_id);
-  if (!mission || mission->mission_type == "vda5050_scheduled_mission") {
+  if (!mission || !mission->is_manual) {
     response->success = false;
     response->message = "Manual mission not found for mission_id=" + request->mission_id;
     return;
@@ -636,6 +737,45 @@ std::optional<ManualMissionInfo> MissionExecutorNode::findManualMission(
   return *it;
 }
 
+std::string MissionExecutorNode::sanitizeMissionId(const std::string & mission_id)
+{
+  std::string sanitized;
+  sanitized.reserve(mission_id.size());
+  for (const unsigned char character : mission_id) {
+    if (std::isalnum(character) || character == '-' || character == '_') {
+      sanitized.push_back(static_cast<char>(character));
+      continue;
+    }
+    if (character == ' ' || character == '.' || character == '/') {
+      sanitized.push_back('_');
+    }
+  }
+
+  if (sanitized.empty()) {
+    throw std::runtime_error("Mission id must contain at least one alphanumeric character");
+  }
+  return sanitized;
+}
+
+std::string MissionExecutorNode::deriveMissionId(
+  const nlohmann::json & document,
+  const std::string & requested_mission_id)
+{
+  if (!requested_mission_id.empty()) {
+    return sanitizeMissionId(requested_mission_id);
+  }
+
+  if (document.contains("orderId") && document.at("orderId").is_string()) {
+    return sanitizeMissionId(document.at("orderId").get<std::string>());
+  }
+
+  if (document.contains("name") && document.at("name").is_string()) {
+    return sanitizeMissionId(document.at("name").get<std::string>());
+  }
+
+  throw std::runtime_error("Unable to derive mission_id from mission_json; provide mission_id explicitly");
+}
+
 std::filesystem::path MissionExecutorNode::resolvePath(const std::string & configured_path) const
 {
   const std::filesystem::path configured(configured_path);
@@ -705,7 +845,7 @@ std::optional<ManualMissionInfo> MissionExecutorNode::classifyMissionFile(
   mission.mission_type =
     document.contains("mission_type") && document.at("mission_type").is_string() ?
     document.at("mission_type").get<std::string>() :
-    "vda5050_scheduled_mission";
+    kScheduledMissionType;
   mission.execution_mode = kFollowWaypointsExecutionMode;
 
   if (document.contains("execution_mode") && document.at("execution_mode").is_string()) {
@@ -726,6 +866,8 @@ std::optional<ManualMissionInfo> MissionExecutorNode::classifyMissionFile(
   } else {
     mission.running_profile_id = scheduled_running_profile_id_;
   }
+  mission.is_manual = lowered_mission_type != kScheduledMissionType;
+  mission.artifacts_ready = missionArtifactsReady(mission);
   return mission;
 }
 
@@ -1357,7 +1499,7 @@ bool MissionExecutorNode::ensureMissionArtifactsReady(const ManualMissionInfo & 
   if (missionArtifactsReady(mission)) {
     return true;
   }
-  if (mission.mission_type != "vda5050_scheduled_mission") {
+  if (toLower(mission.mission_type) != kScheduledMissionType) {
     return false;
   }
   if (!mission_parser_parameter_client_->service_is_ready() ||

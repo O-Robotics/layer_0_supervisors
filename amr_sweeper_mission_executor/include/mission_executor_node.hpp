@@ -19,8 +19,10 @@
 #include "amr_sweeper_mission_executor/srv/end_mission.hpp"
 #include "amr_sweeper_fsm/srv/request_state.hpp"
 #include "amr_sweeper_mission_executor/srv/execute_mission.hpp"
+#include "amr_sweeper_mission_executor/srv/list_executable_missions.hpp"
 #include "amr_sweeper_mission_executor/srv/list_manual_missions.hpp"
 #include "amr_sweeper_mission_executor/srv/prepare_manual_mission.hpp"
+#include "amr_sweeper_mission_executor/srv/upload_vda5050_mission.hpp"
 
 namespace amr_sweeper_mission_executor
 {
@@ -32,6 +34,8 @@ struct ManualMissionInfo
   std::string mission_type;
   std::string execution_mode;
   std::uint16_t running_profile_id{0U};
+  bool is_manual{false};
+  bool artifacts_ready{false};
 };
 
 struct PreparedMissionContext
@@ -47,9 +51,15 @@ public:
   explicit MissionExecutorNode(const rclcpp::NodeOptions & options = rclcpp::NodeOptions());
 
 private:
+  void handleListExecutableMissions(
+    const std::shared_ptr<srv::ListExecutableMissions::Request> request,
+    std::shared_ptr<srv::ListExecutableMissions::Response> response);
   void handleListManualMissions(
     const std::shared_ptr<srv::ListManualMissions::Request> request,
     std::shared_ptr<srv::ListManualMissions::Response> response);
+  void handleUploadVda5050Mission(
+    const std::shared_ptr<srv::UploadVda5050Mission::Request> request,
+    std::shared_ptr<srv::UploadVda5050Mission::Response> response);
   void handlePrepareManualMission(
     const std::shared_ptr<srv::PrepareManualMission::Request> request,
     std::shared_ptr<srv::PrepareManualMission::Response> response);
@@ -65,6 +75,10 @@ private:
 
   [[nodiscard]] std::vector<ManualMissionInfo> discoverManualMissions() const;
   [[nodiscard]] std::optional<ManualMissionInfo> findManualMission(const std::string & mission_id) const;
+  [[nodiscard]] static std::string sanitizeMissionId(const std::string & mission_id);
+  [[nodiscard]] static std::string deriveMissionId(
+    const nlohmann::json & document,
+    const std::string & requested_mission_id);
   [[nodiscard]] std::filesystem::path resolvePath(const std::string & configured_path) const;
   [[nodiscard]] std::filesystem::path resolveManualMissionsDirectory() const;
   [[nodiscard]] std::filesystem::path missionFolderPath(const std::filesystem::path & mission_path) const;
@@ -140,7 +154,9 @@ private:
   rclcpp::AsyncParametersClient::SharedPtr mission_parser_parameter_client_;
   rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr mission_parser_build_client_;
   rclcpp::Client<amr_sweeper_fsm::srv::RequestState>::SharedPtr fsm_request_client_;
+  rclcpp::Service<srv::ListExecutableMissions>::SharedPtr list_executable_missions_service_;
   rclcpp::Service<srv::ListManualMissions>::SharedPtr list_manual_missions_service_;
+  rclcpp::Service<srv::UploadVda5050Mission>::SharedPtr upload_vda5050_mission_service_;
   rclcpp::Service<srv::PrepareManualMission>::SharedPtr prepare_manual_mission_service_;
   rclcpp::Service<srv::ExecuteMission>::SharedPtr execute_mission_service_;
   rclcpp::Service<srv::EndMission>::SharedPtr end_mission_service_;
