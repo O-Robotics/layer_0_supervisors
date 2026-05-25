@@ -17,7 +17,7 @@ Terminal A:
   source /opt/ros/jazzy/setup.bash
   colcon build --packages-select amr_sweeper_fsm
   source install/setup.bash
-  ros2 launch amr_sweeper_fsm amr_sweeper_layer_0_fsm.launch.py
+  ros2 launch amr_sweeper_fsm amr_sweeper_fsm.launch.py
 
 Arguments (pass arguments as '<name>:=<value>'):
     'namespace': Top-level namespace for all FSM nodes. (default: 'amr_sweeper')
@@ -28,7 +28,7 @@ Arguments (pass arguments as '<name>:=<value>'):
       (default: '<package_share>/share/amr_sweeper_fsm/config/state_parameters.yaml')
 
 "TEST"
-ros2 launch amr_sweeper_fsm amr_sweeper_layer_0_fsm.launch.py start_profile:=000
+ros2 launch amr_sweeper_fsm amr_sweeper_fsm.launch.py start_profile:=000
 
 2) Discover ROS graph
 ---------------------

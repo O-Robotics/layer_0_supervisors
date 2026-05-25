@@ -413,6 +413,10 @@ void SupervisorNode::start_enter_state(FSMState target)
       break;
   }
 
+  // Keep the desired profile aligned with the clamped in-flight target so a later
+  // tick does not reapply an out-of-band profile onto the newly entered state.
+  desired_profile_ = op_target_profile_;
+
   op_phase_ = OpPhase::TGT_CONFIGURE;
   op_inflight_ = false;
 }
@@ -446,6 +450,10 @@ void SupervisorNode::start_switch_to(FSMState target)
     default:
       break;
   }
+
+  // Keep the desired profile aligned with the clamped in-flight target so a later
+  // tick does not reapply an out-of-band profile onto the newly entered state.
+  desired_profile_ = op_target_profile_;
 
   op_phase_ = OpPhase::CUR_GET;
   op_inflight_ = false;
@@ -755,6 +763,8 @@ switch (current_state_) {
     break;
 }
 current_profile_ = effective_profile;
+desired_profile_ = current_profile_;
+transitioning_to_profile_ = current_profile_;
 
 RCLCPP_INFO(
   this->get_logger(),
@@ -1206,6 +1216,7 @@ void SupervisorNode::tick()
           "FSM profile changed: now %s (%03u)",
           state_name(current_state_).c_str(),
           current_profile_);
+        transitioning_to_profile_ = current_profile_;
         last_message_ = "Applied profile update";
       }
     }

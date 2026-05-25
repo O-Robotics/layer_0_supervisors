@@ -21,8 +21,9 @@ profiles:
             exec: "ros2 launch amr_sweeper_layer_1_hardware_bringup amr_sweeper_layer_1_hardware_bringup.launch.py"
             args:
               - "namespace:={ns}"
+              - "use_amr_sweeper_description:=false"
               - "use_ros2_control:=false"
-              - "use_amr_sweeper_battery:=false"
+              - "use_amr_sweeper_battery:=true"
               - "use_amr_sweeper_system_info:=true"
               - "use_amr_sweeper_usb_cameras:=false"
               - "use_amr_sweeper_depth_camera:=false"

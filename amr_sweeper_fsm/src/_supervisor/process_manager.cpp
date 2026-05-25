@@ -5,6 +5,8 @@
 #include <unistd.h>
 
 #include <cstring>
+#include <cstdlib>
+#include <filesystem>
 
 namespace fsm_layer_0
 {
@@ -71,6 +73,21 @@ bool ProcessManager::start(const std::string & command, std::string & err_out)
   if (pid == 0) {
     // Child: new process group so we can signal the whole tree.
     ::setpgid(0, 0);
+
+    // Give each FSM-managed launch tree an isolated ROS log directory so concurrent
+    // `ros2 launch` invocations do not race on ~/.ros/log/latest.
+    const std::filesystem::path ros_log_dir =
+      std::filesystem::temp_directory_path() /
+      ("amr_sweeper_fsm_roslog_" + std::to_string(::getpid()));
+    std::error_code ec;
+    std::filesystem::create_directories(ros_log_dir, ec);
+    ::setenv("ROS_LOG_DIR", ros_log_dir.c_str(), 1);
+
+    // Fast DDS shared-memory transport can leave stale lock files behind when many
+    // short-lived launch trees cycle quickly. Disable SHM for FSM-managed subprocesses
+    // to avoid spurious RTPS transport startup errors.
+    ::setenv("RMW_FASTRTPS_USE_SHM", "0", 1);
+
     ::execl("/bin/sh", "sh", "-c", command.c_str(), (char *)nullptr);
     _exit(127);
   }

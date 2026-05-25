@@ -1,7 +1,7 @@
 # layer_0_supervisors
 
 ```
-ros2 launch amr_sweeper_fsm amr_sweeper_layer_0_fsm.launch.py
+ros2 launch amr_sweeper_fsm amr_sweeper_fsm.launch.py
 ```
 
 Dependencies to other AMR Sweeper packages:
