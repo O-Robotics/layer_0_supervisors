@@ -17,7 +17,6 @@
 #include <vector>
 
 #include <nlohmann/json.hpp>
-#include <rmw/qos_profiles.h>
 
 namespace amr_sweeper_mission_executor
 {
@@ -240,11 +239,11 @@ MissionExecutorNode::MissionExecutorNode(const rclcpp::NodeOptions & options)
     std::make_shared<rclcpp::AsyncParametersClient>(this, mission_parser_node_name_);
   mission_parser_build_client_ = create_client<std_srvs::srv::Trigger>(
     mission_parser_build_service_,
-    rmw_qos_profile_services_default,
+    rclcpp::ServicesQoS(),
     client_callback_group_);
   fsm_request_client_ = create_client<amr_sweeper_fsm::srv::RequestState>(
     fsm_request_service_,
-    rmw_qos_profile_services_default,
+    rclcpp::ServicesQoS(),
     client_callback_group_);
 
   list_executable_missions_service_ = create_service<srv::ListExecutableMissions>(
