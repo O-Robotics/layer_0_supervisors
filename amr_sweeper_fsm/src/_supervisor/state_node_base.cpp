@@ -1566,7 +1566,7 @@ void StateNodeBase::on_rosout(const rcl_interfaces::msg::Log::SharedPtr msg)
       auto req = std::make_shared<amr_sweeper_fsm::srv::RequestState::Request>();
       req->target_state = "IDLING";
       req->target_lifecycle.clear();
-      req->target_profile_id = 100;  // Default IDLING profile (*00)
+      req->target_profile_id = 101;  // Default IDLING profile
       req->priority = 250;
       req->force = true;
       req->requester = "rosout_trigger";

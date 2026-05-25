@@ -47,7 +47,7 @@
 
     # Valid profile range: 100 - 199
     profiles:
-      default_profile_id: 100
+      default_profile_id: 101
       file: "config/profiles/idling_profiles.yaml"
 
 
