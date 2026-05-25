@@ -7,7 +7,7 @@
 profiles:
 
   # ---------------------------------------------------------------------------
-  # Profile 100 (FSM tester)
+  # Profile 100 (default)
   # ---------------------------------------------------------------------------
   - profile:
       id: 100
@@ -15,28 +15,37 @@ profiles:
         auto_transition_on: false
         auto_transition_profile: 
         fault_transition_on: true
-        fault_transition_profile: 200
+        fault_transition_profile: 400
 
       processes:
-         # Logic block: FSM tester node (critical)
-        - name: "fsm_tester"
+      # Logic block: layer_1_hardware bringup (critical)
+        - name: "amr_sweeper_layer_1_hardware_bringup"
           importance: "critical"
           startup:
-            exec: "ros2 run amr_sweeper_fsm fsm_tester_node"
+            exec: "ros2 launch amr_sweeper_layer_1_hardware_bringup amr_sweeper_layer_1_hardware_bringup.launch.py"
             args:
-              - "--ros-args -r __ns:=/{ns}"
-              - "-p exit_after_ms:=2000"
+              - "namespace:={ns}"
+              - "use_amr_sweeper_battery:=true"
+              - "use_amr_sweeper_system_info:=true"
+              - "use_amr_sweeper_usb_cameras:=false"
+              - "use_amr_sweeper_depth_camera:=false"
+              - "use_amr_sweeper_imu:=true"
+              - "use_amr_sweeper_gnss:=true"
+              - "use_ntrip_client:=true"
             ready:
               - type: "topic"
-                target: "{ns}/fsm_tester"
+                target: "system_info"
                 required: true
               - type: "service"
-                target: "{ns}/fsm_tester_node/apply_parameters"
+                target: "amr_sweeper_battery_node/get_parameters"
                 required: true
-            window_ms: 5000
+            window_ms: 8000
           rosout_triggers:
-            - "node=fsm_tester_node;level>=ERROR;action=FAULT"
-            - "node=fsm_tester_node_node;level>=WARN;action=DEGRADED"
+            - "node=amr_sweeper_system_info_node;level>=ERROR;action=FAULT"
+            - "node=amr_sweeper_system_info_node;level>=WARN;action=DEGRADED"
+            - "node=amr_sweeper_system_info_node;match=Could not open file;action=FAULT"
+            - "node=amr_sweeper_battery_node;level>=ERROR;action=FAULT"
+            - "node=amr_sweeper_battery_node;level>=WARN;action=DEGRADED"
           errors:
             on_readiness_fail: "FAULT"
             on_unexpected_exit: "FAULT"
@@ -52,7 +61,68 @@ profiles:
 
 
   # ---------------------------------------------------------------------------
-  # Profile 101 (default)
+        - name: "amr_sweeper_vda5050_parser"
+          importance: "degraded"
+          startup:
+            exec: "ros2 launch amr_sweeper_vda5050_parser mission_parser.launch.py"
+            args:
+              - "namespace:={ns}"
+              - "use_sim_time:=false"
+              - "missions_directory:=src/missions"
+              - "auto_build_on_start:=true"
+              - "watch_for_updates:=true"
+            ready:
+              - type: "service"
+                target: "mission_parser_node/get_parameters"
+                required: true
+            window_ms: 6000
+          rosout_triggers:
+            - "node=mission_parser_node;level>=ERROR;action=DEGRADED"
+          errors:
+            on_readiness_fail: "DEGRADED"
+            on_unexpected_exit: "DEGRADED"
+            priority: 220
+            force: false
+          restart:
+            max_restarts: 5
+            restart_delay_ms: 1000
+          shutdown:
+            sigint_timeout_ms: 1000
+            sigterm_timeout_ms: 1000
+            sigkill_timeout_ms: 1000
+
+        - name: "amr_sweeper_scheduler"
+          importance: "degraded"
+          startup:
+            exec: "ros2 launch amr_sweeper_scheduler scheduler.launch.py"
+            args:
+              - "namespace:={ns}"
+              - "use_sim_time:=false"
+              - "missions_directory:=src/missions"
+              - "robot_id:=RBT-01"
+            ready:
+              - type: "service"
+                target: "reload_schedule"
+                required: true
+            window_ms: 6000
+          rosout_triggers:
+            - "node=amr_sweeper_scheduler;level>=ERROR;action=DEGRADED"
+          errors:
+            on_readiness_fail: "DEGRADED"
+            on_unexpected_exit: "DEGRADED"
+            priority: 220
+            force: false
+          restart:
+            max_restarts: 5
+            restart_delay_ms: 1000
+          shutdown:
+            sigint_timeout_ms: 1000
+            sigterm_timeout_ms: 1000
+            sigkill_timeout_ms: 1000
+
+
+  # ---------------------------------------------------------------------------
+  # Profile 101 (alternate)
   # ---------------------------------------------------------------------------
   - profile:
       id: 101
