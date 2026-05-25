@@ -269,7 +269,7 @@ profiles:
               - "use_amr_sweeper_battery:=true"
               - "use_amr_sweeper_system_info:=true"
               - "use_amr_sweeper_usb_cameras:=true"
-              - "use_amr_sweeper_depth_camera:=true"
+              - "use_amr_sweeper_depth_camera:=false"
               - "use_amr_sweeper_imu:=true"
               - "use_amr_sweeper_gnss:=true"
               - "use_ntrip_client:=true"
