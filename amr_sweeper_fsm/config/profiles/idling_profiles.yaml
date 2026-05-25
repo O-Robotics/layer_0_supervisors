@@ -24,14 +24,14 @@ profiles:
           startup:
             exec: "ros2 run amr_sweeper_fsm fsm_tester_node"
             args:
-              - "--ros-args -r __ns:=/amr_sweeper"
+              - "--ros-args -r __ns:=/{ns}"
               - "-p exit_after_ms:=2000"
             ready:
               - type: "topic"
-                target: "/amr_sweeper/fsm_tester"
+                target: "{ns}/fsm_tester"
                 required: true
               - type: "service"
-                target: "/amr_sweeper/fsm_tester_node/apply_parameters"
+                target: "{ns}/fsm_tester_node/apply_parameters"
                 required: true
             window_ms: 5000
           rosout_triggers:
