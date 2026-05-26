@@ -40,7 +40,7 @@ class MissionWebServerNode(Node):
         self._site_title = self.declare_parameter("site_title", "AMR Sweeper Mission Control").value
         self._public_base_url = self.declare_parameter(
             "public_base_url",
-            "http://192.168.2.5:8080",
+            "http://192.168.2.1:8080",
         ).value
         self._missions_directory = self.declare_parameter("missions_directory", "src/missions").value
         self._active_execution_pointer_filename = self.declare_parameter(

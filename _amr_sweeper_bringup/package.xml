@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>amr_sweeper_bringup</name>
+  <version>0.0.0</version>
+  <description>Bringup entrypoint for the AMR Sweeper layer 0 supervisor stack.</description>
+  <maintainer email="info@O-Robotics.com">O-Robotics</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>amr_sweeper_default_missions</exec_depend>
+  <exec_depend>amr_sweeper_fsm</exec_depend>
+  <exec_depend>amr_sweeper_mission_executor</exec_depend>
+  <exec_depend>amr_sweeper_scheduler</exec_depend>
+  <exec_depend>amr_sweeper_vda5050_parser</exec_depend>
+  <exec_depend>amr_sweeper_web_server</exec_depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

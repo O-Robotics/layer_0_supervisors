@@ -11,11 +11,8 @@ Services:
 - `end_mission`
 
 HTTP operator UI:
-- launch `mission_web_server.py` alongside the executor to expose a local dashboard over HTTP
-- shows FSM state, GNSS latitude/longitude, battery state, and the active mission run folder
-- can execute built-in manual missions and saved autonomous missions
-- can stop the active mission
-- can upload a VDA5050 mission JSON payload into the runtime missions directory so it becomes executable
+- the HTTP operator UI now lives in `amr_sweeper_web_server`
+- it still uses the mission executor services to list missions, execute them, stop the active mission, and upload VDA5050 mission JSON payloads
 
 Profile routing:
 - scheduled VDA5050 missions -> RUNNING profile `201`
