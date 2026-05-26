@@ -395,16 +395,16 @@ void SupervisorNode::start_enter_state(FSMState target)
   // Clamp to valid profile band for target state
   switch (op_target_) {
     case FSMState::INITIALIZING:
-      if (op_target_profile_ > 99) { op_target_profile_ = 0; }
+      if (op_target_profile_ > 99) { op_target_profile_ = 1; }
       break;
     case FSMState::IDLING:
-      if (op_target_profile_ < 100 || op_target_profile_ > 199) { op_target_profile_ = 100; }
+      if (op_target_profile_ < 100 || op_target_profile_ > 199) { op_target_profile_ = 101; }
       break;
     case FSMState::RUNNING:
-      if (op_target_profile_ < 200 || op_target_profile_ > 299) { op_target_profile_ = 200; }
+      if (op_target_profile_ < 200 || op_target_profile_ > 299) { op_target_profile_ = 201; }
       break;
     case FSMState::CHARGING:
-      if (op_target_profile_ < 300 || op_target_profile_ > 399) { op_target_profile_ = 300; }
+      if (op_target_profile_ < 300 || op_target_profile_ > 399) { op_target_profile_ = 301; }
       break;
     case FSMState::FAULT:
       if (op_target_profile_ < 400 || op_target_profile_ > 499) { op_target_profile_ = 400; }
@@ -433,16 +433,16 @@ void SupervisorNode::start_switch_to(FSMState target)
   // Clamp to valid profile band for target state
   switch (op_target_) {
     case FSMState::INITIALIZING:
-      if (op_target_profile_ > 99) { op_target_profile_ = 0; }
+      if (op_target_profile_ > 99) { op_target_profile_ = 1; }
       break;
     case FSMState::IDLING:
-      if (op_target_profile_ < 100 || op_target_profile_ > 199) { op_target_profile_ = 100; }
+      if (op_target_profile_ < 100 || op_target_profile_ > 199) { op_target_profile_ = 101; }
       break;
     case FSMState::RUNNING:
-      if (op_target_profile_ < 200 || op_target_profile_ > 299) { op_target_profile_ = 200; }
+      if (op_target_profile_ < 200 || op_target_profile_ > 299) { op_target_profile_ = 201; }
       break;
     case FSMState::CHARGING:
-      if (op_target_profile_ < 300 || op_target_profile_ > 399) { op_target_profile_ = 300; }
+      if (op_target_profile_ < 300 || op_target_profile_ > 399) { op_target_profile_ = 301; }
       break;
     case FSMState::FAULT:
       if (op_target_profile_ < 400 || op_target_profile_ > 499) { op_target_profile_ = 400; }
@@ -663,16 +663,16 @@ void SupervisorNode::drive()
             uint16_t effective_profile = op_target_profile_;
             switch (current_state_) {
               case FSMState::INITIALIZING:
-                if (effective_profile > 99) { effective_profile = 0; }
+                if (effective_profile > 99) { effective_profile = 1; }
                 break;
               case FSMState::IDLING:
-                if (effective_profile < 100 || effective_profile > 199) { effective_profile = 100; }
+                if (effective_profile < 100 || effective_profile > 199) { effective_profile = 101; }
                 break;
               case FSMState::RUNNING:
-                if (effective_profile < 200 || effective_profile > 299) { effective_profile = 200; }
+                if (effective_profile < 200 || effective_profile > 299) { effective_profile = 201; }
                 break;
               case FSMState::CHARGING:
-                if (effective_profile < 300 || effective_profile > 399) { effective_profile = 300; }
+                if (effective_profile < 300 || effective_profile > 399) { effective_profile = 301; }
                 break;
               case FSMState::FAULT:
                 if (effective_profile < 400 || effective_profile > 499) { effective_profile = 400; }
@@ -745,16 +745,16 @@ current_state_ = op_target_;
 uint16_t effective_profile = op_target_profile_;
 switch (current_state_) {
   case FSMState::INITIALIZING:
-    if (effective_profile > 99) { effective_profile = 0; }
+    if (effective_profile > 99) { effective_profile = 1; }
     break;
   case FSMState::IDLING:
-    if (effective_profile < 100 || effective_profile > 199) { effective_profile = 100; }
+    if (effective_profile < 100 || effective_profile > 199) { effective_profile = 101; }
     break;
   case FSMState::RUNNING:
-    if (effective_profile < 200 || effective_profile > 299) { effective_profile = 200; }
+    if (effective_profile < 200 || effective_profile > 299) { effective_profile = 201; }
     break;
   case FSMState::CHARGING:
-    if (effective_profile < 300 || effective_profile > 399) { effective_profile = 300; }
+    if (effective_profile < 300 || effective_profile > 399) { effective_profile = 301; }
     break;
   case FSMState::FAULT:
     if (effective_profile < 400 || effective_profile > 499) { effective_profile = 400; }
