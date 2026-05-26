@@ -543,7 +543,7 @@ SchedulerNode::SchedulerNode(const rclcpp::NodeOptions & options)
 : rclcpp::Node("amr_sweeper_scheduler", options)
 {
   schedule_ics_path_ = declare_parameter<std::string>("schedule_ics_path", "");
-  missions_directory_ = declare_parameter<std::string>("missions_directory", "src/missions");
+  missions_directory_ = declare_parameter<std::string>("missions_directory", "src/missions_from_db");
   default_schedule_filename_ = declare_parameter<std::string>(
     "default_schedule_filename",
     "");

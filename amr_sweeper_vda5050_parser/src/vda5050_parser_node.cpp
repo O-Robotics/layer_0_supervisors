@@ -639,7 +639,7 @@ MissionParserNode::MissionParserNode(const rclcpp::NodeOptions & options)
 : rclcpp::Node("vda5050_parser_node", options)
 {
   mission_path_ = declare_parameter<std::string>("mission_path", "");
-  missions_directory_ = declare_parameter<std::string>("missions_directory", "src/missions");
+  missions_directory_ = declare_parameter<std::string>("missions_directory", "src/missions_from_db");
   mission_file_extension_ = declare_parameter<std::string>("mission_file_extension", ".json");
   costmap_output_basename_ = declare_parameter<std::string>("costmap_output_basename", "global_costmap");
   coverage_path_basename_ = declare_parameter<std::string>(
@@ -700,10 +700,9 @@ bool MissionParserNode::buildCurrentMissionArtifacts()
   const auto current_stamp = currentMissionStamp(*mission_path);
   const auto mission_key = mission_path->string();
   const auto stamp_it = mission_build_stamps_.find(mission_key);
-  const bool active_alias_outdated = *mission_path != last_active_alias_mission_;
   const bool mission_changed =
     stamp_it == mission_build_stamps_.end() || stamp_it->second != current_stamp;
-  if (!mission_changed && !active_alias_outdated) {
+  if (!mission_changed) {
     return true;
   }
 
@@ -866,22 +865,7 @@ bool MissionParserNode::buildArtifactsForMission(
       std::filesystem::remove(legacy_coverage_path);
     }
 
-    if (write_active_aliases) {
-      const std::filesystem::path active_image_path =
-        missions_directory / (costmap_output_basename_ + ".pgm");
-      const std::filesystem::path active_yaml_path =
-        missions_directory / (costmap_output_basename_ + ".yaml");
-      const std::filesystem::path active_coverage_path =
-        missions_directory / (coverage_path_basename_ + ".geojson");
-      mission_parser_->saveGlobalCostmapArtifacts(
-        rasterized_map,
-        active_image_path.string(),
-        active_yaml_path.string());
-      if (mission_parser_->hasMissionWaypoints()) {
-        mission_parser_->saveMissionWaypointsArtifact(active_coverage_path.string());
-      }
-      last_active_alias_mission_ = staged_mission_path;
-    }
+    (void)write_active_aliases;
 
     mission_build_stamps_[staged_mission_path.string()] = currentMissionStamp(staged_mission_path);
     publishStatus("built", staged_mission_path.string());

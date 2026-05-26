@@ -80,6 +80,8 @@ private:
     const nlohmann::json & document,
     const std::string & requested_mission_id);
   [[nodiscard]] std::filesystem::path resolvePath(const std::string & configured_path) const;
+  [[nodiscard]] std::filesystem::path resolveMissionsFromDbDirectory() const;
+  [[nodiscard]] std::filesystem::path resolveMissionsLogDirectory() const;
   [[nodiscard]] std::filesystem::path resolveManualMissionsDirectory() const;
   [[nodiscard]] std::filesystem::path missionFolderPath(const std::filesystem::path & mission_path) const;
   [[nodiscard]] std::string missionStemForPath(const std::filesystem::path & mission_path) const;
@@ -121,12 +123,16 @@ private:
     const PreparedMissionContext & context,
     const srv::ExecuteMission::Request & request,
     std::string & message) const;
+  [[nodiscard]] std::filesystem::path resolveScheduleSourcePath() const;
+  [[nodiscard]] std::filesystem::path ensureScheduleLogPath(
+    const std::filesystem::path & schedule_source_path) const;
   [[nodiscard]] static std::string formatUtcTimestamp(
     const std::chrono::system_clock::time_point & time_point);
   [[nodiscard]] static std::string formatLocalTimestamp(
     const std::chrono::system_clock::time_point & time_point);
 
   std::string missions_directory_;
+  std::string missions_log_directory_;
   std::string manual_missions_directory_;
   std::string mission_file_extension_;
   std::string active_costmap_output_basename_;

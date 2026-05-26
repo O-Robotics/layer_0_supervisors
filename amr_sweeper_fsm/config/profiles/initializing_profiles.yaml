@@ -161,7 +161,7 @@ profiles:
             args:
               - "namespace:={ns}"
               - "use_sim_time:=false"
-              - "missions_directory:=src/missions"
+              - "missions_directory:=src/missions_from_db"
               - "auto_build_on_start:=true"
               - "watch_for_updates:=true"
             ready:
@@ -195,7 +195,7 @@ profiles:
             args:
               - "namespace:={ns}"
               - "use_sim_time:=false"
-              - "missions_directory:=src/missions"
+              - "missions_directory:=src/missions_from_db"
               - "robot_id:=RBT-01"
               - "trigger_running_on_work_window:=false"
             ready:

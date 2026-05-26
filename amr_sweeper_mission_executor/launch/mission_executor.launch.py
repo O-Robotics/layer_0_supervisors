@@ -9,6 +9,7 @@ from launch.substitutions import PathJoinSubstitution
 def generate_launch_description():
     namespace = LaunchConfiguration("namespace")
     missions_directory = LaunchConfiguration("missions_directory")
+    missions_log_directory = LaunchConfiguration("missions_log_directory")
     manual_missions_directory = LaunchConfiguration("manual_missions_directory")
     fsm_request_service = LaunchConfiguration("fsm_request_service")
     schedule_ics_path = LaunchConfiguration("schedule_ics_path")
@@ -23,7 +24,8 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument("namespace", default_value="amr_sweeper"),
-        DeclareLaunchArgument("missions_directory", default_value="src/missions"),
+        DeclareLaunchArgument("missions_directory", default_value="src/missions_from_db"),
+        DeclareLaunchArgument("missions_log_directory", default_value="src/missions_log"),
         DeclareLaunchArgument(
             "manual_missions_directory",
             default_value=PathJoinSubstitution(
@@ -48,6 +50,7 @@ def generate_launch_description():
             output="screen",
             parameters=[{
                 "missions_directory": missions_directory,
+                "missions_log_directory": missions_log_directory,
                 "manual_missions_directory": manual_missions_directory,
                 "fsm_request_service": fsm_request_service,
                 "schedule_ics_path": schedule_ics_path,

@@ -28,8 +28,9 @@ Responsibilities:
 - accept external/manual activation calls for built-in missions
 - source built-in manual mission templates from `amr_sweeper_default_missions`
 - build VDA5050 mission artifacts on demand when scheduled missions are not ready yet
+- read synced schedules and VDA5050 mission payloads from `/missions_from_db`
 - prepare execution folders and active mission aliases before the FSM handoff
-- write execution history under `/missions/<mission_id>/<execution_timestamp>/...`
+- write execution history, active aliases, and the execution pointer under `/missions_log`
 - append manual execution entries into the schedule log and stamp scheduled entries with actual start time
 - finalize mission runs with actual end time, outcome, and an FSM return to `IDLING`
 - calculate the traveled-path length from `actual_path.geojson` and append it into mission end metadata

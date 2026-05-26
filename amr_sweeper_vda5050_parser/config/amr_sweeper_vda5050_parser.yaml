@@ -2,10 +2,10 @@
   ros__parameters:
     # -- Mission sources and outputs ------------------------------------------
     mission_path:                       ""                   # Optional active mission path. Leave empty for auto-discovery until the scheduler selects a mission.
-    missions_directory:                 src/missions         # Folder containing incoming mission JSON files, per-mission subfolders, and active runtime aliases.
+    missions_directory:                 src/missions_from_db # Folder containing incoming mission JSON files and per-mission VDA5050 subfolders.
     mission_file_extension:             .json                # Mission file suffix scanned when discovering new VDA5050 missions.
-    costmap_output_basename:            global_costmap       # Active runtime costmap alias basename written at the missions root.
-    coverage_path_basename:             active_mission_path  # Active runtime route alias basename written at the missions root.
+    costmap_output_basename:            global_costmap       # Legacy compatibility parameter; runtime aliases are no longer written.
+    coverage_path_basename:             active_mission_path  # Legacy compatibility parameter; runtime aliases are no longer written.
 
     # -- Build controls -------------------------------------------------------
     mission_build_resolution:           0.1                  # Costmap raster resolution in meters per cell.

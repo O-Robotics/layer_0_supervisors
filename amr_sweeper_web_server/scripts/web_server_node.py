@@ -48,7 +48,10 @@ class MissionWebServerNode(Node):
             "public_base_url",
             "http://192.168.2.1:8080",
         ).value
-        self._missions_directory = self.declare_parameter("missions_directory", "src/missions").value
+        self._missions_log_directory = self.declare_parameter(
+            "missions_log_directory",
+            "src/missions_log",
+        ).value
         self._active_execution_pointer_filename = self.declare_parameter(
             "active_execution_pointer_filename",
             "active_execution.json",
@@ -402,7 +405,7 @@ class MissionWebServerNode(Node):
         }
 
     def _load_active_execution(self) -> dict[str, Any] | None:
-        pointer_path = _resolve_path(self._missions_directory) / self._active_execution_pointer_filename
+        pointer_path = _resolve_path(self._missions_log_directory) / self._active_execution_pointer_filename
         if not pointer_path.exists():
             return None
         try:
@@ -532,6 +535,14 @@ class MissionWebServerNode(Node):
     }}
     button:hover {{ background: var(--accent-strong); }}
     button.stop {{ background: var(--danger); }}
+    button:disabled {{
+      cursor: not-allowed;
+      background: #98a3aa;
+      color: #eef2f4;
+    }}
+    button.stop:disabled {{
+      background: #98a3aa;
+    }}
     pre {{
       margin: 0;
       white-space: pre-wrap;
@@ -566,6 +577,14 @@ class MissionWebServerNode(Node):
         <div id="fsm-transition" class="muted">Transition: -</div>
       </article>
       <article class="card">
+        <h2>Active Mission</h2>
+        <div id="active-mission" class="stat">No Active Missions</div>
+        <div id="active-directory" class="muted">Run folder: -</div>
+        <div style="margin-top: 12px;">
+          <button class="stop" id="stop-button" disabled>Stop Mission</button>
+        </div>
+      </article>
+      <article class="card">
         <h2>Position</h2>
         <div id="position-lat" class="stat">--</div>
         <div id="position-lon" class="muted">Longitude: --</div>
@@ -576,14 +595,6 @@ class MissionWebServerNode(Node):
         <div id="battery-percent" class="stat">--</div>
         <div id="battery-voltage" class="muted">Voltage: --</div>
         <div id="battery-current" class="muted">Current: --</div>
-      </article>
-      <article class="card">
-        <h2>Active Mission</h2>
-        <div id="active-mission" class="stat">None</div>
-        <div id="active-directory" class="muted">Run folder: -</div>
-        <div style="margin-top: 12px;">
-          <button class="stop" id="stop-button">Stop Mission</button>
-        </div>
       </article>
     </section>
 
@@ -633,6 +644,11 @@ class MissionWebServerNode(Node):
       const position = data.position || {{}};
       const battery = data.battery || {{}};
       const active = data.active_execution || {{}};
+      const hasActiveMission = Boolean(
+        active &&
+        active.mission_id &&
+        active.active !== false
+      );
 
       document.getElementById('fsm-state').textContent = fsm.current_state || 'Unknown';
       document.getElementById('fsm-profile').textContent = `Profile: ${{fsm.current_profile ?? '-'}}`;
@@ -654,9 +670,11 @@ class MissionWebServerNode(Node):
       document.getElementById('battery-current').textContent =
         battery.current !== undefined ? `Current: ${{Number(battery.current).toFixed(2)}} A` : 'Current: --';
 
-      document.getElementById('active-mission').textContent = active.mission_id || 'None';
+      document.getElementById('active-mission').textContent =
+        hasActiveMission ? active.mission_id : 'No Active Missions';
       document.getElementById('active-directory').textContent =
-        `Run folder: ${{active.mission_run_directory || '-'}}`;
+        `Run folder: ${{hasActiveMission ? (active.mission_run_directory || '-') : '-'}}`;
+      document.getElementById('stop-button').disabled = !hasActiveMission;
 
       rawStatus.textContent = JSON.stringify(data, null, 2);
     }}

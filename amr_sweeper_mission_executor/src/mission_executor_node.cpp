@@ -185,7 +185,10 @@ std::string discoverScheduleTimezone(const std::string & schedule_text)
 MissionExecutorNode::MissionExecutorNode(const rclcpp::NodeOptions & options)
 : rclcpp::Node("mission_executor_node", options)
 {
-  missions_directory_ = declare_parameter<std::string>("missions_directory", "src/missions");
+  missions_directory_ = declare_parameter<std::string>("missions_directory", "src/missions_from_db");
+  missions_log_directory_ = declare_parameter<std::string>(
+    "missions_log_directory",
+    "src/missions_log");
   manual_missions_directory_ = declare_parameter<std::string>("manual_missions_directory", "");
   mission_file_extension_ = declare_parameter<std::string>("mission_file_extension", ".json");
   active_costmap_output_basename_ = declare_parameter<std::string>(
@@ -369,7 +372,7 @@ void MissionExecutorNode::handleUploadVda5050Mission(
     }
 
     const std::string mission_id = deriveMissionId(mission_document, request->mission_id);
-    const auto missions_root = resolvePath(missions_directory_);
+    const auto missions_root = resolveMissionsFromDbDirectory();
     const auto mission_folder = missions_root / mission_id;
     const auto mission_file = mission_folder / (mission_id + mission_file_extension_);
 
@@ -711,7 +714,7 @@ std::vector<ManualMissionInfo> MissionExecutorNode::discoverManualMissions() con
     };
 
   scan_directory(resolveManualMissionsDirectory());
-  scan_directory(resolvePath(missions_directory_));
+  scan_directory(resolveMissionsFromDbDirectory());
 
   std::sort(
     missions.begin(),
@@ -789,6 +792,16 @@ std::filesystem::path MissionExecutorNode::resolvePath(const std::string & confi
   return configured;
 }
 
+std::filesystem::path MissionExecutorNode::resolveMissionsFromDbDirectory() const
+{
+  return resolvePath(missions_directory_);
+}
+
+std::filesystem::path MissionExecutorNode::resolveMissionsLogDirectory() const
+{
+  return resolvePath(missions_log_directory_);
+}
+
 std::filesystem::path MissionExecutorNode::resolveManualMissionsDirectory() const
 {
   if (!manual_missions_directory_.empty()) {
@@ -807,7 +820,7 @@ std::filesystem::path MissionExecutorNode::missionFolderPath(
 
 std::string MissionExecutorNode::missionStemForPath(const std::filesystem::path & mission_path) const
 {
-  if (mission_path.has_parent_path() && mission_path.parent_path() != resolvePath(missions_directory_)) {
+  if (mission_path.has_parent_path() && mission_path.parent_path() != resolveMissionsFromDbDirectory()) {
     return mission_path.parent_path().filename().string();
   }
   return mission_path.stem().string();
@@ -827,7 +840,7 @@ std::string MissionExecutorNode::missionRouteBasename(
 
 std::filesystem::path MissionExecutorNode::missionHistoryDirectory(const ManualMissionInfo & mission) const
 {
-  return resolvePath(missions_directory_) / mission.mission_id;
+  return resolveMissionsLogDirectory() / mission.mission_id;
 }
 
 std::optional<ManualMissionInfo> MissionExecutorNode::classifyMissionFile(
@@ -954,48 +967,6 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
     actual_path_stream << std::setw(2) << actual_path_document << '\n';
   }
 
-  const fs::path missions_directory = resolvePath(missions_directory_);
-  const fs::path active_costmap_yaml =
-    missions_directory / (active_costmap_output_basename_ + ".yaml");
-  const fs::path active_costmap_image =
-    missions_directory / (active_costmap_output_basename_ + ".pgm");
-  const fs::path active_route =
-    missions_directory / (active_route_output_basename_ + ".geojson");
-
-  fs::copy_file(
-    run_costmap_yaml,
-    active_costmap_yaml,
-    fs::copy_options::overwrite_existing);
-  fs::copy_file(
-    run_costmap_image,
-    active_costmap_image,
-    fs::copy_options::overwrite_existing);
-  fs::copy_file(
-    run_route,
-    active_route,
-    fs::copy_options::overwrite_existing);
-
-  {
-    std::ifstream yaml_input(active_costmap_yaml);
-    if (!yaml_input.is_open()) {
-      throw std::runtime_error("Failed to rewrite active costmap YAML image reference");
-    }
-    std::ostringstream yaml_buffer;
-    std::string yaml_line;
-    while (std::getline(yaml_input, yaml_line)) {
-      if (yaml_line.rfind("image:", 0) == 0) {
-        yaml_buffer << "image: " << active_costmap_output_basename_ << ".pgm\n";
-      } else {
-        yaml_buffer << yaml_line << "\n";
-      }
-    }
-    std::ofstream yaml_output(active_costmap_yaml, std::ios::trunc);
-    if (!yaml_output.is_open()) {
-      throw std::runtime_error("Failed to write active costmap YAML alias");
-    }
-    yaml_output << yaml_buffer.str();
-  }
-
   const nlohmann::json context{
     {"mission_id", mission.mission_id},
     {"mission_type", mission.mission_type},
@@ -1013,7 +984,7 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
     {"gaussian_output_directory", gaussian_output_directory.string()},
     {"captured_images_directory", captured_images_directory.string()},
     {"collected_artifacts_directory", collected_artifacts_directory.string()},
-    {"schedule_log_path", schedule_ics_path_.empty() ? discoverNewestSchedulePath(missions_directory).string() : resolvePath(schedule_ics_path_).string()}};
+    {"schedule_log_path", ensureScheduleLogPath(resolveScheduleSourcePath()).string()}};
 
   const fs::path execution_context_file = mission_run_directory / "execution_context.json";
   std::ofstream context_stream(execution_context_file);
@@ -1029,7 +1000,10 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
     {"execution_context_file", execution_context_file.string()},
     {"mission_window_start", mission_window_start},
     {"mission_window_end", mission_window_end}};
-  std::ofstream pointer_stream(missions_directory / active_execution_pointer_filename_, std::ios::trunc);
+  const fs::path missions_log_directory = resolveMissionsLogDirectory();
+  std::ofstream pointer_stream(
+    missions_log_directory / active_execution_pointer_filename_,
+    std::ios::trunc);
   if (!pointer_stream.is_open()) {
     throw std::runtime_error("Failed to write active manual mission execution pointer");
   }
@@ -1044,7 +1018,7 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
 
 std::filesystem::path MissionExecutorNode::activeExecutionPointerPath() const
 {
-  return resolvePath(missions_directory_) / active_execution_pointer_filename_;
+  return resolveMissionsLogDirectory() / active_execution_pointer_filename_;
 }
 
 std::optional<nlohmann::json> MissionExecutorNode::loadActiveExecutionPointer() const
@@ -1422,9 +1396,7 @@ void MissionExecutorNode::recordSafetyEvent(
     mission_run_directory = context_document->value("mission_run_directory", std::string{});
   }
   if (schedule_path_string.empty()) {
-    const auto schedule_path = schedule_ics_path_.empty() ?
-      discoverNewestSchedulePath(resolvePath(missions_directory_)) :
-      resolvePath(schedule_ics_path_);
+    const auto schedule_path = ensureScheduleLogPath(resolveScheduleSourcePath());
     schedule_path_string = schedule_path.string();
   }
   if (schedule_path_string.empty()) {
@@ -1626,6 +1598,34 @@ std::string MissionExecutorNode::formatLocalTimestamp(
   std::ostringstream stream;
   stream << std::put_time(&time_info, "%Y%m%dT%H%M%S");
   return stream.str();
+}
+
+std::filesystem::path MissionExecutorNode::resolveScheduleSourcePath() const
+{
+  if (!schedule_ics_path_.empty()) {
+    return resolvePath(schedule_ics_path_);
+  }
+  return discoverNewestSchedulePath(resolveMissionsFromDbDirectory());
+}
+
+std::filesystem::path MissionExecutorNode::ensureScheduleLogPath(
+  const std::filesystem::path & schedule_source_path) const
+{
+  if (schedule_source_path.empty()) {
+    return {};
+  }
+
+  const std::filesystem::path missions_log_directory = resolveMissionsLogDirectory();
+  std::filesystem::create_directories(missions_log_directory);
+  const std::filesystem::path schedule_log_path =
+    missions_log_directory / schedule_source_path.filename();
+  if (!std::filesystem::exists(schedule_log_path) && std::filesystem::exists(schedule_source_path)) {
+    std::filesystem::copy_file(
+      schedule_source_path,
+      schedule_log_path,
+      std::filesystem::copy_options::overwrite_existing);
+  }
+  return schedule_log_path;
 }
 
 }  // namespace amr_sweeper_mission_executor

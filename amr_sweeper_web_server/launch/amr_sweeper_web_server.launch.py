@@ -6,7 +6,7 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     namespace = LaunchConfiguration("namespace")
-    missions_directory = LaunchConfiguration("missions_directory")
+    missions_log_directory = LaunchConfiguration("missions_log_directory")
     http_host = LaunchConfiguration("http_host")
     http_port = LaunchConfiguration("http_port")
     gnss_topic = LaunchConfiguration("gnss_topic")
@@ -18,7 +18,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument("namespace", default_value="amr_sweeper"),
-        DeclareLaunchArgument("missions_directory", default_value="src/missions"),
+        DeclareLaunchArgument("missions_log_directory", default_value="src/missions_log"),
         DeclareLaunchArgument("http_host", default_value="0.0.0.0"),
         DeclareLaunchArgument("http_port", default_value="8080"),
         DeclareLaunchArgument("gnss_topic", default_value="gnss/navsat"),
@@ -38,7 +38,7 @@ def generate_launch_description():
                 "http_port": http_port,
                 "site_title": site_title,
                 "public_base_url": public_base_url,
-                "missions_directory": missions_directory,
+                "missions_log_directory": missions_log_directory,
                 "list_missions_service": "list_executable_missions",
                 "execute_mission_service": "execute_mission",
                 "upload_vda5050_mission_service": "upload_vda5050_mission",

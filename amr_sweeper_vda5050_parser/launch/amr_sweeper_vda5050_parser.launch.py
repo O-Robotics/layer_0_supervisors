@@ -23,7 +23,7 @@ def generate_launch_description():
         DeclareLaunchArgument("namespace", default_value="amr_sweeper"),
         DeclareLaunchArgument("use_sim_time", default_value="false"),
         DeclareLaunchArgument("mission_path", default_value=""),
-        DeclareLaunchArgument("missions_directory", default_value="src/missions"),
+        DeclareLaunchArgument("missions_directory", default_value="src/missions_from_db"),
         DeclareLaunchArgument("costmap_output_basename", default_value="global_costmap"),
         DeclareLaunchArgument("coverage_path_basename", default_value="active_mission_path"),
         DeclareLaunchArgument("auto_build_on_start", default_value="true"),

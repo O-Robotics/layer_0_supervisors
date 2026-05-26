@@ -7,7 +7,7 @@ Responsibilities:
 - show FSM state, GNSS latitude/longitude, battery state, and the active mission run folder
 - execute built-in manual missions and saved autonomous missions through `amr_sweeper_mission_executor`
 - stop the active mission through `amr_sweeper_mission_executor`
-- upload a VDA5050 mission JSON payload into the runtime missions directory so it becomes executable
+- upload a VDA5050 mission JSON payload into `/missions_from_db` so it becomes executable
 
 Default operator URL:
 - `http://192.168.2.1:8080`

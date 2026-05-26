@@ -20,16 +20,17 @@ See `config/architecture.md` and `config/schedule_semantics.md`.
 
 ## Missions Folder Workflow
 
-- Default schedule discovery: newest `src/missions/schedule_<timestamp>.ics`
-- Default mission search directory: `src/missions`
-- `/missions` is treated as the runtime ledger: schedules, active aliases, and per-mission execution history
-- Each mission is staged under its own folder, for example `src/missions/polygon_test_20260523T000000Z/polygon_test_20260523T000000Z.json`
-- Each execution creates a timestamped subfolder, for example `src/missions/polygon_test_20260523T000000Z/20260524T211500Z/`
+- Default schedule discovery: newest `src/missions_from_db/schedule_<timestamp>.ics`
+- Default mission search directory: `src/missions_from_db`
+- DB-synced schedule and VDA5050 mission payloads live under `/missions_from_db`
+- Execution history and runtime aliases live under `/missions_log`
+- Each synced mission is staged under its own folder, for example `src/missions_from_db/polygon_test_20260523T000000Z/polygon_test_20260523T000000Z.json`
+- Each execution creates a timestamped subfolder under `src/missions_log/<mission_id>/`, for example `src/missions_log/polygon_test_20260523T000000Z/20260524T211500Z/`
 - Work windows publish both `mission_id` and resolved `mission_path` when a matching VDA5050 JSON file is found.
 - If exactly one mission JSON exists in `/missions`, the scheduler will use it as a fallback during initial testing.
-- The recommended convention is for `X-MISSION-ID` to match the mission folder and mission filename stem, for example `polygon_test_20260523T000000Z` for `src/missions/polygon_test_20260523T000000Z/polygon_test_20260523T000000Z.json`.
+- The recommended convention is for `X-MISSION-ID` to match the mission folder and mission filename stem, for example `polygon_test_20260523T000000Z` for `src/missions_from_db/polygon_test_20260523T000000Z/polygon_test_20260523T000000Z.json`.
 - When a WORK window becomes active, the scheduler:
-  - checks whether `/missions/<order_id>_<timestamp>.json` or `/missions/<order_id>_<timestamp>/` exists for that mission
+  - checks whether `/missions_from_db/<order_id>_<timestamp>.json` or `/missions_from_db/<order_id>_<timestamp>/` exists for that mission
   - asks `amr_sweeper_mission_executor/execute_mission` to execute the selected mission
   - the mission executor builds VDA5050 artifacts when needed, prepares the execution folder, refreshes active aliases, and requests the FSM transition to the correct RUNNING profile
 
@@ -84,7 +85,7 @@ source install/setup.bash
 
 ```bash
 ros2 run amr_sweeper_scheduler scheduler_node --ros-args \
-  -p missions_directory:=src/missions \
+  -p missions_directory:=src/missions_from_db \
   -p robot_id:=RBT-01 \
   -p schedule_poll_interval_sec:=60 \
   -p strict_validation:=true
