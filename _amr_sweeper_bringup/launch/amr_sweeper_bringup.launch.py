@@ -160,11 +160,13 @@ def generate_launch_description():
             PythonLaunchDescriptionSource(_launch_file("amr_sweeper_web_server", "amr_sweeper_web_server.launch.py")),
             launch_arguments={
                 "namespace": namespace,
+                "missions_from_db_directory": missions_from_db_directory,
                 "missions_log_directory": missions_log_directory,
                 "http_host": http_host,
                 "http_port": http_port,
                 "gnss_topic": gnss_topic,
                 "battery_topic": battery_topic,
+                "fsm_request_service": fsm_request_service,
                 "fsm_state_topic": fsm_state_topic,
                 "fsm_status_topic": fsm_status_topic,
                 "site_title": site_title,
