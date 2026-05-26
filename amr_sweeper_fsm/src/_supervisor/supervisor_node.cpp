@@ -205,6 +205,13 @@ static bool profile_exists_in_state_yaml(int8_t state_id, uint16_t profile_id, s
   return false;
 }
 
+static std::string green_log_text(const std::string & text)
+{
+  static constexpr const char * kGreen = "\033[32m";
+  static constexpr const char * kReset = "\033[0m";
+  return std::string(kGreen) + text + kReset;
+}
+
 // -----------------------------------------------------------------------------
 // Helpers
 // -----------------------------------------------------------------------------
@@ -459,25 +466,24 @@ void SupervisorNode::start_switch_to(FSMState target)
   op_inflight_ = false;
 
   if (last_requester_ == "Supervisor") {
-    RCLCPP_INFO(
-      this->get_logger(),
-      "FSM switch scheduled: %s (%03u) -> %s (%03u)",
-      state_name(current_state_).c_str(),
-      current_profile_,
-      state_name(target).c_str(),
-      op_target_profile_);
+    const auto msg = green_log_text(
+      "FSM switch scheduled: " + state_name(current_state_) + " (" +
+      (current_profile_ < 10 ? "00" : current_profile_ < 100 ? "0" : "") + std::to_string(current_profile_) +
+      ") -> " + state_name(target) + " (" +
+      (op_target_profile_ < 10 ? "00" : op_target_profile_ < 100 ? "0" : "") + std::to_string(op_target_profile_) +
+      ")");
+    RCLCPP_INFO(this->get_logger(), "%s", msg.c_str());
   } else {
-    RCLCPP_INFO(
-      this->get_logger(),
-      "FSM switch scheduled: %s (%03u) -> %s (%03u) (requester=%s priority=%u force=%s reason=%s)",
-      state_name(current_state_).c_str(),
-      current_profile_,
-      state_name(target).c_str(),
-      op_target_profile_,
-      last_requester_.c_str(),
-      last_priority_,
-      last_force_ ? "true" : "false",
-      last_reason_.c_str());
+    const auto msg = green_log_text(
+      "FSM switch scheduled: " + state_name(current_state_) + " (" +
+      (current_profile_ < 10 ? "00" : current_profile_ < 100 ? "0" : "") + std::to_string(current_profile_) +
+      ") -> " + state_name(target) + " (" +
+      (op_target_profile_ < 10 ? "00" : op_target_profile_ < 100 ? "0" : "") + std::to_string(op_target_profile_) +
+      ") (requester=" + last_requester_ +
+      " priority=" + std::to_string(last_priority_) +
+      " force=" + std::string(last_force_ ? "true" : "false") +
+      " reason=" + last_reason_ + ")");
+    RCLCPP_INFO(this->get_logger(), "%s", msg.c_str());
   }
 
 }
@@ -685,11 +691,11 @@ void SupervisorNode::drive()
             last_lifecycle_id_ = State::PRIMARY_STATE_INACTIVE;
             active_lifecycle_label_ = lifecycle_id_to_label(last_lifecycle_id_);
 
-            RCLCPP_INFO(
-              this->get_logger(),
-              "FSM state configured (inactive): %s (%03u)",
-              state_name(current_state_).c_str(),
-              current_profile_);
+            const auto msg = green_log_text(
+              "FSM state configured (inactive): " + state_name(current_state_) + " (" +
+              (current_profile_ < 10 ? "00" : current_profile_ < 100 ? "0" : "") + std::to_string(current_profile_) +
+              ")");
+            RCLCPP_INFO(this->get_logger(), "%s", msg.c_str());
 
             need_enter_current_ = false;
 
@@ -766,11 +772,11 @@ current_profile_ = effective_profile;
 desired_profile_ = current_profile_;
 transitioning_to_profile_ = current_profile_;
 
-RCLCPP_INFO(
-  this->get_logger(),
-  "FSM state changed, now running: %s (%03u)",
-  state_name(current_state_).c_str(),
-  current_profile_);
+const auto msg = green_log_text(
+  "FSM state changed, now running: " + state_name(current_state_) + " (" +
+  (current_profile_ < 10 ? "00" : current_profile_ < 100 ? "0" : "") + std::to_string(current_profile_) +
+  ")");
+RCLCPP_INFO(this->get_logger(), "%s", msg.c_str());
 
           need_enter_current_ = false;
 
