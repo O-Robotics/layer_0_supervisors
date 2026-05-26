@@ -69,7 +69,9 @@ struct ProfileProcess
  * 1) **External process management**
  *    - Each state can define a list of bring-up commands (processes / launch files)
  *      via the parameter `processes` (typically loaded from state_parameters.yaml).
- *    - On activation: all commands are started (best-effort).
+ *    - On activation: commands are started in profile order.
+ *      Critical profile processes that declare `startup.ready` requirements must
+ *      satisfy them before later processes are launched.
  *    - On deactivation/cleanup/shutdown/error: all commands are stopped (best-effort).
  *
  * 2) **ROSOUT monitoring + fault trigger rules**
@@ -247,8 +249,8 @@ protected:
    */
   std::string resolve_placeholders(std::string cmd) const;
 
-  /// Start all processes specified in processes_ (best-effort).
-  void start_state_processes();
+  /// Start all processes specified in processes_. Returns false with a reason on failure.
+  bool start_state_processes(std::string & why_not);
 
   /// Stop all processes specified in processes_ (best-effort).
   void stop_state_processes();
@@ -274,6 +276,13 @@ private:
   void start_process_monitoring_();
   void stop_process_monitoring_();
   void on_process_monitor_tick_();
+
+  bool profile_process_readiness_satisfied_(
+    const ProfileProcess & pp,
+    std::string & why_not);
+  bool wait_for_profile_process_readiness_(
+    const ProfileProcess & pp,
+    std::string & why_not);
 
   // ----- Members -----
 

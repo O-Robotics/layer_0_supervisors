@@ -50,6 +50,9 @@ profiles:
               - type: "topic"
                 target: "system_info"
                 required: true
+              - type: "topic"
+                target: "imu/data_raw"
+                required: true
               - type: "service"
                 target: "amr_sweeper_battery_node/get_parameters"
                 required: true

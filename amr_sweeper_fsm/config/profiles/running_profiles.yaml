@@ -6,48 +6,17 @@
 
 profiles:
   # ---------------------------------------------------------------------------
-  # Profile 200 (FSM tester) 
+  # Profile 200 (bridge)
   # ---------------------------------------------------------------------------
   - profile:
       id: 200
       transitions:
-        auto_transition_on: false
-        auto_transition_profile: 
+        auto_transition_on: true
+        auto_transition_profile: 300
         fault_transition_on: true
         fault_transition_profile: 400
 
-      processes: 
-         # Logic block: FSM tester node (critical)
-        - name: "fsm_tester"
-          importance: "critical"
-          startup:
-            exec: "ros2 run amr_sweeper_fsm fsm_tester_node"
-            args:
-              - "--ros-args"
-              - "-r __ns:=/{ns}"
-            ready:
-              - type: "topic"
-                target: "{ns}/fsm_tester"
-                required: true
-              - type: "service"
-                target: "{ns}/fsm_tester_node/apply_parameters"
-                required: true
-            window_ms: 5000
-          rosout_triggers:
-            - "node=fsm_tester_node;level>=ERROR;action=FAULT"
-            - "node=fsm_tester_node_node;level>=WARN;action=DEGRADED"
-          errors:
-            on_readiness_fail: "FAULT"
-            on_unexpected_exit: "FAULT"
-            priority: 250
-            force: true
-          restart:
-            max_restarts: 5
-            restart_delay_ms: 1000
-          shutdown:
-            sigint_timeout_ms: 1000
-            sigterm_timeout_ms: 1000
-            sigkill_timeout_ms: 1000
+      processes: []
 
 
   # ---------------------------------------------------------------------------
@@ -79,6 +48,9 @@ profiles:
             ready:
               - type: "topic"
                 target: "system_info"
+                required: true
+              - type: "topic"
+                target: "imu/data_raw"
                 required: true
               - type: "service"
                 target: "amr_sweeper_battery_node/get_parameters"
@@ -238,6 +210,9 @@ profiles:
               - type: "topic"
                 target: "system_info"
                 required: true
+              - type: "topic"
+                target: "imu/data_raw"
+                required: true
               - type: "service"
                 target: "amr_sweeper_battery_node/get_parameters"
                 required: true
@@ -361,6 +336,9 @@ profiles:
             ready:
               - type: "topic"
                 target: "system_info"
+                required: true
+              - type: "topic"
+                target: "imu/data_raw"
                 required: true
               - type: "service"
                 target: "amr_sweeper_battery_node/get_parameters"
@@ -516,6 +494,9 @@ profiles:
             ready:
               - type: "topic"
                 target: "system_info"
+                required: true
+              - type: "topic"
+                target: "imu/data_raw"
                 required: true
               - type: "service"
                 target: "amr_sweeper_battery_node/get_parameters"

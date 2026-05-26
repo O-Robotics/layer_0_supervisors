@@ -799,7 +799,7 @@ if (!profiles_file_.empty()) {
   // 3) Bring-up readiness gating.
   load_readiness_spec();
 
-  // Profile-defined readiness requirements are handled per-process in wait_for_readiness().
+  // Profile-defined readiness requirements are used both during staged startup and final gating.
 
 
   RCLCPP_INFO(
@@ -826,7 +826,28 @@ StateNodeBase::on_activate(const rclcpp_lifecycle::State &)
   }
 
   // Start external processes/launch files associated with this state.
-  start_state_processes();
+  std::string process_start_why;
+  if (!start_state_processes(process_start_why)) {
+    RCLCPP_ERROR(get_logger(), "Process startup failed: %s", process_start_why.c_str());
+
+    if (!profile_processes_.empty()) {
+      const std::string prefix = "profile process '";
+      const std::string mid = "' not ready:";
+      const auto p0 = process_start_why.find(prefix);
+      const auto p1 = process_start_why.find(mid);
+      if (p0 != std::string::npos && p1 != std::string::npos && p1 > (p0 + prefix.size())) {
+        const std::string key =
+          process_start_why.substr(p0 + prefix.size(), p1 - (p0 + prefix.size()));
+        const auto * pp = find_profile_process_by_name_or_command_(key);
+        if (pp) {
+          handle_profile_error_policy_(*pp, "readiness_fail", process_start_why);
+        }
+      }
+    }
+
+    stop_state_processes();
+    return LifecycleNodeInterface::CallbackReturn::FAILURE;
+  }
   start_process_monitoring_();
 
   // Optionally block until configured readiness requirements are satisfied.
@@ -1733,9 +1754,107 @@ std::string StateNodeBase::resolve_placeholders(std::string cmd) const
   return cmd;
 }
 
-void StateNodeBase::start_state_processes()
+bool StateNodeBase::profile_process_readiness_satisfied_(
+  const ProfileProcess & pp,
+  std::string & why_not)
 {
-  // Start each configured command. Failures are logged and do not abort activation.
+  auto missing_reason_for = [&](const std::string & what, const std::string & target) {
+    const std::string pname = pp.name.empty() ? pp.command : pp.name;
+    return "profile process '" + pname + "' not ready: missing " + what + " '" + target + "'";
+  };
+
+  for (const auto & t : pp.ready_topics) {
+    if (!graph_has_topic(t)) {
+      why_not = missing_reason_for("topic", t);
+      return false;
+    }
+  }
+
+  for (const auto & s : pp.ready_services) {
+    if (!graph_has_service(s)) {
+      why_not = missing_reason_for("service", s);
+      return false;
+    }
+  }
+
+  why_not.clear();
+  return true;
+}
+
+bool StateNodeBase::wait_for_profile_process_readiness_(
+  const ProfileProcess & pp,
+  std::string & why_not)
+{
+  if (pp.ready_topics.empty() && pp.ready_services.empty()) {
+    why_not.clear();
+    return true;
+  }
+
+  if (pp.window_ms <= 0) {
+    why_not.clear();
+    return true;
+  }
+
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(pp.window_ms);
+  rclcpp::WallRate rate(10.0);
+
+  while (rclcpp::ok()) {
+    if (profile_process_readiness_satisfied_(pp, why_not)) {
+      return true;
+    }
+    if (std::chrono::steady_clock::now() >= deadline) {
+      return false;
+    }
+    rate.sleep();
+  }
+
+  why_not = "rclcpp shutdown";
+  return false;
+}
+
+bool StateNodeBase::start_state_processes(std::string & why_not)
+{
+  why_not.clear();
+
+  // Prefer profile metadata when available so startup can be gated in process order.
+  if (!profile_processes_.empty()) {
+    for (const auto & pp : profile_processes_) {
+      const auto cmd = resolve_placeholders(pp.command);
+      const std::string pname = pp.name.empty() ? cmd : pp.name;
+      const bool has_process_readiness = !pp.ready_topics.empty() || !pp.ready_services.empty();
+      std::string err;
+
+      if (!procman_.start(cmd, err)) {
+        RCLCPP_WARN(get_logger(), "Failed to start command: '%s' (%s)", cmd.c_str(), err.c_str());
+        if (pp.importance == ProcessImportance::CRITICAL) {
+          why_not = "profile process '" + pname + "' failed to start: " + err;
+          return false;
+        }
+        continue;
+      }
+
+      RCLCPP_INFO(get_logger(), "Started: %s", cmd.c_str());
+
+      if (pp.importance != ProcessImportance::CRITICAL) {
+        continue;
+      }
+
+      if (!wait_for_profile_process_readiness_(pp, why_not)) {
+        return false;
+      }
+
+      if (has_process_readiness) {
+        RCLCPP_INFO(
+          get_logger(),
+          "Critical profile process ready: %s",
+          pname.c_str());
+      }
+      why_not.clear();
+    }
+    return true;
+  }
+
+  // Backwards compatible: no profile metadata, just start each command best-effort.
   for (const auto & raw : processes_) {
     const auto cmd = resolve_placeholders(raw);
     std::string err;
@@ -1746,6 +1865,8 @@ void StateNodeBase::start_state_processes()
       RCLCPP_INFO(get_logger(), "Started: %s", cmd.c_str());
     }
   }
+
+  return true;
 }
 
 void StateNodeBase::stop_state_processes()

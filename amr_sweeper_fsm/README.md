@@ -175,7 +175,7 @@ Request fields include:
 Example:
 
 ```bash
-ros2 service call /amr_sweeper/request_state amr_sweeper_fsm/srv/RequestState "{target_state: 'RUNNING', target_lifecycle: 'Active', target_profile_id: 200, requester: 'cli', priority: 200, force: false, reason: 'manual switch', mission_execution_directory: '/abs/path/to/missions/order_20260523T120000Z/20260523T121500Z'}"
+ros2 service call /amr_sweeper/request_state amr_sweeper_fsm/srv/RequestState "{target_state: 'RUNNING', target_lifecycle: 'Active', target_profile_id: 201, requester: 'cli', priority: 200, force: false, reason: 'manual switch', mission_execution_directory: '/abs/path/to/missions/order_20260523T120000Z/20260523T121500Z'}"
 ```
 
 ---

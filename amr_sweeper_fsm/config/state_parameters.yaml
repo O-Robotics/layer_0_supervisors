@@ -29,7 +29,7 @@
 
     # Valid profile range: 000 - 099
     profiles:
-      default_profile_id: 000
+      default_profile_id: 001
       file: "config/profiles/initializing_profiles.yaml"
 
 
@@ -65,7 +65,7 @@
 
     # Valid profile range: 200 - 299
     profiles:
-      default_profile_id: 200
+      default_profile_id: 201
       file: "config/profiles/running_profiles.yaml"
 
 
