@@ -801,21 +801,27 @@ void SchedulerNode::tick()
   auto windows = expander_->expand(schedule_, robot_id_, now, horizon);
   windows = apply_blackout_overlay(windows);
   std::unordered_map<std::string, std::size_t> missing_mission_counts;
+  std::set<std::string> current_missing_mission_ids;
 
   for (auto & window : windows) {
     if (window.type == ScheduleType::WORK && window.mission_id) {
       if (!mission_json_or_folder_exists(*window.mission_id)) {
         ++missing_mission_counts[*window.mission_id];
+        current_missing_mission_ids.insert(*window.mission_id);
         continue;
       }
       window.mission_path = resolve_mission_path(*window.mission_id);
       if (!window.mission_path) {
         ++missing_mission_counts[*window.mission_id];
+        current_missing_mission_ids.insert(*window.mission_id);
       }
     }
   }
 
   for (const auto & entry : missing_mission_counts) {
+    if (warned_missing_mission_ids_.count(entry.first) != 0U) {
+      continue;
+    }
     std::ostringstream detail;
     detail << "mission_id=" << entry.first;
     if (entry.second > 1U) {
@@ -823,6 +829,7 @@ void SchedulerNode::tick()
     }
     trigger_warn("SCHED_MISSION_NOT_FOUND", detail.str());
   }
+  warned_missing_mission_ids_ = std::move(current_missing_mission_ids);
 
   publish_windows(windows);
   maybe_promote_mission(windows);

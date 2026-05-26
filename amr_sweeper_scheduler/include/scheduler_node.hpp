@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -164,6 +165,7 @@ private:
   std::string running_request_window_uid_;
   std::optional<std::time_t> last_mtime_;
   std::unordered_map<std::string, std::string> mission_catalog_;
+  std::set<std::string> warned_missing_mission_ids_;
 };
 
 }  // namespace amr_sweeper_scheduler
