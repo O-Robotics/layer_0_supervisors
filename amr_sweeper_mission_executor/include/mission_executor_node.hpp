@@ -144,7 +144,7 @@ private:
   double manual_mission_min_linear_speed_mps_{0.01};
   double manual_mission_min_angular_speed_rps_{0.01};
   double teleop_path_sample_distance_m_{0.1};
-  std::uint16_t idling_profile_id_{100U};
+  std::uint16_t idling_profile_id_{101U};
   std::uint16_t scheduled_running_profile_id_{201U};
   std::uint16_t manual_mapping_profile_id_{202U};
   std::uint16_t manual_routed_profile_id_{203U};

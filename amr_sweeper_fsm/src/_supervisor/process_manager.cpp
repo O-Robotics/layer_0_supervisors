@@ -120,11 +120,13 @@ bool ProcessManager::stop(const std::string & command, std::string & err_out, co
   const pid_t pid = it->second.pid;
 
   // Signal process group (-pid) so typical "ros2 launch" trees are handled.
+  // Prefer SIGTERM first for FSM-managed transitions so launch trees do not
+  // report this as a user Ctrl-C interruption.
   if (pid_alive(pid)) {
-    ::kill(-pid, SIGINT);
-    if (!wait_dead(pid, policy.sigint_timeout)) {
-      ::kill(-pid, SIGTERM);
-      if (!wait_dead(pid, policy.sigterm_timeout)) {
+    ::kill(-pid, SIGTERM);
+    if (!wait_dead(pid, policy.sigterm_timeout)) {
+      ::kill(-pid, SIGINT);
+      if (!wait_dead(pid, policy.sigint_timeout)) {
         ::kill(-pid, SIGKILL);
         (void)wait_dead(pid, policy.sigkill_timeout);
       }

@@ -222,7 +222,7 @@ MissionExecutorNode::MissionExecutorNode(const rclcpp::NodeOptions & options)
     0.01);
   teleop_path_sample_distance_m_ = declare_parameter<double>("teleop_path_sample_distance_m", 0.1);
   idling_profile_id_ = static_cast<std::uint16_t>(
-    declare_parameter<int>("idling_profile_id", 100));
+    declare_parameter<int>("idling_profile_id", 101));
   scheduled_running_profile_id_ = static_cast<std::uint16_t>(
     declare_parameter<int>("scheduled_running_profile_id", 201));
   manual_mapping_profile_id_ = static_cast<std::uint16_t>(

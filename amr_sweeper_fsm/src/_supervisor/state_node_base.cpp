@@ -1888,6 +1888,10 @@ void StateNodeBase::stop_state_processes()
         pol.sigkill_timeout = std::chrono::milliseconds(pp.shutdown.sigkill_timeout_ms);
       }
 
+      RCLCPP_INFO(
+        get_logger(),
+        "FSM state transition stopping managed process: %s",
+        cmd.c_str());
       std::string err;
       (void)procman_.stop(cmd, err, pol);
     }
@@ -1897,6 +1901,10 @@ void StateNodeBase::stop_state_processes()
   // Backwards compatible: no profile metadata.
   for (const auto & raw : processes_) {
     const auto cmd = resolve_placeholders(raw);
+    RCLCPP_INFO(
+      get_logger(),
+      "FSM state transition stopping managed process: %s",
+      cmd.c_str());
     std::string err;
     (void)procman_.stop(cmd, err);
   }

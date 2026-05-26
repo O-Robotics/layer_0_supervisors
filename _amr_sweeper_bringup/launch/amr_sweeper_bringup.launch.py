@@ -76,7 +76,7 @@ def generate_launch_description():
         DeclareLaunchArgument("teleop_odometry_topic", default_value="diff_cont/odom"),
         DeclareLaunchArgument("manual_mapping_odometry_topic", default_value="odometry/fused"),
         DeclareLaunchArgument("manual_mission_inactivity_timeout_seconds", default_value="300.0"),
-        DeclareLaunchArgument("idling_profile_id", default_value="100"),
+        DeclareLaunchArgument("idling_profile_id", default_value="101"),
         DeclareLaunchArgument("mission_parser_node_name", default_value="vda5050_parser_node"),
         DeclareLaunchArgument("mission_parser_build_service", default_value="build_current_mission"),
         DeclareLaunchArgument("default_schedule_filename", default_value=""),
