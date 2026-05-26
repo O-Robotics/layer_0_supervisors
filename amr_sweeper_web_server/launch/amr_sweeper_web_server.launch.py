@@ -29,8 +29,8 @@ def generate_launch_description():
         DeclareLaunchArgument("public_base_url", default_value="http://192.168.2.1:8080"),
         Node(
             package="amr_sweeper_web_server",
-            executable="mission_web_server.py",
-            name="mission_web_server",
+            executable="web_server_node.py",
+            name="web_server_node",
             namespace=namespace,
             output="screen",
             parameters=[{

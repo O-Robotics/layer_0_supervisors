@@ -8,7 +8,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 
 install(PROGRAMS
-  scripts/mission_web_server.py
+  scripts/web_server_node.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

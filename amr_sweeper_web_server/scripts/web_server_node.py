@@ -39,7 +39,7 @@ class MissionThreadingHTTPServer(ThreadingHTTPServer):
 
 class MissionWebServerNode(Node):
     def __init__(self) -> None:
-        super().__init__("mission_web_server")
+        super().__init__("web_server_node")
 
         self._http_host = self.declare_parameter("http_host", "0.0.0.0").value
         self._http_port = int(self.declare_parameter("http_port", 8080).value)
@@ -317,7 +317,7 @@ class MissionWebServerNode(Node):
         request.mission_execution_directory = str(payload.get("mission_execution_directory", ""))
         request.mission_window_start = str(payload.get("mission_window_start", ""))
         request.mission_window_end = str(payload.get("mission_window_end", ""))
-        request.requester = str(payload.get("requester", "mission_web_server"))
+        request.requester = str(payload.get("requester", "web_server_node"))
         request.priority = int(payload.get("priority", 200))
         request.force = bool(payload.get("force", False))
         request.reason = str(payload.get("reason", "manual mission requested from HTTP UI"))
@@ -364,7 +364,7 @@ class MissionWebServerNode(Node):
         request.mission_id = str(payload.get("mission_id", ""))
         request.reason = str(payload.get("reason", "mission stop requested from HTTP UI"))
         request.outcome = str(payload.get("outcome", "aborted"))
-        request.requester = str(payload.get("requester", "mission_web_server"))
+        request.requester = str(payload.get("requester", "web_server_node"))
         request.priority = int(payload.get("priority", 200))
         request.force = bool(payload.get("force", False))
         request.request_idling = bool(payload.get("request_idling", True))

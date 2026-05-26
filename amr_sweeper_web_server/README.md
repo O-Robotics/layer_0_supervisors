@@ -15,6 +15,15 @@ Default operator URL:
 Launch:
 - `ros2 launch amr_sweeper_web_server amr_sweeper_web_server.launch.py`
 
+Network setup:
+- Target static robot Ethernet address: `192.168.2.1/24`
+- Copy [amr_sweeper_web_server.yaml](/mnt/c/home/dev/rob_ws/src/layer_0_supervisors/amr_sweeper_web_server/config/amr_sweeper_web_server.yaml) into `/etc/netplan/`
+- Confirm the robot Ethernet interface name is `eth0`
+- Apply with `sudo netplan apply`
+
 Notes:
-- the node binds to `0.0.0.0:8080` by default so operators on the robot Wi-Fi can reach it
-- the default public URL assumes the robot uses the static Wi-Fi address `192.168.2.1/24`
+- the node binds to `0.0.0.0:8080` by default so operators on the router LAN can reach it
+- the default public URL assumes the Jetson uses the static Ethernet address `192.168.2.1/24`
+- operators connect through the router's Wi-Fi network; the Jetson itself is expected to be wired to the router over Ethernet
+- this assumes the robot uplink and router LAN use the `192.168.2.0/24` subnet
+- if the Ethernet interface is not `eth0`, update the netplan file before applying it
