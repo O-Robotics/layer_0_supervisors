@@ -165,6 +165,7 @@ def generate_launch_description():
     return LaunchDescription(
         [
             SetEnvironmentVariable("FASTDDS_BUILTIN_TRANSPORTS", "UDPv4"),
+            SetEnvironmentVariable("RCUTILS_COLORIZED_OUTPUT", "1"),
             declare_namespace,
             declare_use_sim_time,
             declare_start_profile,
