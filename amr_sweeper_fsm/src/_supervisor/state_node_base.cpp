@@ -1874,6 +1874,7 @@ void StateNodeBase::stop_state_processes()
   // Stop is best-effort and intentionally ignores errors (common during teardown).
   // Prefer per-profile process specs so we can honor per-process shutdown policies.
   if (!profile_processes_.empty()) {
+    RCLCPP_INFO(get_logger(), "FSM state transition stopping proccesses");
     for (const auto & pp : profile_processes_) {
       const auto cmd = resolve_placeholders(pp.command);
       fsm_layer_0::ProcessManager::StopPolicy pol;
@@ -1888,10 +1889,6 @@ void StateNodeBase::stop_state_processes()
         pol.sigkill_timeout = std::chrono::milliseconds(pp.shutdown.sigkill_timeout_ms);
       }
 
-      RCLCPP_INFO(
-        get_logger(),
-        "FSM state transition stopping managed process: %s",
-        cmd.c_str());
       std::string err;
       (void)procman_.stop(cmd, err, pol);
     }
@@ -1899,12 +1896,9 @@ void StateNodeBase::stop_state_processes()
   }
 
   // Backwards compatible: no profile metadata.
+  RCLCPP_INFO(get_logger(), "FSM state transition stopping proccesses");
   for (const auto & raw : processes_) {
     const auto cmd = resolve_placeholders(raw);
-    RCLCPP_INFO(
-      get_logger(),
-      "FSM state transition stopping managed process: %s",
-      cmd.c_str());
     std::string err;
     (void)procman_.stop(cmd, err);
   }
