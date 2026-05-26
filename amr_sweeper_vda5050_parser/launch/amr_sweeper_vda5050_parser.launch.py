@@ -16,7 +16,7 @@ def generate_launch_description():
     auto_build_on_start = LaunchConfiguration("auto_build_on_start")
     watch_for_updates = LaunchConfiguration("watch_for_updates")
     config_file = PathJoinSubstitution(
-        [FindPackageShare("amr_sweeper_vda5050_parser"), "config", "mission_parser.yaml"]
+        [FindPackageShare("amr_sweeper_vda5050_parser"), "config", "amr_sweeper_vda5050_parser.yaml"]
     )
 
     return LaunchDescription([
@@ -30,9 +30,9 @@ def generate_launch_description():
         DeclareLaunchArgument("watch_for_updates", default_value="true"),
         Node(
             package="amr_sweeper_vda5050_parser",
-            executable="mission_parser_node",
+            executable="vda5050_parser_node",
             namespace=namespace,
-            name="mission_parser_node",
+            name="vda5050_parser_node",
             output="screen",
             parameters=[
                 config_file,

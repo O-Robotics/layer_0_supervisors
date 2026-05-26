@@ -77,7 +77,7 @@ def generate_launch_description():
         DeclareLaunchArgument("manual_mapping_odometry_topic", default_value="odometry/fused"),
         DeclareLaunchArgument("manual_mission_inactivity_timeout_seconds", default_value="300.0"),
         DeclareLaunchArgument("idling_profile_id", default_value="100"),
-        DeclareLaunchArgument("mission_parser_node_name", default_value="mission_parser_node"),
+        DeclareLaunchArgument("mission_parser_node_name", default_value="vda5050_parser_node"),
         DeclareLaunchArgument("mission_parser_build_service", default_value="build_current_mission"),
         DeclareLaunchArgument("default_schedule_filename", default_value=""),
         DeclareLaunchArgument("mission_file_extension", default_value=".json"),
@@ -141,7 +141,7 @@ def generate_launch_description():
             }.items(),
         ),
         IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(_launch_file("amr_sweeper_vda5050_parser", "mission_parser.launch.py")),
+            PythonLaunchDescriptionSource(_launch_file("amr_sweeper_vda5050_parser", "amr_sweeper_vda5050_parser.launch.py")),
             launch_arguments={
                 "namespace": namespace,
                 "use_sim_time": use_sim_time,

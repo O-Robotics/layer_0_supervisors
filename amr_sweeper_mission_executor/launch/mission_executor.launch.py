@@ -38,7 +38,7 @@ def generate_launch_description():
         DeclareLaunchArgument("manual_mapping_odometry_topic", default_value="odometry/fused"),
         DeclareLaunchArgument("manual_mission_inactivity_timeout_seconds", default_value="300.0"),
         DeclareLaunchArgument("idling_profile_id", default_value="100"),
-        DeclareLaunchArgument("mission_parser_node_name", default_value="mission_parser_node"),
+        DeclareLaunchArgument("mission_parser_node_name", default_value="vda5050_parser_node"),
         DeclareLaunchArgument("mission_parser_build_service", default_value="build_current_mission"),
         Node(
             package="amr_sweeper_mission_executor",

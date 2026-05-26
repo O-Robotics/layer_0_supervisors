@@ -185,6 +185,7 @@ private:
   double mission_build_padding_meters_{2.0};
   bool auto_build_on_start_{true};
   bool watch_for_updates_{true};
+  bool waiting_for_active_mission_logged_{false};
   std::filesystem::path last_active_alias_mission_;
   std::map<std::string, std::filesystem::file_time_type> mission_build_stamps_;
   std::unique_ptr<Vda5050MissionParser> mission_parser_;

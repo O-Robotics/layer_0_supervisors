@@ -23,10 +23,10 @@ mission artifacts up to date before the scheduler asks the FSM to enter `RUNNING
 ## Launch
 
 ```bash
-ros2 launch amr_sweeper_vda5050_parser mission_parser.launch.py
+ros2 launch amr_sweeper_vda5050_parser amr_sweeper_vda5050_parser.launch.py
 ```
 
-The maintained parameter defaults live in `config/mission_parser.yaml`.
+The maintained parameter defaults live in `config/amr_sweeper_vda5050_parser.yaml`.
 
 YAML style guide for package config:
 - Match the formatting pattern used in `amr_sweeper_gnss/config/amr_sweeper_gnss_ntrip_client.yaml`.

@@ -15,24 +15,24 @@ find_package(std_srvs REQUIRED)
 
 pkg_check_modules(GEOGRAPHICLIB REQUIRED geographiclib)
 
-add_executable(mission_parser_node
-  src/mission_parser_node.cpp
+add_executable(vda5050_parser_node
+  src/vda5050_parser_node.cpp
 )
-target_include_directories(mission_parser_node PUBLIC
+target_include_directories(vda5050_parser_node PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
   ${GEOGRAPHICLIB_INCLUDE_DIRS}
 )
-target_link_directories(mission_parser_node PUBLIC ${GEOGRAPHICLIB_LIBRARY_DIRS})
-target_link_libraries(mission_parser_node ${GEOGRAPHICLIB_LIBRARIES})
-ament_target_dependencies(mission_parser_node
+target_link_directories(vda5050_parser_node PUBLIC ${GEOGRAPHICLIB_LIBRARY_DIRS})
+target_link_libraries(vda5050_parser_node ${GEOGRAPHICLIB_LIBRARIES})
+ament_target_dependencies(vda5050_parser_node
   rclcpp
   std_msgs
   std_srvs
 )
 
 install(TARGETS
-  mission_parser_node
+  vda5050_parser_node
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 

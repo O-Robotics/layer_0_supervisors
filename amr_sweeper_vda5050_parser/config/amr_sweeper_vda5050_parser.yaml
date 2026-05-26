@@ -1,4 +1,4 @@
-/**/mission_parser_node:
+/**/vda5050_parser_node:
   ros__parameters:
     # -- Mission sources and outputs ------------------------------------------
     mission_path:                       ""                   # Optional active mission path. Leave empty for auto-discovery until the scheduler selects a mission.

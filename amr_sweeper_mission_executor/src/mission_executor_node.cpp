@@ -206,7 +206,7 @@ MissionExecutorNode::MissionExecutorNode(const rclcpp::NodeOptions & options)
     "odometry/fused");
   mission_parser_node_name_ = declare_parameter<std::string>(
     "mission_parser_node_name",
-    "mission_parser_node");
+    "vda5050_parser_node");
   mission_parser_build_service_ = declare_parameter<std::string>(
     "mission_parser_build_service",
     "build_current_mission");

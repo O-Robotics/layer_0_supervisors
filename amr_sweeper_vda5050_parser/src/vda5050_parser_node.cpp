@@ -1,4 +1,4 @@
-#include "mission_parser_node.hpp"
+#include "vda5050_parser_node.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -636,7 +636,7 @@ std::string Vda5050MissionParser::normalizeZoneType(const std::string & zone_typ
 }
 
 MissionParserNode::MissionParserNode(const rclcpp::NodeOptions & options)
-: rclcpp::Node("mission_parser_node", options)
+: rclcpp::Node("vda5050_parser_node", options)
 {
   mission_path_ = declare_parameter<std::string>("mission_path", "");
   missions_directory_ = declare_parameter<std::string>("missions_directory", "src/missions");
@@ -689,9 +689,13 @@ bool MissionParserNode::buildCurrentMissionArtifacts()
   const auto mission_path = selectActiveMissionPath();
   if (!mission_path) {
     publishStatus("waiting", "no active mission selected");
-    RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 5000, "Waiting for an active mission selection");
+    if (!waiting_for_active_mission_logged_) {
+      RCLCPP_INFO(get_logger(), "Waiting for an active mission selection");
+      waiting_for_active_mission_logged_ = true;
+    }
     return false;
   }
+  waiting_for_active_mission_logged_ = false;
 
   const auto current_stamp = currentMissionStamp(*mission_path);
   const auto mission_key = mission_path->string();

@@ -157,7 +157,7 @@ profiles:
         - name: "amr_sweeper_vda5050_parser"
           importance: "critical"
           startup:
-            exec: "ros2 launch amr_sweeper_vda5050_parser mission_parser.launch.py"
+            exec: "ros2 launch amr_sweeper_vda5050_parser amr_sweeper_vda5050_parser.launch.py"
             args:
               - "namespace:={ns}"
               - "use_sim_time:=false"
@@ -166,14 +166,14 @@ profiles:
               - "watch_for_updates:=true"
             ready:
               - type: "service"
-                target: "mission_parser_node/get_parameters"
+                target: "vda5050_parser_node/get_parameters"
                 required: true
               - type: "service"
                 target: "build_current_mission"
                 required: true
             window_ms: 8000
           rosout_triggers:
-            - "node=mission_parser_node;level>=ERROR;action=FAULT"
+            - "node=vda5050_parser_node;level>=ERROR;action=FAULT"
           errors:
             on_readiness_fail: "FAULT"
             on_unexpected_exit: "FAULT"
