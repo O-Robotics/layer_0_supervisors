@@ -773,7 +773,7 @@ desired_profile_ = current_profile_;
 transitioning_to_profile_ = current_profile_;
 
 const auto msg = green_log_text(
-  "FSM state changed, now running: " + state_name(current_state_) + " (" +
+  "FSM state transition completed, now running: " + state_name(current_state_) + " (" +
   (current_profile_ < 10 ? "00" : current_profile_ < 100 ? "0" : "") + std::to_string(current_profile_) +
   ")");
 RCLCPP_INFO(this->get_logger(), "%s", msg.c_str());
@@ -782,7 +782,7 @@ RCLCPP_INFO(this->get_logger(), "%s", msg.c_str());
 
 // INTERNAL TRANSITIONS:
 // Do not stamp "Entered <state>" into request bookkeeping. Entry is already logged via
-// "FSM state changed, now running: <state>". Bookkeeping fields are reserved for request-driven
+// "FSM state transition completed, now running: <state>". Bookkeeping fields are reserved for request-driven
 // transitions (request_state service).
 if (last_requester_ == "Supervisor") {
   last_requester_ = "Supervisor";
