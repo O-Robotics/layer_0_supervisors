@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import errno
 import threading
 import urllib.parse
 from html import escape
@@ -29,6 +30,11 @@ def _resolve_path(configured_path: str) -> Path:
     if path.is_absolute():
         return path
     return Path.cwd() / path
+
+
+class MissionThreadingHTTPServer(ThreadingHTTPServer):
+    allow_reuse_address = True
+    daemon_threads = True
 
 
 class MissionWebServerNode(Node):
@@ -100,7 +106,15 @@ class MissionWebServerNode(Node):
 
     def start_http_server(self) -> None:
         handler = self._build_handler()
-        self._http_server = ThreadingHTTPServer((self._http_host, self._http_port), handler)
+        try:
+            self._http_server = MissionThreadingHTTPServer((self._http_host, self._http_port), handler)
+        except OSError as exc:
+            if exc.errno == errno.EADDRINUSE:
+                raise RuntimeError(
+                    f"HTTP listen address {self._http_host}:{self._http_port} is already in use. "
+                    "Another web server instance may still be running."
+                ) from exc
+            raise
         self.get_logger().info(
             "Mission web server listening on http://%s:%d",
             self._http_host,
@@ -752,6 +766,9 @@ def main(args: list[str] | None = None) -> int:
         node.serve_forever()
     except KeyboardInterrupt:
         pass
+    except Exception as exc:  # noqa: BLE001
+        node.get_logger().error(f"Mission web server startup failed: {exc}")
+        return 1
     finally:
         node.stop_http_server()
         executor.shutdown()
