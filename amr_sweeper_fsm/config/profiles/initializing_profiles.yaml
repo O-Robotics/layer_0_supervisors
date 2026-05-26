@@ -14,7 +14,7 @@ profiles:
       id: 000
       transitions:
         auto_transition_on: true
-        auto_transition_profile: 100
+        auto_transition_profile: 101
         fault_transition_on: true
         fault_transition_profile: 400
 

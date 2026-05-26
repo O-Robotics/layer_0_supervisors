@@ -116,9 +116,7 @@ class MissionWebServerNode(Node):
                 ) from exc
             raise
         self.get_logger().info(
-            "Mission web server listening on http://%s:%d",
-            self._http_host,
-            self._http_port,
+            f"Mission web server listening on http://{self._http_host}:{self._http_port}"
         )
 
     def stop_http_server(self) -> None:
@@ -192,7 +190,7 @@ class MissionWebServerNode(Node):
                 self._send_json(HTTPStatus.NOT_FOUND, {"success": False, "message": "Not found"})
 
             def log_message(self, format: str, *args: Any) -> None:
-                node.get_logger().info("HTTP %s - %s", self.address_string(), format % args)
+                node.get_logger().info(f"HTTP {self.address_string()} - {format % args}")
 
             def _read_json_body(self) -> dict[str, Any]:
                 length = int(self.headers.get("Content-Length", "0"))

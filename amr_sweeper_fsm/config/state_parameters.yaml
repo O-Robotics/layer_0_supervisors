@@ -83,7 +83,7 @@
 
     # Valid profile range: 300 - 399
     profiles:
-      default_profile_id: 300
+      default_profile_id: 301
       file: "config/profiles/charging_profiles.yaml"
 
 
