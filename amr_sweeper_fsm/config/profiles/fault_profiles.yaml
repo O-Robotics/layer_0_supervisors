@@ -28,7 +28,7 @@ profiles:
               - "use_amr_sweeper_usb_cameras:=false"
               - "use_amr_sweeper_depth_camera:=false"
               - "use_amr_sweeper_imu:=false"
-              - "use_amr_sweeper_gnss:=false"
+              - "use_amr_sweeper_gnss:=true"
               - "use_ntrip_client:=false"
             ready:
               - type: "topic"
