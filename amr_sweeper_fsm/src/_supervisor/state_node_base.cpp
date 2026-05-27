@@ -1174,7 +1174,9 @@ bool StateNodeBase::controller_is_active(const std::string & controller_name, st
   const std::string probe_name = "fsm_cprobe_" + std::to_string(id);
   auto probe = std::make_shared<rclcpp::Node>(
     probe_name,
-    rclcpp::NodeOptions().context(this->get_node_base_interface()->get_context()));
+    rclcpp::NodeOptions()
+    .context(this->get_node_base_interface()->get_context())
+    .enable_rosout(false));
 
   auto client = probe->create_client<controller_manager_msgs::srv::ListControllers>(srv);
   if (!client->wait_for_service(std::chrono::milliseconds(0))) {
@@ -1184,8 +1186,13 @@ bool StateNodeBase::controller_is_active(const std::string & controller_name, st
 
   auto req = std::make_shared<controller_manager_msgs::srv::ListControllers::Request>();
   auto future = client->async_send_request(req);
-  const auto rc = future.wait_for(std::chrono::milliseconds(500));
-  if (rc != std::future_status::ready) {
+
+  rclcpp::executors::SingleThreadedExecutor exec;
+  exec.add_node(probe);
+  const auto rc = exec.spin_until_future_complete(future, std::chrono::milliseconds(500));
+  exec.remove_node(probe);
+
+  if (rc != rclcpp::FutureReturnCode::SUCCESS) {
     why_not = "controller manager did not answer list_controllers for '" + controller_name + "'";
     return false;
   }
@@ -1220,7 +1227,9 @@ bool StateNodeBase::lifecycle_node_meets_requirement(
   const std::string probe_name = "fsm_rprobe_" + std::to_string(id);
   auto probe = std::make_shared<rclcpp::Node>(
     probe_name,
-    rclcpp::NodeOptions().context(this->get_node_base_interface()->get_context()));
+    rclcpp::NodeOptions()
+    .context(this->get_node_base_interface()->get_context())
+    .enable_rosout(false));
 
   auto client = probe->create_client<lifecycle_msgs::srv::GetState>(srv);
 
