@@ -135,6 +135,8 @@ private:
   [[nodiscard]] std::filesystem::path resolveScheduleSourcePath() const;
   [[nodiscard]] std::filesystem::path ensureScheduleLogPath(
     const std::filesystem::path & schedule_source_path) const;
+  [[nodiscard]] std::filesystem::path ensureActualScheduleLogPath(
+    const std::filesystem::path & schedule_source_path) const;
   [[nodiscard]] static std::string formatUtcTimestamp(
     const std::chrono::system_clock::time_point & time_point);
   [[nodiscard]] static std::string formatLocalTimestamp(

@@ -649,14 +649,7 @@ class MissionWebServerNode(Node):
         except Exception as exc:  # noqa: BLE001
             return {"error": f"Failed to read active execution pointer: {exc}", "path": str(pointer_path)}
 
-    def _discover_schedule_path(self) -> Path | None:
-        active_execution = self._load_active_execution() or {}
-        schedule_log_path = active_execution.get("schedule_log_path", "")
-        if schedule_log_path:
-            path = Path(schedule_log_path)
-            if path.exists():
-                return path
-
+    def _discover_planned_schedule_path(self) -> Path | None:
         missions_from_db_directory = _resolve_path(self._missions_from_db_directory)
         candidates = sorted(
             missions_from_db_directory.glob("schedule_*.ics"),
@@ -664,6 +657,20 @@ class MissionWebServerNode(Node):
             reverse=True,
         )
         return candidates[0] if candidates else None
+
+    def _discover_actual_schedule_path(self) -> Path | None:
+        active_execution = self._load_active_execution() or {}
+        actual_schedule_log_path = active_execution.get("actual_schedule_log_path", "")
+        if actual_schedule_log_path:
+            path = Path(actual_schedule_log_path)
+            if path.exists():
+                return path
+
+        missions_log_directory = _resolve_path(self._missions_log_directory)
+        fixed_path = missions_log_directory / "actual_schedule.ics"
+        if fixed_path.exists():
+            return fixed_path
+        return None
 
     @staticmethod
     def _unfold_ics_lines(text: str) -> list[str]:
@@ -718,8 +725,7 @@ class MissionWebServerNode(Node):
             number = ""
         return timedelta(hours=hours, minutes=minutes, seconds=seconds)
 
-    def _load_schedule_events(self) -> tuple[Path | None, list[dict[str, Any]]]:
-        schedule_path = self._discover_schedule_path()
+    def _load_schedule_events(self, schedule_path: Path | None) -> tuple[Path | None, list[dict[str, Any]]]:
         if schedule_path is None or not schedule_path.exists():
             return None, []
 
@@ -868,23 +874,34 @@ class MissionWebServerNode(Node):
             week_start = datetime.fromisocalendar(iso_year, iso_week, 1)
 
         week_end = week_start + timedelta(days=7)
-        schedule_path, events = self._load_schedule_events()
-        occurrences: list[dict[str, Any]] = []
-        for event in events:
-            occurrences.extend(self._expand_event_occurrences(event, week_start, week_end))
-        occurrences.sort(key=lambda item: item["start"])
+        planned_path, planned_events = self._load_schedule_events(self._discover_planned_schedule_path())
+        actual_path, actual_events = self._load_schedule_events(self._discover_actual_schedule_path())
+        planned_occurrences: list[dict[str, Any]] = []
+        actual_occurrences: list[dict[str, Any]] = []
+        for event in planned_events:
+            for occurrence in self._expand_event_occurrences(event, week_start, week_end):
+                occurrence["source"] = "planned"
+                planned_occurrences.append(occurrence)
+        for event in actual_events:
+            for occurrence in self._expand_event_occurrences(event, week_start, week_end):
+                occurrence["source"] = "actual"
+                actual_occurrences.append(occurrence)
+        planned_occurrences.sort(key=lambda item: item["start"])
+        actual_occurrences.sort(key=lambda item: item["start"])
 
         iso_year, iso_week, _ = week_start.isocalendar()
 
         return {
             "success": True,
-            "schedule_path": str(schedule_path) if schedule_path is not None else "",
+            "planned_schedule_path": str(planned_path) if planned_path is not None else "",
+            "actual_schedule_path": str(actual_path) if actual_path is not None else "",
             "week": f"{iso_year:04d}-W{iso_week:02d}",
             "week_number": int(iso_week),
             "week_label": f"Week {iso_week:02d} · {week_start.strftime('%d %b')} - {(week_end - timedelta(days=1)).strftime('%d %b %Y')}",
             "week_start": week_start.strftime("%Y-%m-%d"),
             "week_end": (week_end - timedelta(days=1)).strftime("%Y-%m-%d"),
-            "events": occurrences,
+            "planned_events": planned_occurrences,
+            "actual_events": actual_occurrences,
         }
 
     @staticmethod
@@ -1741,9 +1758,24 @@ class MissionWebServerNode(Node):
       border: 1px solid rgba(16, 18, 20, 0.18);
       box-shadow: 0 8px 16px rgba(0, 0, 0, 0.18);
     }}
+    .event-chip.planned {{
+      opacity: 0.68;
+      border-style: dashed;
+    }}
+    .event-chip.actual {{
+      opacity: 0.96;
+      z-index: 2;
+      box-shadow: 0 10px 18px rgba(0, 0, 0, 0.26);
+    }}
     .event-chip.WORK {{ background: var(--work); }}
     .event-chip.NO_WORK {{ background: var(--nowork); color: var(--ink); }}
     .event-chip.SAFETY {{ background: var(--safety); color: #fff4ec; }}
+    .event-source {{
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-top: 4px;
+    }}
     .event-time {{
       font-weight: 700;
       margin-bottom: 4px;
@@ -1797,6 +1829,7 @@ class MissionWebServerNode(Node):
         <span><strong style="color: var(--work);">WORK</strong> mission windows</span>
         <span><strong style="color: var(--nowork);">NO_WORK</strong> blackout windows</span>
         <span><strong style="color: var(--safety);">SAFETY</strong> logged safety events</span>
+        <span>Dashed blocks are planned. Solid blocks are actual.</span>
       </div>
     </section>
   </main>
@@ -1850,7 +1883,8 @@ class MissionWebServerNode(Node):
       activeWeek = data.week;
       document.getElementById('week-label').textContent = data.week_label || data.week;
       document.getElementById('week-number').textContent = `CW ${{data.week_number ?? '--'}}`;
-      document.getElementById('schedule-path').textContent = `Schedule: ${{data.schedule_path || '-'}}`;
+      document.getElementById('schedule-path').textContent =
+        `Planned: ${{data.planned_schedule_path || '-'}} | Actual: ${{data.actual_schedule_path || '-'}}`;
 
       const grid = document.getElementById('calendar-grid');
       grid.innerHTML = '';
@@ -1896,46 +1930,53 @@ class MissionWebServerNode(Node):
       const weekEnd = new Date(weekStart);
       weekEnd.setDate(weekStart.getDate() + 7);
       const weekStartMs = weekStart.getTime();
-      for (const event of data.events || []) {{
-        const start = new Date(event.start);
-        const end = new Date(event.end);
-        const visibleStart = start > weekStart ? start : weekStart;
-        const visibleEnd = end < weekEnd ? end : weekEnd;
-        if (visibleEnd <= visibleStart) {{
-          continue;
-        }}
 
-        let segmentDay = startOfDay(visibleStart);
-        while (segmentDay < visibleEnd) {{
-          const nextDay = new Date(segmentDay);
-          nextDay.setDate(segmentDay.getDate() + 1);
-          const segmentStart = visibleStart > segmentDay ? visibleStart : segmentDay;
-          const segmentEnd = visibleEnd < nextDay ? visibleEnd : nextDay;
-          const dayIndex = Math.floor((segmentDay.getTime() - weekStartMs) / 86400000);
-          if (dayIndex >= 0 && dayIndex <= 6 && segmentEnd > segmentStart) {{
-            const column = dayColumns[dayIndex];
-            const startMinutes = clamp((segmentStart.getHours() * 60) + segmentStart.getMinutes(), 0, 1440);
-            const endMinutes = clamp((segmentEnd.getHours() * 60) + segmentEnd.getMinutes(), 0, 1440);
-            const durationMinutes = Math.max(
-              30,
-              (segmentEnd >= nextDay && endMinutes === 0 ? 1440 : endMinutes) - startMinutes
-            );
-
-            const chip = document.createElement('div');
-            chip.className = `event-chip ${{event.schedule_type || 'WORK'}}`;
-            chip.style.top = `${{(startMinutes / 60) * hourHeight + 6}}px`;
-            chip.style.height = `${{Math.max(28, (durationMinutes / 60) * hourHeight - 8)}}px`;
-            chip.title = event.description || event.summary || '';
-            chip.innerHTML = `
-              <div class="event-time">${{segmentStart.toLocaleTimeString([], {{ hour: '2-digit', minute: '2-digit', hour12: false }})}} - ${{segmentEnd >= nextDay ? '24:00' : segmentEnd.toLocaleTimeString([], {{ hour: '2-digit', minute: '2-digit', hour12: false }})}}</div>
-              <div><strong>${{event.summary || event.schedule_type || 'Event'}}</strong></div>
-              <div>${{event.mission_id || event.robot_id || ''}}</div>
-            `;
-            column.appendChild(chip);
+      function renderEvents(events, sourceLabel) {{
+        for (const event of events || []) {{
+          const start = new Date(event.start);
+          const end = new Date(event.end);
+          const visibleStart = start > weekStart ? start : weekStart;
+          const visibleEnd = end < weekEnd ? end : weekEnd;
+          if (visibleEnd <= visibleStart) {{
+            continue;
           }}
-          segmentDay = nextDay;
+
+          let segmentDay = startOfDay(visibleStart);
+          while (segmentDay < visibleEnd) {{
+            const nextDay = new Date(segmentDay);
+            nextDay.setDate(segmentDay.getDate() + 1);
+            const segmentStart = visibleStart > segmentDay ? visibleStart : segmentDay;
+            const segmentEnd = visibleEnd < nextDay ? visibleEnd : nextDay;
+            const dayIndex = Math.floor((segmentDay.getTime() - weekStartMs) / 86400000);
+            if (dayIndex >= 0 && dayIndex <= 6 && segmentEnd > segmentStart) {{
+              const column = dayColumns[dayIndex];
+              const startMinutes = clamp((segmentStart.getHours() * 60) + segmentStart.getMinutes(), 0, 1440);
+              const endMinutes = clamp((segmentEnd.getHours() * 60) + segmentEnd.getMinutes(), 0, 1440);
+              const durationMinutes = Math.max(
+                30,
+                (segmentEnd >= nextDay && endMinutes === 0 ? 1440 : endMinutes) - startMinutes
+              );
+
+              const chip = document.createElement('div');
+              chip.className = `event-chip ${{event.schedule_type || 'WORK'}} ${{sourceLabel}}`;
+              chip.style.top = `${{(startMinutes / 60) * hourHeight + 6}}px`;
+              chip.style.height = `${{Math.max(28, (durationMinutes / 60) * hourHeight - 8)}}px`;
+              chip.title = event.description || event.summary || '';
+              chip.innerHTML = `
+                <div class="event-time">${{segmentStart.toLocaleTimeString([], {{ hour: '2-digit', minute: '2-digit', hour12: false }})}} - ${{segmentEnd >= nextDay ? '24:00' : segmentEnd.toLocaleTimeString([], {{ hour: '2-digit', minute: '2-digit', hour12: false }})}}</div>
+                <div><strong>${{event.summary || event.schedule_type || 'Event'}}</strong></div>
+                <div>${{event.mission_id || event.robot_id || ''}}</div>
+                <div class="event-source">${{sourceLabel}}</div>
+              `;
+              column.appendChild(chip);
+            }}
+            segmentDay = nextDay;
+          }}
         }}
       }}
+
+      renderEvents(data.planned_events || [], 'planned');
+      renderEvents(data.actual_events || [], 'actual');
     }}
 
     document.getElementById('prev-week').addEventListener('click', async () => {{

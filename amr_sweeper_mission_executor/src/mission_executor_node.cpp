@@ -49,6 +49,7 @@ constexpr char kLatestRecordedMapMetadataFile[] = "latest_recorded_map.json";
 constexpr char kLatestRecordedMapRouteStem[] = "latest_recorded_map_path";
 constexpr char kLatestRecordedMapCostmapStem[] = "latest_recorded_map_costmap";
 constexpr char kLatestRecordedMapNavSatStem[] = "latest_recorded_map_navsat";
+constexpr char kActualScheduleLogFilename[] = "actual_schedule.ics";
 constexpr double kRecordMapCostmapResolutionMeters = 0.1;
 constexpr double kRecordMapCostmapPaddingMeters = 2.0;
 constexpr double kRecordMapEdgeBandMeters = 1.0;
@@ -2181,7 +2182,8 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
     {"gaussian_output_directory", gaussian_output_directory.string()},
     {"captured_images_directory", captured_images_directory.string()},
     {"collected_artifacts_directory", collected_artifacts_directory.string()},
-    {"schedule_log_path", ensureScheduleLogPath(resolveScheduleSourcePath()).string()}};
+    {"schedule_log_path", ensureScheduleLogPath(resolveScheduleSourcePath()).string()},
+    {"actual_schedule_log_path", ensureActualScheduleLogPath(resolveScheduleSourcePath()).string()}};
 
   const fs::path execution_context_file = mission_run_directory / "execution_context.json";
   std::ofstream context_stream(execution_context_file);
@@ -2195,6 +2197,8 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
     {"mission_folder", mission_history_directory.string()},
     {"mission_run_directory", mission_run_directory.string()},
     {"execution_context_file", execution_context_file.string()},
+    {"schedule_log_path", context.value("schedule_log_path", std::string{})},
+    {"actual_schedule_log_path", context.value("actual_schedule_log_path", std::string{})},
     {"mission_window_start", mission_window_start},
     {"mission_window_end", mission_window_end}};
   const fs::path missions_log_directory = resolveMissionsLogDirectory();
@@ -2649,6 +2653,48 @@ void MissionExecutorNode::recordMissionExecutionStart(
   }
   output_stream << schedule_text;
 
+  const std::filesystem::path actual_schedule_path =
+    ensureActualScheduleLogPath(resolveScheduleSourcePath());
+  if (!actual_schedule_path.empty() && std::filesystem::exists(actual_schedule_path)) {
+    std::ifstream actual_input_stream(actual_schedule_path);
+    if (actual_input_stream.is_open()) {
+      std::ostringstream actual_buffer;
+      actual_buffer << actual_input_stream.rdbuf();
+      std::string actual_schedule_text = actual_buffer.str();
+      const std::string actual_timezone = discoverScheduleTimezone(actual_schedule_text);
+      const std::string actual_event_uid = "actual-" + sanitizeUidToken(event_uid.empty() ? mission.mission_id + "-" + actual_start_utc : event_uid);
+      const auto existing_anchor = actual_schedule_text.find("UID:" + actual_event_uid);
+      if (existing_anchor == std::string::npos) {
+        std::ostringstream actual_event_stream;
+        actual_event_stream
+          << "BEGIN:VEVENT\n"
+          << "UID:" << actual_event_uid << "\n"
+          << "DTSTART;TZID=" << actual_timezone << ":" << actual_start_local << "\n"
+          << "DURATION:PT0S\n"
+          << "SUMMARY:Actual mission run " << mission.mission_id << "\n"
+          << "X-ROBOT-ID:" << robot_id_ << "\n"
+          << "X-SCHEDULE-TYPE:WORK\n"
+          << "X-MISSION-ID:" << mission.mission_id << "\n"
+          << "X-ACTUAL-START-UTC:" << actual_start_utc << "\n"
+          << "X-RUNTIME-STATUS:" << kRuntimeStatusStarted << "\n"
+          << "END:VEVENT\n";
+        const auto calendar_end = actual_schedule_text.rfind("END:VCALENDAR");
+        if (calendar_end != std::string::npos) {
+          actual_schedule_text.insert(calendar_end, actual_event_stream.str());
+          std::ofstream actual_output_stream(actual_schedule_path, std::ios::trunc);
+          if (actual_output_stream.is_open()) {
+            actual_output_stream << actual_schedule_text;
+          }
+          context_document["actual_schedule_event_uid"] = actual_event_uid;
+          context_document["actual_schedule_log_path"] = actual_schedule_path.string();
+        }
+      } else {
+        context_document["actual_schedule_event_uid"] = actual_event_uid;
+        context_document["actual_schedule_log_path"] = actual_schedule_path.string();
+      }
+    }
+  }
+
   context_document["schedule_event_uid"] = event_uid;
   context_document["actual_start_utc"] = actual_start_utc;
   context_document["runtime_status"] = kRuntimeStatusStarted;
@@ -2786,6 +2832,71 @@ void MissionExecutorNode::recordMissionExecutionEnd(
     return;
   }
   output_stream << schedule_text;
+
+  std::string actual_schedule_path_string =
+    context_document.value("actual_schedule_log_path", std::string{});
+  if (actual_schedule_path_string.empty()) {
+    actual_schedule_path_string = ensureActualScheduleLogPath(resolveScheduleSourcePath()).string();
+  }
+  if (!actual_schedule_path_string.empty()) {
+    const std::filesystem::path actual_schedule_path(actual_schedule_path_string);
+    if (std::filesystem::exists(actual_schedule_path)) {
+      std::ifstream actual_input_stream(actual_schedule_path);
+      if (actual_input_stream.is_open()) {
+        std::ostringstream actual_buffer;
+        actual_buffer << actual_input_stream.rdbuf();
+        std::string actual_schedule_text = actual_buffer.str();
+        const std::string actual_event_uid =
+          context_document.value("actual_schedule_event_uid", std::string{});
+        const auto actual_anchor = !actual_event_uid.empty() ?
+          actual_schedule_text.find("UID:" + actual_event_uid) : std::string::npos;
+        if (actual_anchor != std::string::npos) {
+          const auto actual_begin = actual_schedule_text.rfind("BEGIN:VEVENT", actual_anchor);
+          const auto actual_end = actual_schedule_text.find("END:VEVENT", actual_anchor);
+          if (actual_begin != std::string::npos && actual_end != std::string::npos) {
+            const auto insert_or_replace_actual_line =
+              [&actual_schedule_text, actual_begin, actual_end](
+                const std::string & prefix,
+                const std::string & line)
+              {
+                const auto position = actual_schedule_text.find(prefix, actual_begin);
+                if (position != std::string::npos && position < actual_end) {
+                  const auto line_end = actual_schedule_text.find('\n', position);
+                  actual_schedule_text.replace(
+                    position,
+                    (line_end == std::string::npos ? actual_end : line_end + 1) - position,
+                    line);
+                } else {
+                  actual_schedule_text.insert(actual_end, line);
+                }
+              };
+            insert_or_replace_actual_line(
+              "DTEND;TZID=",
+              "DTEND;TZID=" + discoverScheduleTimezone(actual_schedule_text) + ":" + formatLocalTimestamp(now) + "\n");
+            insert_or_replace_actual_line(
+              "X-ACTUAL-END-UTC:",
+              "X-ACTUAL-END-UTC:" + actual_end_utc + "\n");
+            insert_or_replace_actual_line(
+              "X-ACTUAL-DURATION-SECONDS:",
+              "X-ACTUAL-DURATION-SECONDS:" + std::to_string(static_cast<long long>(actual_duration_seconds)) + "\n");
+            insert_or_replace_actual_line(
+              "X-ACTUAL-PATH-LENGTH-METERS:",
+              "X-ACTUAL-PATH-LENGTH-METERS:" + std::to_string(actual_path_length_meters) + "\n");
+            insert_or_replace_actual_line(
+              "X-RUNTIME-STATUS:",
+              "X-RUNTIME-STATUS:" + runtime_status + "\n");
+            insert_or_replace_actual_line(
+              "X-END-REASON:",
+              "X-END-REASON:" + request.reason + "\n");
+            std::ofstream actual_output_stream(actual_schedule_path, std::ios::trunc);
+            if (actual_output_stream.is_open()) {
+              actual_output_stream << actual_schedule_text;
+            }
+          }
+        }
+      }
+    }
+  }
 }
 
 void MissionExecutorNode::recordSafetyEvent(
@@ -2858,6 +2969,46 @@ void MissionExecutorNode::recordSafetyEvent(
     return;
   }
   output_stream << schedule_text;
+
+  const std::filesystem::path actual_schedule_path =
+    ensureActualScheduleLogPath(resolveScheduleSourcePath());
+  if (!actual_schedule_path.empty() && std::filesystem::exists(actual_schedule_path)) {
+    std::ifstream actual_input_stream(actual_schedule_path);
+    if (actual_input_stream.is_open()) {
+      std::ostringstream actual_buffer;
+      actual_buffer << actual_input_stream.rdbuf();
+      std::string actual_schedule_text = actual_buffer.str();
+      const std::string actual_timezone = discoverScheduleTimezone(actual_schedule_text);
+      std::ostringstream actual_event_stream;
+      actual_event_stream
+        << "BEGIN:VEVENT\n"
+        << "UID:actual-safety-" << sanitizeUidToken(event.sender) << "-" << sanitizeUidToken(event_utc) << "\n"
+        << "DTSTART;TZID=" << actual_timezone << ":" << event_local << "\n"
+        << "DURATION:PT0S\n"
+        << "SUMMARY:Actual safety stop " << event.sender << "\n"
+        << "X-ROBOT-ID:" << robot_id_ << "\n"
+        << "X-SCHEDULE-TYPE:" << kSafetyScheduleType << "\n"
+        << "X-SAFETY-SENDER:" << event.sender << "\n"
+        << "X-SAFETY-REASON:" << event.reason << "\n"
+        << "X-ACTUAL-START-UTC:" << event_utc << "\n";
+      if (!related_mission_id.empty()) {
+        actual_event_stream << "X-MISSION-ID:" << related_mission_id << "\n";
+      }
+      if (!mission_run_directory.empty()) {
+        actual_event_stream << "X-MISSION-RUN-DIRECTORY:" << mission_run_directory << "\n";
+      }
+      actual_event_stream << "END:VEVENT\n";
+
+      const auto calendar_end = actual_schedule_text.rfind("END:VCALENDAR");
+      if (calendar_end != std::string::npos) {
+        actual_schedule_text.insert(calendar_end, actual_event_stream.str());
+        std::ofstream actual_output_stream(actual_schedule_path, std::ios::trunc);
+        if (actual_output_stream.is_open()) {
+          actual_output_stream << actual_schedule_text;
+        }
+      }
+    }
+  }
 }
 
 bool MissionExecutorNode::missionArtifactsReady(const ManualMissionInfo & mission) const
@@ -3031,6 +3182,42 @@ std::filesystem::path MissionExecutorNode::ensureScheduleLogPath(
       std::filesystem::copy_options::overwrite_existing);
   }
   return schedule_log_path;
+}
+
+std::filesystem::path MissionExecutorNode::ensureActualScheduleLogPath(
+  const std::filesystem::path & schedule_source_path) const
+{
+  const std::filesystem::path missions_log_directory = resolveMissionsLogDirectory();
+  std::filesystem::create_directories(missions_log_directory);
+  const std::filesystem::path actual_schedule_path =
+    missions_log_directory / kActualScheduleLogFilename;
+  if (std::filesystem::exists(actual_schedule_path)) {
+    return actual_schedule_path;
+  }
+
+  std::string timezone = "UTC";
+  if (!schedule_source_path.empty() && std::filesystem::exists(schedule_source_path)) {
+    std::ifstream input_stream(schedule_source_path);
+    if (input_stream.is_open()) {
+      std::ostringstream buffer;
+      buffer << input_stream.rdbuf();
+      timezone = discoverScheduleTimezone(buffer.str());
+    }
+  }
+
+  std::ofstream output_stream(actual_schedule_path, std::ios::trunc);
+  if (!output_stream.is_open()) {
+    return {};
+  }
+  output_stream
+    << "BEGIN:VCALENDAR\n"
+    << "VERSION:2.0\n"
+    << "PRODID:-//O-Robotics//AMR Sweeper Actual Schedule//EN\n"
+    << "CALSCALE:GREGORIAN\n"
+    << "X-WR-CALNAME:AMR Sweeper Actual Mission Log\n"
+    << "X-WR-TIMEZONE:" << timezone << "\n"
+    << "END:VCALENDAR\n";
+  return actual_schedule_path;
 }
 
 }  // namespace amr_sweeper_mission_executor
