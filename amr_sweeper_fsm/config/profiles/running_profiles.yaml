@@ -274,8 +274,8 @@ profiles:
               - type: "service"
                 target: "amr_sweeper_gaussian_node/get_parameters"
                 required: true
-              - type: "node"
-                target: "amr_sweeper_mapping_node"
+              - type: "service"
+                target: "amr_sweeper_mapping_node/get_parameters"
                 required: true
             window_ms: 25000
           rosout_triggers:
@@ -564,8 +564,8 @@ profiles:
               - type: "service"
                 target: "amr_sweeper_gaussian_node/get_parameters"
                 required: true
-              - type: "node"
-                target: "amr_sweeper_mapping_node"
+              - type: "service"
+                target: "amr_sweeper_mapping_node/get_parameters"
                 required: true
             window_ms: 25000
           rosout_triggers:
@@ -837,8 +837,8 @@ profiles:
               - type: "service"
                 target: "amr_sweeper_gaussian_node/get_parameters"
                 required: true
-              - type: "node"
-                target: "amr_sweeper_mapping_node"
+              - type: "service"
+                target: "amr_sweeper_mapping_node/get_parameters"
                 required: true
             window_ms: 25000
           rosout_triggers:
