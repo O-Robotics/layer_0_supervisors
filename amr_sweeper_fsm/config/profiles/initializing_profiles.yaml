@@ -121,12 +121,33 @@ profiles:
                 target: "cmd_vel_sweep_wheels"
                 required: true
               - type: "topic"
+                target: "cmd_vel_sweep_tools"
+                required: true
+              - type: "topic"
+                target: "attitude/roll_pitch"
+                required: true
+              - type: "topic"
+                target: "joint_states"
+                required: true
+              - type: "topic"
+                target: "safety_controller/status"
+                required: true
+              - type: "topic"
                 target: "controller_steadydrive/commands"
+                required: true
+              - type: "topic"
+                target: "diff_cont/cmd_vel"
                 required: true
               - type: "topic"
                 target: "collision_detector/impact_detected"
                 required: true
-            window_ms: 8000
+              - type: "service"
+                target: "amr_sweeper_attitude_controller/enable_attitude_estimation"
+                required: true
+              - type: "service"
+                target: "amr_sweeper_safety_controller/enable_controller"
+                required: true
+            window_ms: 15000
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "level>=ERROR;action=FAULT"
@@ -151,20 +172,48 @@ profiles:
             args:
               - "namespace:={ns}"
               - "use_sim_time:=false"
+              - "use_amr_sweeper_visual_odometry:=true"
               - "use_amr_sweeper_localization:=true"
               - "use_amr_sweeper_mapping:=true"
               - "use_amr_sweeper_waypoint_follower:=true"
             ready:
               - type: "topic"
+                target: "visual_odometry/odom"
+                required: true
+              - type: "topic"
                 target: "odometry/fused"
+                required: true
+              - type: "topic"
+                target: "pose"
+                required: true
+              - type: "service"
+                target: "visual_odometry_node/get_parameters"
+                required: true
+              - type: "service"
+                target: "fusioncore/get_state"
                 required: true
               - type: "service"
                 target: "controller_server/get_state"
                 required: true
               - type: "service"
+                target: "planner_server/get_state"
+                required: true
+              - type: "service"
+                target: "bt_navigator/get_state"
+                required: true
+              - type: "service"
+                target: "waypoint_follower/get_state"
+                required: true
+              - type: "service"
+                target: "amr_sweeper_slam_node/get_parameters"
+                required: true
+              - type: "service"
+                target: "amr_sweeper_gaussian_node/get_parameters"
+                required: true
+              - type: "service"
                 target: "amr_sweeper_mapping_node/get_parameters"
                 required: true
-            window_ms: 15000
+            window_ms: 25000
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "level>=ERROR;action=FAULT"
