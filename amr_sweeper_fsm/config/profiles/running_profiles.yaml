@@ -81,7 +81,7 @@ profiles:
                 required: true
               - type: "topic"
                 target: "depth_camera/depth/color/points"
-                required: true
+                required: false
               - type: "service"
                 target: "amr_sweeper_battery_node/get_parameters"
                 required: true
@@ -331,7 +331,7 @@ profiles:
                 required: true
               - type: "topic"
                 target: "depth_camera/depth/color/points"
-                required: true
+                required: false
               - type: "service"
                 target: "amr_sweeper_battery_node/get_parameters"
                 required: true
@@ -538,7 +538,7 @@ profiles:
                 required: true
               - type: "topic"
                 target: "depth_camera/depth/color/points"
-                required: true
+                required: false
               - type: "service"
                 target: "amr_sweeper_battery_node/get_parameters"
                 required: true
@@ -785,7 +785,7 @@ profiles:
                 required: true
               - type: "topic"
                 target: "depth_camera/depth/color/points"
-                required: true
+                required: false
               - type: "service"
                 target: "amr_sweeper_battery_node/get_parameters"
                 required: true

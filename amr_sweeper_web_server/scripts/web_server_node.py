@@ -1757,19 +1757,31 @@ class MissionWebServerNode(Node):
       overflow: hidden;
       border: 1px solid rgba(16, 18, 20, 0.18);
       box-shadow: 0 8px 16px rgba(0, 0, 0, 0.18);
+      z-index: 1;
     }}
     .event-chip.planned {{
-      opacity: 0.68;
+      opacity: 0.48;
       border-style: dashed;
+      z-index: 1;
     }}
     .event-chip.actual {{
       opacity: 0.96;
-      z-index: 2;
+      z-index: 3;
       box-shadow: 0 10px 18px rgba(0, 0, 0, 0.26);
     }}
-    .event-chip.WORK {{ background: var(--work); }}
-    .event-chip.NO_WORK {{ background: var(--nowork); color: var(--ink); }}
-    .event-chip.SAFETY {{ background: var(--safety); color: #fff4ec; }}
+    .event-chip.planned.WORK {{ background: #8aa4b8; color: #0f1418; }}
+    .event-chip.planned.NO_WORK {{ background: #6f7880; color: #f5f1df; }}
+    .event-chip.planned.SAFETY {{ background: #b78888; color: #161111; }}
+    .event-chip.actual.WORK {{ background: var(--work); color: #101214; }}
+    .event-chip.actual.NO_WORK {{ background: var(--nowork); color: var(--ink); }}
+    .event-chip.actual.SAFETY {{ background: var(--safety); color: #fff4ec; }}
+    .event-chip.SAFETY {{
+      background: #ff3b30;
+      color: #fff7f5;
+      border-color: rgba(90, 0, 0, 0.42);
+      z-index: 5;
+      box-shadow: 0 12px 22px rgba(120, 0, 0, 0.34);
+    }}
     .event-source {{
       font-size: 0.68rem;
       text-transform: uppercase;
@@ -1829,7 +1841,7 @@ class MissionWebServerNode(Node):
         <span><strong style="color: var(--work);">WORK</strong> mission windows</span>
         <span><strong style="color: var(--nowork);">NO_WORK</strong> blackout windows</span>
         <span><strong style="color: var(--safety);">SAFETY</strong> logged safety events</span>
-        <span>Dashed blocks are planned. Solid blocks are actual.</span>
+        <span>Planned blocks are blue-gray, dashed, and semi-transparent in the background. Actual blocks are solid in the foreground.</span>
       </div>
     </section>
   </main>
