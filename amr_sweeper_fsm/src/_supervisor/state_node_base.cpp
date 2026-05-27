@@ -184,7 +184,11 @@ namespace {
           } else if (type == "controller") {
             pp.ready_active_controllers.push_back(target);
           } else if (type == "lifecycle") {
-            pp.ready_lifecycle_nodes.push_back(parse_lifecycle_requirement_line(target));
+            LifecycleNodeRequirement req;
+            req.node = target;
+            req.raw = target;
+            req.min_state_id = lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE;
+            pp.ready_lifecycle_nodes.push_back(req);
           }
         }
       }
