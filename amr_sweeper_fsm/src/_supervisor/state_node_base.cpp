@@ -1311,6 +1311,9 @@ bool StateNodeBase::wait_for_readiness(std::string & why_not)
         if (!graph_has_node(n)) {
           why_not = "node not discovered: '" + n + "'";
           if (now >= global_deadline) {
+            why_not =
+              "timed out after " + std::to_string(readiness_.timeout_ms) +
+              " ms waiting for " + why_not;
             return false;
           }
           waiting = true;
@@ -1321,6 +1324,9 @@ bool StateNodeBase::wait_for_readiness(std::string & why_not)
         if (!graph_has_topic(t)) {
           why_not = "topic not discovered: '" + t + "'";
           if (now >= global_deadline) {
+            why_not =
+              "timed out after " + std::to_string(readiness_.timeout_ms) +
+              " ms waiting for " + why_not;
             return false;
           }
           waiting = true;
@@ -1331,6 +1337,9 @@ bool StateNodeBase::wait_for_readiness(std::string & why_not)
         if (!graph_has_service(s)) {
           why_not = "service not discovered: '" + s + "'";
           if (now >= global_deadline) {
+            why_not =
+              "timed out after " + std::to_string(readiness_.timeout_ms) +
+              " ms waiting for " + why_not;
             return false;
           }
           waiting = true;
@@ -1342,6 +1351,9 @@ bool StateNodeBase::wait_for_readiness(std::string & why_not)
         if (!lifecycle_node_meets_requirement(lreq, lwhy)) {
           why_not = lwhy;
           if (now >= global_deadline) {
+            why_not =
+              "timed out after " + std::to_string(readiness_.timeout_ms) +
+              " ms waiting for " + why_not;
             return false;
           }
           waiting = true;
@@ -1395,6 +1407,7 @@ bool StateNodeBase::wait_for_readiness(std::string & why_not)
 
       if (pp.importance == ProcessImportance::CRITICAL) {
         if (pp.window_ms > 0 && now >= proc_deadline) {
+          why_not = "timed out after " + std::to_string(pp.window_ms) + " ms waiting for " + why_not;
           return false;
         }
         waiting = true;
@@ -1886,6 +1899,15 @@ bool StateNodeBase::wait_for_profile_process_readiness_(
       return true;
     }
     if (std::chrono::steady_clock::now() >= deadline) {
+      const std::string pname = pp.name.empty() ? pp.command : pp.name;
+      if (why_not.empty()) {
+        why_not =
+          "profile process '" + pname + "' not ready: timed out after " +
+          std::to_string(pp.window_ms) + " ms";
+      } else {
+        why_not =
+          "timed out after " + std::to_string(pp.window_ms) + " ms waiting for " + why_not;
+      }
       return false;
     }
     rate.sleep();
