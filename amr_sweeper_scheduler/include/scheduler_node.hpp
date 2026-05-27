@@ -162,6 +162,8 @@ private:
   std::string rosout_trigger_prefix_{"FSM_TRIGGER"};
   bool emit_trigger_topic_{true};
   std::string trigger_topic_name_{"scheduler_triggers"};
+  std::string last_trigger_message_;
+  std::string last_planned_windows_payload_;
   bool running_request_in_flight_{false};
   std::string running_request_window_uid_;
   std::optional<std::time_t> last_mtime_;

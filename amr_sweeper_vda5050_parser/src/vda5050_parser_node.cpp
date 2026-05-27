@@ -955,16 +955,22 @@ bool MissionParserNode::buildArtifactsForMission(
     (void)write_active_aliases;
 
     mission_build_stamps_[staged_mission_path.string()] = currentMissionStamp(staged_mission_path);
+    last_build_error_key_.clear();
     publishStatus("built", staged_mission_path.string());
     RCLCPP_INFO(get_logger(), "Built mission artifacts from %s", staged_mission_path.string().c_str());
     return true;
   } catch (const std::exception & exception) {
     publishStatus("error", exception.what());
-    RCLCPP_ERROR(
-      get_logger(),
-      "Failed to build mission artifacts from %s: %s",
-      mission_path.string().c_str(),
-      exception.what());
+    std::ostringstream error_key;
+    error_key << mission_path.string() << '\n' << exception.what();
+    if (last_build_error_key_ != error_key.str()) {
+      last_build_error_key_ = error_key.str();
+      RCLCPP_ERROR(
+        get_logger(),
+        "Failed to build mission artifacts from %s: %s",
+        mission_path.string().c_str(),
+        exception.what());
+    }
     return false;
   }
 }

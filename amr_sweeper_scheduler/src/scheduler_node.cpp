@@ -683,6 +683,12 @@ SchedulerNode::SchedulerNode(const rclcpp::NodeOptions & options)
 
 void SchedulerNode::trigger_info(const std::string & code, const std::string & kv)
 {
+  const std::string message =
+    rosout_trigger_prefix_ + std::string(" INFO ") + code + (kv.empty() ? "" : " " + kv);
+  if (last_trigger_message_ == message) {
+    return;
+  }
+  last_trigger_message_ = message;
   if (emit_rosout_triggers_) {
     RCLCPP_INFO(get_logger(), "%s %s %s", rosout_trigger_prefix_.c_str(), code.c_str(), kv.c_str());
   }
@@ -695,6 +701,12 @@ void SchedulerNode::trigger_info(const std::string & code, const std::string & k
 
 void SchedulerNode::trigger_warn(const std::string & code, const std::string & kv)
 {
+  const std::string message =
+    rosout_trigger_prefix_ + std::string(" WARN ") + code + (kv.empty() ? "" : " " + kv);
+  if (last_trigger_message_ == message) {
+    return;
+  }
+  last_trigger_message_ = message;
   if (emit_rosout_triggers_) {
     RCLCPP_WARN(get_logger(), "%s %s %s", rosout_trigger_prefix_.c_str(), code.c_str(), kv.c_str());
   }
@@ -707,6 +719,12 @@ void SchedulerNode::trigger_warn(const std::string & code, const std::string & k
 
 void SchedulerNode::trigger_error(const std::string & code, const std::string & kv)
 {
+  const std::string message =
+    rosout_trigger_prefix_ + std::string(" ERROR ") + code + (kv.empty() ? "" : " " + kv);
+  if (last_trigger_message_ == message) {
+    return;
+  }
+  last_trigger_message_ = message;
   if (emit_rosout_triggers_) {
     RCLCPP_ERROR(get_logger(), "%s %s %s", rosout_trigger_prefix_.c_str(), code.c_str(), kv.c_str());
   }
@@ -871,7 +889,10 @@ void SchedulerNode::publish_windows(const std::vector<TimeWindow> & windows)
   }
   stream << "]}";
   msg.data = stream.str();
-  planned_pub_->publish(msg);
+  if (last_planned_windows_payload_ != msg.data) {
+    last_planned_windows_payload_ = msg.data;
+    planned_pub_->publish(msg);
+  }
 
   if (windows.empty()) {
     trigger_warn("SCHED_NO_WINDOWS", "robot_id=" + robot_id_);

@@ -1836,6 +1836,10 @@ class MissionWebServerNode(Node):
       return (date.getHours() * 60) + date.getMinutes();
     }}
 
+    function startOfDay(date) {{
+      return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    }}
+
     function clamp(value, min, max) {{
       return Math.max(min, Math.min(max, value));
     }}
@@ -1889,33 +1893,48 @@ class MissionWebServerNode(Node):
         grid.appendChild(dayColumn);
       }}
 
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 7);
       const weekStartMs = weekStart.getTime();
       for (const event of data.events || []) {{
         const start = new Date(event.start);
         const end = new Date(event.end);
-        const dayIndex = Math.floor((start.getTime() - weekStartMs) / 86400000);
-        if (dayIndex < 0 || dayIndex > 6) {{
+        const visibleStart = start > weekStart ? start : weekStart;
+        const visibleEnd = end < weekEnd ? end : weekEnd;
+        if (visibleEnd <= visibleStart) {{
           continue;
         }}
-        const column = dayColumns[dayIndex];
-        const startMinutes = clamp(minutesSinceMidnight(event.start), 0, 1440);
-        const startDate = new Date(event.start);
-        const endDate = new Date(event.end);
-        const sameDay = startDate.toDateString() === endDate.toDateString();
-        const endMinutes = sameDay ? clamp(minutesSinceMidnight(event.end), 0, 1440) : 1440;
-        const durationMinutes = Math.max(30, endMinutes - startMinutes);
 
-        const chip = document.createElement('div');
-        chip.className = `event-chip ${{event.schedule_type || 'WORK'}}`;
-        chip.style.top = `${{(startMinutes / 60) * hourHeight + 6}}px`;
-        chip.style.height = `${{Math.max(28, (durationMinutes / 60) * hourHeight - 8)}}px`;
-        chip.title = event.description || event.summary || '';
-        chip.innerHTML = `
-          <div class="event-time">${{event.time}} - ${{event.end_time || ''}}</div>
-          <div><strong>${{event.summary || event.schedule_type || 'Event'}}</strong></div>
-          <div>${{event.mission_id || event.robot_id || ''}}</div>
-        `;
-        column.appendChild(chip);
+        let segmentDay = startOfDay(visibleStart);
+        while (segmentDay < visibleEnd) {{
+          const nextDay = new Date(segmentDay);
+          nextDay.setDate(segmentDay.getDate() + 1);
+          const segmentStart = visibleStart > segmentDay ? visibleStart : segmentDay;
+          const segmentEnd = visibleEnd < nextDay ? visibleEnd : nextDay;
+          const dayIndex = Math.floor((segmentDay.getTime() - weekStartMs) / 86400000);
+          if (dayIndex >= 0 && dayIndex <= 6 && segmentEnd > segmentStart) {{
+            const column = dayColumns[dayIndex];
+            const startMinutes = clamp((segmentStart.getHours() * 60) + segmentStart.getMinutes(), 0, 1440);
+            const endMinutes = clamp((segmentEnd.getHours() * 60) + segmentEnd.getMinutes(), 0, 1440);
+            const durationMinutes = Math.max(
+              30,
+              (segmentEnd >= nextDay && endMinutes === 0 ? 1440 : endMinutes) - startMinutes
+            );
+
+            const chip = document.createElement('div');
+            chip.className = `event-chip ${{event.schedule_type || 'WORK'}}`;
+            chip.style.top = `${{(startMinutes / 60) * hourHeight + 6}}px`;
+            chip.style.height = `${{Math.max(28, (durationMinutes / 60) * hourHeight - 8)}}px`;
+            chip.title = event.description || event.summary || '';
+            chip.innerHTML = `
+              <div class="event-time">${{segmentStart.toLocaleTimeString([], {{ hour: '2-digit', minute: '2-digit', hour12: false }})}} - ${{segmentEnd >= nextDay ? '24:00' : segmentEnd.toLocaleTimeString([], {{ hour: '2-digit', minute: '2-digit', hour12: false }})}}</div>
+              <div><strong>${{event.summary || event.schedule_type || 'Event'}}</strong></div>
+              <div>${{event.mission_id || event.robot_id || ''}}</div>
+            `;
+            column.appendChild(chip);
+          }}
+          segmentDay = nextDay;
+        }}
       }}
     }}
 

@@ -191,6 +191,7 @@ private:
   bool watch_for_updates_{true};
   bool waiting_for_active_mission_logged_{false};
   std::filesystem::path last_active_alias_mission_;
+  std::string last_build_error_key_;
   std::map<std::string, std::filesystem::file_time_type> mission_build_stamps_;
   std::unique_ptr<Vda5050MissionParser> mission_parser_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr status_publisher_;
