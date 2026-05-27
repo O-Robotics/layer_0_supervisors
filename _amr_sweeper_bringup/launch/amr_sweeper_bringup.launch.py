@@ -2,6 +2,7 @@
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.substitutions import FindPackageShare
@@ -39,6 +40,8 @@ def generate_launch_description():
     mission_executor_execute_service = LaunchConfiguration("mission_executor_execute_service")
     mission_executor_prepare_service = LaunchConfiguration("mission_executor_prepare_service")
     trigger_running_on_work_window = LaunchConfiguration("trigger_running_on_work_window")
+    launch_scheduler = LaunchConfiguration("launch_scheduler")
+    launch_vda5050_parser = LaunchConfiguration("launch_vda5050_parser")
     mission_path = LaunchConfiguration("mission_path")
     costmap_output_basename = LaunchConfiguration("costmap_output_basename")
     coverage_path_basename = LaunchConfiguration("coverage_path_basename")
@@ -86,6 +89,8 @@ def generate_launch_description():
         DeclareLaunchArgument("mission_executor_execute_service", default_value="execute_mission"),
         DeclareLaunchArgument("mission_executor_prepare_service", default_value="prepare_manual_mission"),
         DeclareLaunchArgument("trigger_running_on_work_window", default_value="true"),
+        DeclareLaunchArgument("launch_scheduler", default_value="false"),
+        DeclareLaunchArgument("launch_vda5050_parser", default_value="false"),
         DeclareLaunchArgument("mission_path", default_value=""),
         DeclareLaunchArgument("costmap_output_basename", default_value="global_costmap"),
         DeclareLaunchArgument("coverage_path_basename", default_value="active_mission_path"),
@@ -142,6 +147,7 @@ def generate_launch_description():
                 "mission_executor_prepare_service": mission_executor_prepare_service,
                 "trigger_running_on_work_window": trigger_running_on_work_window,
             }.items(),
+            condition=IfCondition(launch_scheduler),
         ),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(_launch_file("amr_sweeper_vda5050_parser", "amr_sweeper_vda5050_parser.launch.py")),
@@ -156,6 +162,7 @@ def generate_launch_description():
                 "auto_build_on_start": auto_build_on_start,
                 "watch_for_updates": watch_for_updates,
             }.items(),
+            condition=IfCondition(launch_vda5050_parser),
         ),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(_launch_file("amr_sweeper_web_server", "amr_sweeper_web_server.launch.py")),

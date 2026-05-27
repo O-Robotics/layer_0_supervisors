@@ -25,6 +25,9 @@ namespace amr_sweeper_scheduler
 namespace
 {
 
+constexpr char kLowerPriorityRejectedPrefix[] = "Rejected: lower priority than last request";
+constexpr auto kLowerPriorityRetryCooldown = std::chrono::seconds(30);
+
 std::optional<std::time_t> file_mtime(const std::string & path)
 {
   struct stat st;
@@ -917,6 +920,14 @@ void SchedulerNode::maybe_promote_mission(const std::vector<TimeWindow> & window
       continue;
     }
 
+    if (
+      rejected_running_window_uid_ == window.uid &&
+      next_running_request_retry_time_.has_value() &&
+      this->now() < *next_running_request_retry_time_)
+    {
+      return;
+    }
+
     if (!running_request_in_flight_ && running_request_window_uid_ != window.uid) {
       request_mission_execution(window);
     }
@@ -924,6 +935,8 @@ void SchedulerNode::maybe_promote_mission(const std::vector<TimeWindow> & window
   }
 
   running_request_window_uid_.clear();
+  rejected_running_window_uid_.clear();
+  next_running_request_retry_time_.reset();
 }
 
 bool SchedulerNode::mission_json_or_folder_exists(const std::string & mission_id) const
@@ -966,11 +979,18 @@ void SchedulerNode::request_mission_execution(const TimeWindow & window)
       const auto response = response_future.get();
       if (response->success) {
         running_request_window_uid_ = window.uid;
+        rejected_running_window_uid_.clear();
+        next_running_request_retry_time_.reset();
         trigger_info(
           "SCHED_PROMOTED_TO_RUNNING",
           "mission_id=" + window.mission_id.value_or(std::string("unknown")) +
           "; profile=" + std::to_string(response->running_profile_id));
       } else {
+        if (response->message.rfind(kLowerPriorityRejectedPrefix, 0) == 0) {
+          rejected_running_window_uid_ = window.uid;
+          next_running_request_retry_time_ =
+            this->now() + rclcpp::Duration(kLowerPriorityRetryCooldown);
+        }
         trigger_warn("SCHED_MISSION_EXECUTION_REJECTED", response->message);
       }
     });

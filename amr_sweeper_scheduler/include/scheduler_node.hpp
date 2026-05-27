@@ -166,6 +166,8 @@ private:
   std::string last_planned_windows_payload_;
   bool running_request_in_flight_{false};
   std::string running_request_window_uid_;
+  std::string rejected_running_window_uid_;
+  std::optional<rclcpp::Time> next_running_request_retry_time_;
   std::optional<std::time_t> last_mtime_;
   std::unordered_map<std::string, std::string> mission_catalog_;
   std::set<std::string> warned_missing_mission_ids_;

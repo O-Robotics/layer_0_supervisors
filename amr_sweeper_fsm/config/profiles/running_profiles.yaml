@@ -41,7 +41,7 @@ profiles:
               - "use_amr_sweeper_battery:=true"
               - "use_amr_sweeper_system_info:=true"
               - "use_amr_sweeper_usb_cameras:=true"
-              - "use_amr_sweeper_depth_camera:=false"
+              - "use_amr_sweeper_depth_camera:=true"
               - "use_amr_sweeper_imu:=true"
               - "use_amr_sweeper_gnss:=true"
               - "use_ntrip_client:=true"
@@ -73,6 +73,15 @@ profiles:
               - type: "topic"
                 target: "usb_cameras/tools_camera/image_raw"
                 required: true
+              - type: "topic"
+                target: "depth_camera/depth/camera_info"
+                required: true
+              - type: "topic"
+                target: "depth_camera/scan"
+                required: true
+              - type: "topic"
+                target: "depth_camera/depth/color/points"
+                required: true
               - type: "service"
                 target: "amr_sweeper_battery_node/get_parameters"
                 required: true
@@ -86,6 +95,8 @@ profiles:
             - "node=amr_sweeper_system_info_node;match=Could not open file;action=FAULT"
             - "node=amr_sweeper_battery_node;level>=ERROR;action=FAULT"
             - "node=amr_sweeper_battery_node;level>=WARN;action=DEGRADED"
+            - "node=depth_camera_watchdog;level>=ERROR;action=FAULT"
+            - "node=depth_camera_watchdog;level>=WARN;action=DEGRADED"
             - "level>=ERROR;match=Failed to open V4L2 device;action=FAULT"
           errors:
             on_readiness_fail: "FAULT"
@@ -280,7 +291,7 @@ profiles:
               - "use_amr_sweeper_battery:=true"
               - "use_amr_sweeper_system_info:=true"
               - "use_amr_sweeper_usb_cameras:=true"
-              - "use_amr_sweeper_depth_camera:=false"
+              - "use_amr_sweeper_depth_camera:=true"
               - "use_amr_sweeper_imu:=true"
               - "use_amr_sweeper_gnss:=true"
               - "use_ntrip_client:=true"
@@ -312,6 +323,15 @@ profiles:
               - type: "topic"
                 target: "usb_cameras/tools_camera/image_raw"
                 required: true
+              - type: "topic"
+                target: "depth_camera/depth/camera_info"
+                required: true
+              - type: "topic"
+                target: "depth_camera/scan"
+                required: true
+              - type: "topic"
+                target: "depth_camera/depth/color/points"
+                required: true
               - type: "service"
                 target: "amr_sweeper_battery_node/get_parameters"
                 required: true
@@ -325,6 +345,8 @@ profiles:
             - "node=amr_sweeper_system_info_node;match=Could not open file;action=FAULT"
             - "node=amr_sweeper_battery_node;level>=ERROR;action=FAULT"
             - "node=amr_sweeper_battery_node;level>=WARN;action=DEGRADED"
+            - "node=depth_camera_watchdog;level>=ERROR;action=FAULT"
+            - "node=depth_camera_watchdog;level>=WARN;action=DEGRADED"
             - "level>=ERROR;match=Failed to open V4L2 device;action=FAULT"
           errors:
             on_readiness_fail: "FAULT"
@@ -476,7 +498,7 @@ profiles:
               - "use_amr_sweeper_battery:=true"
               - "use_amr_sweeper_system_info:=true"
               - "use_amr_sweeper_usb_cameras:=true"
-              - "use_amr_sweeper_depth_camera:=false"
+              - "use_amr_sweeper_depth_camera:=true"
               - "use_amr_sweeper_imu:=true"
               - "use_amr_sweeper_gnss:=true"
               - "use_ntrip_client:=true"
@@ -508,6 +530,15 @@ profiles:
               - type: "topic"
                 target: "usb_cameras/tools_camera/image_raw"
                 required: true
+              - type: "topic"
+                target: "depth_camera/depth/camera_info"
+                required: true
+              - type: "topic"
+                target: "depth_camera/scan"
+                required: true
+              - type: "topic"
+                target: "depth_camera/depth/color/points"
+                required: true
               - type: "service"
                 target: "amr_sweeper_battery_node/get_parameters"
                 required: true
@@ -521,6 +552,8 @@ profiles:
             - "node=amr_sweeper_system_info_node;match=Could not open file;action=FAULT"
             - "node=amr_sweeper_battery_node;level>=ERROR;action=FAULT"
             - "node=amr_sweeper_battery_node;level>=WARN;action=DEGRADED"
+            - "node=depth_camera_watchdog;level>=ERROR;action=FAULT"
+            - "node=depth_camera_watchdog;level>=WARN;action=DEGRADED"
             - "level>=ERROR;match=Failed to open V4L2 device;action=FAULT"
           errors:
             on_readiness_fail: "FAULT"
@@ -712,7 +745,7 @@ profiles:
               - "use_amr_sweeper_battery:=true"
               - "use_amr_sweeper_system_info:=true"
               - "use_amr_sweeper_usb_cameras:=true"
-              - "use_amr_sweeper_depth_camera:=false"
+              - "use_amr_sweeper_depth_camera:=true"
               - "use_amr_sweeper_imu:=true"
               - "use_amr_sweeper_gnss:=true"
               - "use_ntrip_client:=true"
@@ -744,6 +777,15 @@ profiles:
               - type: "topic"
                 target: "usb_cameras/tools_camera/image_raw"
                 required: true
+              - type: "topic"
+                target: "depth_camera/depth/camera_info"
+                required: true
+              - type: "topic"
+                target: "depth_camera/scan"
+                required: true
+              - type: "topic"
+                target: "depth_camera/depth/color/points"
+                required: true
               - type: "service"
                 target: "amr_sweeper_battery_node/get_parameters"
                 required: true
@@ -757,6 +799,8 @@ profiles:
             - "node=amr_sweeper_system_info_node;match=Could not open file;action=FAULT"
             - "node=amr_sweeper_battery_node;level>=ERROR;action=FAULT"
             - "node=amr_sweeper_battery_node;level>=WARN;action=DEGRADED"
+            - "node=depth_camera_watchdog;level>=ERROR;action=FAULT"
+            - "node=depth_camera_watchdog;level>=WARN;action=DEGRADED"
             - "level>=ERROR;match=Failed to open V4L2 device;action=FAULT"
           errors:
             on_readiness_fail: "FAULT"
