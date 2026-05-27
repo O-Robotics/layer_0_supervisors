@@ -77,10 +77,10 @@ profiles:
                 required: true
               - type: "topic"
                 target: "depth_camera/depth/camera_info"
-                required: true
+                required: false
               - type: "topic"
                 target: "depth_camera/scan"
-                required: true
+                required: false
               - type: "topic"
                 target: "depth_camera/depth/color/points"
                 required: false
@@ -97,7 +97,7 @@ profiles:
             - "node=amr_sweeper_system_info_node;match=Could not open file;action=FAULT"
             - "node=amr_sweeper_battery_node;level>=ERROR;action=FAULT"
             - "node=amr_sweeper_battery_node;level>=WARN;action=DEGRADED"
-            - "node=depth_camera_watchdog;level>=ERROR;action=FAULT"
+            - "node=depth_camera_watchdog;level>=ERROR;action=DEGRADED"
             - "node=depth_camera_watchdog;level>=WARN;action=DEGRADED"
             - "level>=ERROR;match=Failed to open V4L2 device;action=FAULT"
           errors:
@@ -364,10 +364,10 @@ profiles:
                 required: true
               - type: "topic"
                 target: "depth_camera/depth/camera_info"
-                required: true
+                required: false
               - type: "topic"
                 target: "depth_camera/scan"
-                required: true
+                required: false
               - type: "topic"
                 target: "depth_camera/depth/color/points"
                 required: false
@@ -382,7 +382,7 @@ profiles:
             - "node=amr_sweeper_layer_1_hardware_bringup;level>=ERROR;action=FAULT"
             - "node=robot_state_publisher;level>=ERROR;action=FAULT"
             - "node=battery;level>=ERROR;action=FAULT"
-            - "node=depth_camera_watchdog;level>=ERROR;action=FAULT"
+            - "node=depth_camera_watchdog;level>=ERROR;action=DEGRADED"
             - "node=depth_camera_watchdog;level>=WARN;action=DEGRADED"
           errors:
             on_readiness_fail: "FAULT"
