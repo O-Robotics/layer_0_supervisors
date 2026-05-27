@@ -177,7 +177,9 @@ namespace {
           if (type.empty() || target.empty()) {
             continue;
           }
-          if (type == "topic") {
+          if (type == "node") {
+            pp.ready_nodes.push_back(target);
+          } else if (type == "topic") {
             pp.ready_topics.push_back(target);
           } else if (type == "service") {
             pp.ready_services.push_back(target);
@@ -1294,7 +1296,8 @@ bool StateNodeBase::wait_for_readiness(std::string & why_not)
   for (const auto & pp : profile_processes_) {
     if (pp.importance == ProcessImportance::CRITICAL &&
         pp.window_ms > 0 &&
-        (!pp.ready_topics.empty() ||
+        (!pp.ready_nodes.empty() ||
+        !pp.ready_topics.empty() ||
         !pp.ready_services.empty() ||
         !pp.ready_active_controllers.empty() ||
         !pp.ready_lifecycle_nodes.empty())) {
@@ -1390,11 +1393,21 @@ bool StateNodeBase::wait_for_readiness(std::string & why_not)
       };
 
       bool proc_waiting = false;
-      for (const auto & t : pp.ready_topics) {
-        if (!graph_has_topic(t)) {
+      for (const auto & n : pp.ready_nodes) {
+        if (!graph_has_node(qualify_to_ns(n))) {
           proc_waiting = true;
-          why_not = missing_reason_for("topic", t);
+          why_not = missing_reason_for("node", qualify_to_ns(n));
           break;
+        }
+      }
+
+      if (!proc_waiting) {
+        for (const auto & t : pp.ready_topics) {
+          if (!graph_has_topic(t)) {
+            proc_waiting = true;
+            why_not = missing_reason_for("topic", t);
+            break;
+          }
         }
       }
       if (!proc_waiting) {
@@ -1896,6 +1909,14 @@ bool StateNodeBase::profile_process_readiness_satisfied_(
     return "profile process '" + pname + "' not ready: missing " + what + " '" + target + "'";
   };
 
+  for (const auto & n : pp.ready_nodes) {
+    const auto fq = qualify_to_ns(n);
+    if (!graph_has_node(fq)) {
+      why_not = missing_reason_for("node", fq);
+      return false;
+    }
+  }
+
   for (const auto & t : pp.ready_topics) {
     if (!graph_has_topic(t)) {
       why_not = missing_reason_for("topic", t);
@@ -1935,10 +1956,18 @@ std::vector<std::string> StateNodeBase::collect_profile_process_readiness_failur
 {
   std::vector<std::string> failures;
   failures.reserve(
+    pp.ready_nodes.size() +
     pp.ready_topics.size() +
     pp.ready_services.size() +
     pp.ready_lifecycle_nodes.size() +
     pp.ready_active_controllers.size());
+
+  for (const auto & n : pp.ready_nodes) {
+    const auto fq = qualify_to_ns(n);
+    if (!graph_has_node(fq)) {
+      failures.push_back("missing node '" + fq + "'");
+    }
+  }
 
   for (const auto & t : pp.ready_topics) {
     if (!graph_has_topic(t)) {
@@ -1974,6 +2003,7 @@ bool StateNodeBase::wait_for_profile_process_readiness_(
   std::string & why_not)
 {
   if (
+    pp.ready_nodes.empty() &&
     pp.ready_topics.empty() &&
     pp.ready_services.empty() &&
     pp.ready_lifecycle_nodes.empty() &&
@@ -2036,6 +2066,7 @@ bool StateNodeBase::start_state_processes(std::string & why_not)
       const auto cmd = resolve_placeholders(pp.command);
       const std::string pname = pp.name.empty() ? cmd : pp.name;
       const bool has_process_readiness =
+        !pp.ready_nodes.empty() ||
         !pp.ready_topics.empty() ||
         !pp.ready_services.empty() ||
         !pp.ready_lifecycle_nodes.empty() ||

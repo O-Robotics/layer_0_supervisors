@@ -53,6 +53,7 @@ struct ProfileProcess
   std::vector<std::string> ready_services;
   std::vector<std::string> ready_active_controllers;
   std::vector<LifecycleNodeRequirement> ready_lifecycle_nodes;
+  std::vector<std::string> ready_nodes;
 
 
   // Optional per-process error policy (declared under `errors:` in the profile YAML).
