@@ -70,10 +70,10 @@ profiles:
                 target: "amr_sweeper_system_info_node/get_parameters"
                 required: true
               - type: "service"
-                target: "imu_node/get_parameters"
+                target: "imu/imu_node/get_parameters"
                 required: true
               - type: "service"
-                target: "amr_sweeper_gnss_ublox_node/get_parameters"
+                target: "gnss/amr_sweeper_gnss_ublox_node/get_parameters"
                 required: true
               - type: "service"
                 target: "controller_manager/list_controllers"

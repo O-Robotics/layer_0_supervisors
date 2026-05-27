@@ -70,7 +70,7 @@ profiles:
                 target: "amr_sweeper_system_info_node/get_parameters"
                 required: true
               - type: "service"
-                target: "amr_sweeper_gnss_ublox_node/get_parameters"
+                target: "gnss/amr_sweeper_gnss_ublox_node/get_parameters"
                 required: true
             window_ms: 10000
           rosout_triggers:
