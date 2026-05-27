@@ -90,7 +90,7 @@ profiles:
               - type: "controller"
                 target: "controller_steadydrive"
                 required: true
-            window_ms: 20000
+            window_ms: 45000
           rosout_triggers:
             - "node=amr_sweeper_system_info_node;level>=ERROR;action=FAULT"
             - "node=amr_sweeper_system_info_node;level>=WARN;action=DEGRADED"

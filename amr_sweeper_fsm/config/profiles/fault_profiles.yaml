@@ -49,7 +49,7 @@ profiles:
               - type: "service"
                 target: "gnss/amr_sweeper_gnss_ublox_node/get_parameters"
                 required: true
-            window_ms: 10000
+            window_ms: 45000
           rosout_triggers:
             - "node=amr_sweeper_system_info_node;level>=ERROR;action=FAULT"
             - "node=amr_sweeper_system_info_node;level>=WARN;action=DEGRADED"

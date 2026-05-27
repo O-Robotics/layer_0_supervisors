@@ -126,7 +126,7 @@ profiles:
               - type: "controller"
                 target: "controller_steadydrive"
                 required: true
-            window_ms: 20000
+            window_ms: 45000
           rosout_triggers:
             - "node=amr_sweeper_system_info_node;level>=ERROR;action=FAULT"
             - "node=amr_sweeper_system_info_node;level>=WARN;action=DEGRADED"
@@ -278,7 +278,7 @@ profiles:
               - type: "service"
                 target: "amr_sweeper_mapping_node/get_parameters"
                 required: true
-            window_ms: 25000
+            window_ms: 45000
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "level>=ERROR;action=FAULT"
@@ -431,7 +431,7 @@ profiles:
               - type: "service"
                 target: "controller_manager/list_controllers"
                 required: true
-            window_ms: 20000
+            window_ms: 45000
           rosout_triggers:
             - "node=amr_sweeper_layer_1_hardware_bringup;level>=ERROR;action=FAULT"
             - "node=robot_state_publisher;level>=ERROR;action=FAULT"
