@@ -289,14 +289,8 @@ class MissionFrontendHttpNode(MissionBackendNode):
       border-radius: 20px;
       box-shadow: 0 18px 44px rgba(0, 0, 0, 0.28);
     }}
-    .brand-band {{
-      width: min(280px, 100%);
-      height: 12px;
-      border-radius: 999px;
-      background:
-        linear-gradient(90deg, var(--accent) 0 24%, transparent 24% 28%, var(--accent) 28% 52%, transparent 52% 56%, var(--accent) 56% 100%),
-        repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.35) 0 8px, rgba(0, 0, 0, 0.1) 8px 16px);
-      box-shadow: inset 0 0 0 1px rgba(253, 202, 15, 0.32);
+    h1 {{
+      color: var(--accent);
     }}
     .grid {{
       display: grid;
@@ -471,7 +465,6 @@ class MissionFrontendHttpNode(MissionBackendNode):
   <main>
     <section class="hero">
       <h1>{title}</h1>
-      <div class="brand-band"></div>
       <div id="banner" class="banner"></div>
       <div class="nav">
         <a class="nav-link" href="/">Dashboard</a>
@@ -741,14 +734,8 @@ class MissionFrontendHttpNode(MissionBackendNode):
       letter-spacing: 0.09em;
       font-family: "Avenir Next Condensed", "Franklin Gothic Medium", "Arial Narrow", sans-serif;
     }}
-    .brand-band {{
-      width: min(240px, 100%);
-      height: 12px;
-      margin: 10px 0 0;
-      border-radius: 999px;
-      background:
-        linear-gradient(90deg, var(--accent) 0 24%, transparent 24% 28%, var(--accent) 28% 52%, transparent 52% 56%, var(--accent) 56% 100%),
-        repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.35) 0 8px, rgba(0, 0, 0, 0.1) 8px 16px);
+    h1 {{
+      color: var(--accent);
     }}
     .nav {{
       display: flex;
@@ -928,7 +915,6 @@ class MissionFrontendHttpNode(MissionBackendNode):
   <main>
     <section class="card">
       <h1>Calendar</h1>
-      <div class="brand-band"></div>
       <div class="muted">View the active schedule as a weekly planner with full 24-hour day lanes.</div>
       <div class="nav">
         <a class="nav-link" href="/">Dashboard</a>
@@ -1185,13 +1171,8 @@ class MissionFrontendHttpNode(MissionBackendNode):
       letter-spacing: 0.09em;
       font-family: "Avenir Next Condensed", "Franklin Gothic Medium", "Arial Narrow", sans-serif;
     }}
-    .brand-band {{
-      width: min(260px, 100%);
-      height: 12px;
-      border-radius: 999px;
-      background:
-        linear-gradient(90deg, var(--accent) 0 24%, transparent 24% 28%, var(--accent) 28% 52%, transparent 52% 56%, var(--accent) 56% 100%),
-        repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.35) 0 8px, rgba(0, 0, 0, 0.1) 8px 16px);
+    h1 {{
+      color: var(--accent);
     }}
     .nav {{
       display: flex;
@@ -1336,7 +1317,6 @@ class MissionFrontendHttpNode(MissionBackendNode):
   <main>
     <section class="card hero">
       <h1>Record Map And Create Missions</h1>
-      <div class="brand-band"></div>
       <div class="muted">Drive the robot around the working-area perimeter, let RecordMap update the latest recorded map, then create one or more named autonomous missions from that map using a sweep pattern.</div>
       <div id="banner" class="banner"></div>
       <div class="nav">
@@ -1678,14 +1658,8 @@ class MissionFrontendHttpNode(MissionBackendNode):
       letter-spacing: 0.09em;
       font-family: "Avenir Next Condensed", "Franklin Gothic Medium", "Arial Narrow", sans-serif;
     }}
-    .brand-band {{
-      width: min(240px, 100%);
-      height: 12px;
-      margin: 10px 0 0;
-      border-radius: 999px;
-      background:
-        linear-gradient(90deg, var(--accent) 0 24%, transparent 24% 28%, var(--accent) 28% 52%, transparent 52% 56%, var(--accent) 56% 100%),
-        repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.35) 0 8px, rgba(0, 0, 0, 0.1) 8px 16px);
+    h1 {{
+      color: var(--accent);
     }}
     .nav {{
       display: flex;
@@ -1771,7 +1745,6 @@ class MissionFrontendHttpNode(MissionBackendNode):
   <main>
     <section class="card">
       <h1>Missions</h1>
-      <div class="brand-band"></div>
       <div class="muted">Preview built or decoded mission routes from the synced mission database, and upload VDA5050 missions.</div>
       <div id="banner" class="banner"></div>
       <div class="nav">
@@ -2001,14 +1974,8 @@ class MissionFrontendHttpNode(MissionBackendNode):
       letter-spacing: 0.09em;
       font-family: "Avenir Next Condensed", "Franklin Gothic Medium", "Arial Narrow", sans-serif;
     }}
-    .brand-band {{
-      width: min(240px, 100%);
-      height: 12px;
-      margin: 10px 0 0;
-      border-radius: 999px;
-      background:
-        linear-gradient(90deg, #fdca0f 0 24%, transparent 24% 28%, #fdca0f 28% 52%, transparent 52% 56%, #fdca0f 56% 100%),
-        repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.35) 0 8px, rgba(0, 0, 0, 0.1) 8px 16px);
+    h1 {{
+      color: var(--accent);
     }}
     .nav {{
       display: flex;
@@ -2064,7 +2031,6 @@ class MissionFrontendHttpNode(MissionBackendNode):
   <main>
     <section class="card">
       <h1>Developer</h1>
-      <div class="brand-band"></div>
       <div class="muted">Inspect recent ROS warning/error logs and the raw web status payload.</div>
       <div class="nav">
         <a class="nav-link" href="/">Dashboard</a>
