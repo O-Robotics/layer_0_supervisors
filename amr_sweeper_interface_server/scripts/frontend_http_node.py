@@ -231,6 +231,8 @@ class MissionFrontendHttpNode(MissionBackendNode):
                 self.end_headers()
                 self.wfile.write(encoded)
 
+        return MissionWebRequestHandler
+
     def render_index_html(self) -> str:
         title = escape(self._site_title)
         public_base_url = escape(self._public_base_url)
