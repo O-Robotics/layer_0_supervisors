@@ -5,12 +5,14 @@
 #include <algorithm>
 #include <cctype>
 #include <chrono>
+#include <cstddef>
 #include <filesystem>
 #include <fstream>
 #include <future>
 #include <cmath>
 #include <iomanip>
 #include <optional>
+#include <random>
 #include <set>
 #include <sstream>
 #include <string>
@@ -39,6 +41,62 @@ constexpr char kTeleopInactivityEndReason[] = "teleop mission auto-ended after 5
 constexpr char kManualMappingInactivityEndReason[] =
   "manual mapping mission auto-ended after 5 minutes without motion";
 constexpr char kScheduledMissionType[] = "vda5050_scheduled_mission";
+constexpr char kZigzagSweepPattern[] = "zigzag";
+constexpr char kRandomSweepPattern[] = "random";
+constexpr char kSpiralSweepPattern[] = "spiral";
+constexpr char kLatestRecordedMapDirectoryName[] = "latest_recorded_map";
+constexpr char kLatestRecordedMapMetadataFile[] = "latest_recorded_map.json";
+constexpr char kLatestRecordedMapRouteStem[] = "latest_recorded_map_path";
+constexpr char kLatestRecordedMapCostmapStem[] = "latest_recorded_map_costmap";
+constexpr char kLatestRecordedMapNavSatStem[] = "latest_recorded_map_navsat";
+constexpr double kRecordMapCostmapResolutionMeters = 0.1;
+constexpr double kRecordMapCostmapPaddingMeters = 2.0;
+constexpr double kRecordMapEdgeBandMeters = 1.0;
+constexpr double kRecordMapObstacleRadiusMeters = 0.3;
+constexpr double kSweepTrackSpacingMeters = 1.0;
+constexpr double kSweepInsetMeters = 0.6;
+constexpr double kNavSatSampleDistanceDegrees = 1.0e-6;
+constexpr unsigned char kRecordMapInsideCost = 0U;
+constexpr unsigned char kRecordMapEdgeBandCost = 180U;
+constexpr unsigned char kRecordMapOutsideCost = 254U;
+constexpr unsigned char kRecordMapObstacleCost = 254U;
+
+struct MapPoint
+{
+  double x{0.0};
+  double y{0.0};
+};
+
+struct GeoPoint
+{
+  double latitude{0.0};
+  double longitude{0.0};
+};
+
+struct GeoTransform
+{
+  bool valid{false};
+  double longitude_coefficients[3]{0.0, 0.0, 0.0};
+  double latitude_coefficients[3]{0.0, 0.0, 0.0};
+};
+
+struct RasterizedCostmap
+{
+  std::vector<unsigned char> costs;
+  unsigned int width_cells{0U};
+  unsigned int height_cells{0U};
+  double resolution{0.0};
+  double origin_x{0.0};
+  double origin_y{0.0};
+};
+
+struct PolygonBounds
+{
+  double min_x{0.0};
+  double min_y{0.0};
+  double max_x{0.0};
+  double max_y{0.0};
+};
 
 std::string toLower(std::string value)
 {
@@ -65,6 +123,13 @@ nlohmann::json loadJsonDocument(const std::filesystem::path & path)
 std::string defaultIfEmpty(const std::string & value, const std::string & fallback)
 {
   return value.empty() ? fallback : value;
+}
+
+std::string sanitizeUidToken(std::string value);
+
+double clampToUnitInterval(const double value)
+{
+  return std::max(0.0, std::min(1.0, value));
 }
 
 double computePathLengthMeters(const nlohmann::json & route_document)
@@ -99,6 +164,920 @@ double computePathLengthMeters(const nlohmann::json & route_document)
   }
 
   return total_length_meters;
+}
+
+std::vector<MapPoint> extractLineStringCoordinates(const nlohmann::json & route_document)
+{
+  std::vector<MapPoint> coordinates;
+  if (!route_document.contains("features") || !route_document.at("features").is_array()) {
+    return coordinates;
+  }
+
+  for (const auto & feature : route_document.at("features")) {
+    if (!feature.contains("geometry") || !feature.at("geometry").is_object()) {
+      continue;
+    }
+    const auto & geometry = feature.at("geometry");
+    if (!geometry.contains("type") || geometry.at("type") != "LineString" ||
+      !geometry.contains("coordinates") || !geometry.at("coordinates").is_array())
+    {
+      continue;
+    }
+
+    for (const auto & coordinate : geometry.at("coordinates")) {
+      if (!coordinate.is_array() || coordinate.size() < 2U) {
+        continue;
+      }
+      coordinates.push_back({coordinate.at(0).get<double>(), coordinate.at(1).get<double>()});
+    }
+    if (!coordinates.empty()) {
+      return coordinates;
+    }
+  }
+
+  return coordinates;
+}
+
+std::vector<GeoPoint> extractGeoLineStringCoordinates(const nlohmann::json & route_document)
+{
+  std::vector<GeoPoint> coordinates;
+  if (!route_document.contains("features") || !route_document.at("features").is_array()) {
+    return coordinates;
+  }
+
+  for (const auto & feature : route_document.at("features")) {
+    if (!feature.contains("geometry") || !feature.at("geometry").is_object()) {
+      continue;
+    }
+    const auto & geometry = feature.at("geometry");
+    if (!geometry.contains("type") || geometry.at("type") != "LineString" ||
+      !geometry.contains("coordinates") || !geometry.at("coordinates").is_array())
+    {
+      continue;
+    }
+
+    for (const auto & coordinate : geometry.at("coordinates")) {
+      if (!coordinate.is_array() || coordinate.size() < 2U) {
+        continue;
+      }
+      coordinates.push_back({coordinate.at(1).get<double>(), coordinate.at(0).get<double>()});
+    }
+    if (!coordinates.empty()) {
+      return coordinates;
+    }
+  }
+
+  return coordinates;
+}
+
+bool arePointsNear(const MapPoint & lhs, const MapPoint & rhs, const double tolerance = 1.0e-6)
+{
+  return std::abs(lhs.x - rhs.x) <= tolerance && std::abs(lhs.y - rhs.y) <= tolerance;
+}
+
+bool areGeoPointsNear(const GeoPoint & lhs, const GeoPoint & rhs, const double tolerance = 1.0e-9)
+{
+  return std::abs(lhs.latitude - rhs.latitude) <= tolerance &&
+         std::abs(lhs.longitude - rhs.longitude) <= tolerance;
+}
+
+double distanceToSegment(const MapPoint & point, const MapPoint & start, const MapPoint & end)
+{
+  const double dx = end.x - start.x;
+  const double dy = end.y - start.y;
+  const double segment_length_squared = (dx * dx) + (dy * dy);
+  if (segment_length_squared <= std::numeric_limits<double>::epsilon()) {
+    return std::hypot(point.x - start.x, point.y - start.y);
+  }
+
+  const double projection =
+    ((point.x - start.x) * dx + (point.y - start.y) * dy) / segment_length_squared;
+  const double clamped_projection = std::clamp(projection, 0.0, 1.0);
+  const double closest_x = start.x + clamped_projection * dx;
+  const double closest_y = start.y + clamped_projection * dy;
+  return std::hypot(point.x - closest_x, point.y - closest_y);
+}
+
+bool pointInPolygon(const MapPoint & point, const std::vector<MapPoint> & polygon)
+{
+  if (polygon.size() < 3U) {
+    return false;
+  }
+
+  bool inside = false;
+  for (std::size_t i = 0U, j = polygon.size() - 1U; i < polygon.size(); j = i++) {
+    const auto & a = polygon.at(i);
+    const auto & b = polygon.at(j);
+    const bool intersects =
+      ((a.y > point.y) != (b.y > point.y)) &&
+      (point.x < (b.x - a.x) * (point.y - a.y) / ((b.y - a.y) + std::numeric_limits<double>::epsilon()) + a.x);
+    if (intersects) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+double nearestPerimeterDistance(const MapPoint & point, const std::vector<MapPoint> & polygon)
+{
+  if (polygon.size() < 2U) {
+    return std::numeric_limits<double>::infinity();
+  }
+
+  double min_distance = std::numeric_limits<double>::infinity();
+  for (std::size_t index = 0U; index + 1U < polygon.size(); ++index) {
+    min_distance = std::min(min_distance, distanceToSegment(point, polygon.at(index), polygon.at(index + 1U)));
+  }
+  return min_distance;
+}
+
+std::vector<MapPoint> closePolygon(std::vector<MapPoint> polygon)
+{
+  if (polygon.size() >= 3U && !arePointsNear(polygon.front(), polygon.back())) {
+    polygon.push_back(polygon.front());
+  }
+  return polygon;
+}
+
+std::vector<MapPoint> uniquePolygonVertices(std::vector<MapPoint> polygon)
+{
+  if (polygon.size() >= 2U && arePointsNear(polygon.front(), polygon.back())) {
+    polygon.pop_back();
+  }
+  return polygon;
+}
+
+std::vector<GeoPoint> uniqueGeoPolygonVertices(std::vector<GeoPoint> polygon)
+{
+  if (polygon.size() >= 2U && areGeoPointsNear(polygon.front(), polygon.back())) {
+    polygon.pop_back();
+  }
+  return polygon;
+}
+
+std::vector<MapPoint> loadGaussianObstaclePoints(const std::filesystem::path & gaussian_json_path)
+{
+  std::vector<MapPoint> points;
+  if (!std::filesystem::exists(gaussian_json_path)) {
+    return points;
+  }
+
+  const auto document = loadJsonDocument(gaussian_json_path);
+  if (!document.contains("gaussians") || !document.at("gaussians").is_array()) {
+    return points;
+  }
+
+  for (const auto & gaussian : document.at("gaussians")) {
+    if (!gaussian.contains("position") || !gaussian.at("position").is_array() || gaussian.at("position").size() < 2U) {
+      continue;
+    }
+    points.push_back({
+      gaussian.at("position").at(0).get<double>(),
+      gaussian.at("position").at(1).get<double>()});
+  }
+  return points;
+}
+
+void saveCostmapArtifacts(
+  const RasterizedCostmap & map,
+  const std::filesystem::path & image_path,
+  const std::filesystem::path & yaml_path)
+{
+  namespace fs = std::filesystem;
+  fs::create_directories(image_path.parent_path());
+  fs::create_directories(yaml_path.parent_path());
+
+  std::ofstream image_stream(image_path, std::ios::binary);
+  if (!image_stream.is_open()) {
+    throw std::runtime_error("Failed to write RecordMap costmap image: " + image_path.string());
+  }
+  image_stream << "P5\n" << map.width_cells << " " << map.height_cells << "\n255\n";
+  for (int row = static_cast<int>(map.height_cells) - 1; row >= 0; --row) {
+    for (unsigned int col = 0; col < map.width_cells; ++col) {
+      const std::size_t index = static_cast<std::size_t>(row) * map.width_cells + col;
+      const unsigned char pixel = static_cast<unsigned char>(255U - map.costs.at(index));
+      image_stream.write(reinterpret_cast<const char *>(&pixel), 1);
+    }
+  }
+
+  std::ofstream yaml_stream(yaml_path, std::ios::trunc);
+  if (!yaml_stream.is_open()) {
+    throw std::runtime_error("Failed to write RecordMap costmap yaml: " + yaml_path.string());
+  }
+  yaml_stream
+    << "image: " << image_path.filename().string() << "\n"
+    << "resolution: " << map.resolution << "\n"
+    << "origin: [" << map.origin_x << ", " << map.origin_y << ", 0.0]\n"
+    << "negate: 0\n"
+    << "occupied_thresh: 0.65\n"
+    << "free_thresh: 0.196\n"
+    << "mode: trinary\n";
+}
+
+nlohmann::json buildPerimeterGeoJson(const std::vector<MapPoint> & perimeter)
+{
+  nlohmann::json coordinates = nlohmann::json::array();
+  for (const auto & point : perimeter) {
+    coordinates.push_back({point.x, point.y});
+  }
+
+  return {
+    {"type", "FeatureCollection"},
+    {"features", nlohmann::json::array({
+      {
+        {"type", "Feature"},
+        {"properties", {
+           {"name", "recorded_work_area_perimeter"},
+           {"source", "record_map"},
+           {"coordinate_frame", "odom"}}},
+        {"geometry", {
+           {"type", "LineString"},
+           {"coordinates", coordinates}}}
+      }
+    })}
+  };
+}
+
+PolygonBounds computeBounds(const std::vector<MapPoint> & points)
+{
+  PolygonBounds bounds{
+    std::numeric_limits<double>::max(),
+    std::numeric_limits<double>::max(),
+    std::numeric_limits<double>::lowest(),
+    std::numeric_limits<double>::lowest()};
+  for (const auto & point : points) {
+    bounds.min_x = std::min(bounds.min_x, point.x);
+    bounds.min_y = std::min(bounds.min_y, point.y);
+    bounds.max_x = std::max(bounds.max_x, point.x);
+    bounds.max_y = std::max(bounds.max_y, point.y);
+  }
+  return bounds;
+}
+
+std::vector<double> scanlineIntersections(const std::vector<MapPoint> & polygon, const double y)
+{
+  std::vector<double> intersections;
+  if (polygon.size() < 2U) {
+    return intersections;
+  }
+
+  for (std::size_t index = 0U; index + 1U < polygon.size(); ++index) {
+    const auto & a = polygon.at(index);
+    const auto & b = polygon.at(index + 1U);
+    const bool crosses = ((a.y <= y) && (b.y > y)) || ((b.y <= y) && (a.y > y));
+    if (!crosses) {
+      continue;
+    }
+    const double t = (y - a.y) / (b.y - a.y);
+    intersections.push_back(a.x + t * (b.x - a.x));
+  }
+
+  std::sort(intersections.begin(), intersections.end());
+  return intersections;
+}
+
+void appendPointIfSeparated(std::vector<MapPoint> & route, const MapPoint & point, const double min_distance = 0.05)
+{
+  if (route.empty()) {
+    route.push_back(point);
+    return;
+  }
+  if (std::hypot(route.back().x - point.x, route.back().y - point.y) >= min_distance) {
+    route.push_back(point);
+  }
+}
+
+std::vector<MapPoint> buildZigzagSweepRoute(const std::vector<MapPoint> & perimeter)
+{
+  std::vector<MapPoint> route;
+  const auto bounds = computeBounds(perimeter);
+  bool reverse = false;
+  for (double y = bounds.min_y + kSweepInsetMeters; y <= bounds.max_y - kSweepInsetMeters; y += kSweepTrackSpacingMeters) {
+    const auto intersections = scanlineIntersections(perimeter, y);
+    if (intersections.size() < 2U) {
+      continue;
+    }
+    std::vector<MapPoint> row_points;
+    for (std::size_t index = 0U; index + 1U < intersections.size(); index += 2U) {
+      const double start_x = intersections.at(index) + kSweepInsetMeters;
+      const double end_x = intersections.at(index + 1U) - kSweepInsetMeters;
+      if (end_x <= start_x) {
+        continue;
+      }
+      row_points.push_back({start_x, y});
+      row_points.push_back({end_x, y});
+    }
+    if (row_points.empty()) {
+      continue;
+    }
+    if (reverse) {
+      std::reverse(row_points.begin(), row_points.end());
+    }
+    for (const auto & point : row_points) {
+      appendPointIfSeparated(route, point);
+    }
+    reverse = !reverse;
+  }
+  return route;
+}
+
+std::vector<MapPoint> buildRandomSweepRoute(const std::vector<MapPoint> & perimeter)
+{
+  std::vector<MapPoint> candidates;
+  const auto bounds = computeBounds(perimeter);
+  for (double y = bounds.min_y + kSweepInsetMeters; y <= bounds.max_y - kSweepInsetMeters; y += kSweepTrackSpacingMeters) {
+    const auto intersections = scanlineIntersections(perimeter, y);
+    if (intersections.size() < 2U) {
+      continue;
+    }
+    for (std::size_t index = 0U; index + 1U < intersections.size(); index += 2U) {
+      const double start_x = intersections.at(index) + kSweepInsetMeters;
+      const double end_x = intersections.at(index + 1U) - kSweepInsetMeters;
+      if (end_x <= start_x) {
+        continue;
+      }
+      candidates.push_back({start_x, y});
+      if ((end_x - start_x) > (kSweepTrackSpacingMeters * 0.5)) {
+        candidates.push_back({0.5 * (start_x + end_x), y});
+      }
+      candidates.push_back({end_x, y});
+    }
+  }
+
+  if (candidates.size() < 2U) {
+    return buildZigzagSweepRoute(perimeter);
+  }
+
+  std::mt19937 generator(42U);
+  std::shuffle(candidates.begin(), candidates.end(), generator);
+
+  std::vector<MapPoint> route;
+  route.push_back(candidates.front());
+  std::vector<bool> used(candidates.size(), false);
+  used.front() = true;
+  for (std::size_t step = 1U; step < candidates.size(); ++step) {
+    std::size_t best_index = candidates.size();
+    double best_distance = std::numeric_limits<double>::max();
+    for (std::size_t index = 0U; index < candidates.size(); ++index) {
+      if (used.at(index)) {
+        continue;
+      }
+      const double distance = std::hypot(
+        route.back().x - candidates.at(index).x,
+        route.back().y - candidates.at(index).y);
+      if (distance < best_distance) {
+        best_distance = distance;
+        best_index = index;
+      }
+    }
+    if (best_index >= candidates.size()) {
+      break;
+    }
+    used.at(best_index) = true;
+    appendPointIfSeparated(route, candidates.at(best_index));
+  }
+  return route;
+}
+
+std::vector<MapPoint> buildSpiralSweepRoute(const std::vector<MapPoint> & perimeter)
+{
+  std::vector<MapPoint> route;
+  const auto bounds = computeBounds(perimeter);
+  double left = bounds.min_x + kSweepInsetMeters;
+  double right = bounds.max_x - kSweepInsetMeters;
+  double bottom = bounds.min_y + kSweepInsetMeters;
+  double top = bounds.max_y - kSweepInsetMeters;
+
+  while ((right - left) > 0.25 && (top - bottom) > 0.25) {
+    const std::vector<MapPoint> candidate_points = {
+      {left, bottom},
+      {right, bottom},
+      {right, top},
+      {left, top}
+    };
+    for (const auto & point : candidate_points) {
+      if (pointInPolygon(point, perimeter) || nearestPerimeterDistance(point, perimeter) <= kSweepInsetMeters) {
+        appendPointIfSeparated(route, point);
+      }
+    }
+    left += kSweepTrackSpacingMeters;
+    right -= kSweepTrackSpacingMeters;
+    bottom += kSweepTrackSpacingMeters;
+    top -= kSweepTrackSpacingMeters;
+  }
+
+  if (route.size() < 2U) {
+    return buildZigzagSweepRoute(perimeter);
+  }
+  return route;
+}
+
+std::vector<MapPoint> buildSweepRouteForPattern(
+  const std::vector<MapPoint> & perimeter,
+  const std::string & requested_pattern,
+  std::string & applied_pattern)
+{
+  const std::string normalized_pattern = toLower(requested_pattern);
+  if (normalized_pattern == kRandomSweepPattern) {
+    applied_pattern = kRandomSweepPattern;
+    return buildRandomSweepRoute(perimeter);
+  }
+  if (normalized_pattern == kSpiralSweepPattern) {
+    applied_pattern = kSpiralSweepPattern;
+    return buildSpiralSweepRoute(perimeter);
+  }
+  applied_pattern = kZigzagSweepPattern;
+  return buildZigzagSweepRoute(perimeter);
+}
+
+std::vector<std::vector<MapPoint>> buildObstacleNoGoZones(const std::vector<MapPoint> & obstacle_points)
+{
+  std::vector<std::vector<MapPoint>> zones;
+  constexpr double half_width_meters = 0.35;
+  for (const auto & point : obstacle_points) {
+    zones.push_back({
+      {point.x - half_width_meters, point.y - half_width_meters},
+      {point.x + half_width_meters, point.y - half_width_meters},
+      {point.x + half_width_meters, point.y + half_width_meters},
+      {point.x - half_width_meters, point.y + half_width_meters},
+    });
+  }
+  return zones;
+}
+
+double computePolylineLength(const std::vector<MapPoint> & points)
+{
+  double length = 0.0;
+  for (std::size_t index = 1U; index < points.size(); ++index) {
+    length += std::hypot(points.at(index).x - points.at(index - 1U).x, points.at(index).y - points.at(index - 1U).y);
+  }
+  return length;
+}
+
+double computeGeoPolylineLength(const std::vector<GeoPoint> & points)
+{
+  double length = 0.0;
+  for (std::size_t index = 1U; index < points.size(); ++index) {
+    const double dx = points.at(index).longitude - points.at(index - 1U).longitude;
+    const double dy = points.at(index).latitude - points.at(index - 1U).latitude;
+    length += std::hypot(dx, dy);
+  }
+  return length;
+}
+
+MapPoint interpolateAlongPolyline(const std::vector<MapPoint> & points, const double target_fraction)
+{
+  if (points.empty()) {
+    return {};
+  }
+  if (points.size() == 1U) {
+    return points.front();
+  }
+  const double total_length = computePolylineLength(points);
+  if (total_length <= std::numeric_limits<double>::epsilon()) {
+    return points.front();
+  }
+  const double target_distance = clampToUnitInterval(target_fraction) * total_length;
+  double traversed = 0.0;
+  for (std::size_t index = 1U; index < points.size(); ++index) {
+    const auto & previous = points.at(index - 1U);
+    const auto & current = points.at(index);
+    const double segment_length = std::hypot(current.x - previous.x, current.y - previous.y);
+    if (traversed + segment_length >= target_distance) {
+      const double local_fraction = (target_distance - traversed) / std::max(segment_length, std::numeric_limits<double>::epsilon());
+      return {
+        previous.x + local_fraction * (current.x - previous.x),
+        previous.y + local_fraction * (current.y - previous.y)};
+    }
+    traversed += segment_length;
+  }
+  return points.back();
+}
+
+GeoPoint interpolateAlongGeoPolyline(const std::vector<GeoPoint> & points, const double target_fraction)
+{
+  if (points.empty()) {
+    return {};
+  }
+  if (points.size() == 1U) {
+    return points.front();
+  }
+  const double total_length = computeGeoPolylineLength(points);
+  if (total_length <= std::numeric_limits<double>::epsilon()) {
+    return points.front();
+  }
+  const double target_distance = clampToUnitInterval(target_fraction) * total_length;
+  double traversed = 0.0;
+  for (std::size_t index = 1U; index < points.size(); ++index) {
+    const auto & previous = points.at(index - 1U);
+    const auto & current = points.at(index);
+    const double segment_length = std::hypot(
+      current.longitude - previous.longitude,
+      current.latitude - previous.latitude);
+    if (traversed + segment_length >= target_distance) {
+      const double local_fraction = (target_distance - traversed) / std::max(segment_length, std::numeric_limits<double>::epsilon());
+      return {
+        previous.latitude + local_fraction * (current.latitude - previous.latitude),
+        previous.longitude + local_fraction * (current.longitude - previous.longitude)};
+    }
+    traversed += segment_length;
+  }
+  return points.back();
+}
+
+bool solveLinear3x3(double matrix[3][4], double solution[3])
+{
+  for (int pivot = 0; pivot < 3; ++pivot) {
+    int best_row = pivot;
+    for (int row = pivot + 1; row < 3; ++row) {
+      if (std::abs(matrix[row][pivot]) > std::abs(matrix[best_row][pivot])) {
+        best_row = row;
+      }
+    }
+    if (std::abs(matrix[best_row][pivot]) <= 1.0e-12) {
+      return false;
+    }
+    if (best_row != pivot) {
+      for (int column = pivot; column < 4; ++column) {
+        std::swap(matrix[pivot][column], matrix[best_row][column]);
+      }
+    }
+    const double pivot_value = matrix[pivot][pivot];
+    for (int column = pivot; column < 4; ++column) {
+      matrix[pivot][column] /= pivot_value;
+    }
+    for (int row = 0; row < 3; ++row) {
+      if (row == pivot) {
+        continue;
+      }
+      const double factor = matrix[row][pivot];
+      for (int column = pivot; column < 4; ++column) {
+        matrix[row][column] -= factor * matrix[pivot][column];
+      }
+    }
+  }
+  for (int row = 0; row < 3; ++row) {
+    solution[row] = matrix[row][3];
+  }
+  return true;
+}
+
+bool fitAffineComponent(
+  const std::vector<MapPoint> & local_points,
+  const std::vector<double> & targets,
+  double coefficients[3])
+{
+  if (local_points.size() != targets.size() || local_points.size() < 3U) {
+    return false;
+  }
+  double ata[3][3] = {};
+  double atb[3] = {};
+  for (std::size_t index = 0U; index < local_points.size(); ++index) {
+    const double row[3] = {local_points.at(index).x, local_points.at(index).y, 1.0};
+    for (int i = 0; i < 3; ++i) {
+      atb[i] += row[i] * targets.at(index);
+      for (int j = 0; j < 3; ++j) {
+        ata[i][j] += row[i] * row[j];
+      }
+    }
+  }
+  double augmented[3][4] = {
+    {ata[0][0], ata[0][1], ata[0][2], atb[0]},
+    {ata[1][0], ata[1][1], ata[1][2], atb[1]},
+    {ata[2][0], ata[2][1], ata[2][2], atb[2]},
+  };
+  return solveLinear3x3(augmented, coefficients);
+}
+
+GeoTransform buildGeoTransform(
+  const std::vector<MapPoint> & local_trace,
+  const std::vector<GeoPoint> & geo_trace)
+{
+  GeoTransform transform;
+  if (local_trace.size() < 3U || geo_trace.size() < 3U) {
+    return transform;
+  }
+
+  const std::size_t sample_count = std::max<std::size_t>(3U, std::min<std::size_t>(12U, std::min(local_trace.size(), geo_trace.size())));
+  std::vector<MapPoint> sampled_local_points;
+  std::vector<double> sampled_longitudes;
+  std::vector<double> sampled_latitudes;
+  sampled_local_points.reserve(sample_count);
+  sampled_longitudes.reserve(sample_count);
+  sampled_latitudes.reserve(sample_count);
+
+  for (std::size_t index = 0U; index < sample_count; ++index) {
+    const double fraction = sample_count == 1U ? 0.0 : static_cast<double>(index) / static_cast<double>(sample_count - 1U);
+    const MapPoint local_point = interpolateAlongPolyline(local_trace, fraction);
+    const GeoPoint geo_point = interpolateAlongGeoPolyline(geo_trace, fraction);
+    sampled_local_points.push_back(local_point);
+    sampled_longitudes.push_back(geo_point.longitude);
+    sampled_latitudes.push_back(geo_point.latitude);
+  }
+
+  if (!fitAffineComponent(sampled_local_points, sampled_longitudes, transform.longitude_coefficients) ||
+    !fitAffineComponent(sampled_local_points, sampled_latitudes, transform.latitude_coefficients))
+  {
+    return transform;
+  }
+
+  transform.valid = true;
+  return transform;
+}
+
+GeoPoint applyGeoTransform(const GeoTransform & transform, const MapPoint & local_point)
+{
+  return {
+    transform.latitude_coefficients[0] * local_point.x +
+      transform.latitude_coefficients[1] * local_point.y +
+      transform.latitude_coefficients[2],
+    transform.longitude_coefficients[0] * local_point.x +
+      transform.longitude_coefficients[1] * local_point.y +
+      transform.longitude_coefficients[2]};
+}
+
+std::vector<GeoPoint> convertToGeoPoints(const std::vector<MapPoint> & points, const GeoTransform & transform)
+{
+  std::vector<GeoPoint> converted;
+  converted.reserve(points.size());
+  for (const auto & point : points) {
+    converted.push_back(applyGeoTransform(transform, point));
+  }
+  return converted;
+}
+
+std::vector<std::vector<GeoPoint>> convertZonesToGeo(
+  const std::vector<std::vector<MapPoint>> & zones,
+  const GeoTransform & transform)
+{
+  std::vector<std::vector<GeoPoint>> converted;
+  converted.reserve(zones.size());
+  for (const auto & zone : zones) {
+    converted.push_back(convertToGeoPoints(zone, transform));
+  }
+  return converted;
+}
+
+nlohmann::json buildNavSatGeoJson(
+  const std::vector<geometry_msgs::msg::Point> & points,
+  const std::string & name)
+{
+  nlohmann::json coordinates = nlohmann::json::array();
+  for (const auto & point : points) {
+    coordinates.push_back({point.x, point.y});
+  }
+
+  return {
+    {"type", "FeatureCollection"},
+    {"features", nlohmann::json::array({
+      {
+        {"type", "Feature"},
+        {"properties", {
+           {"name", name},
+           {"coordinate_frame", "wgs84"}}},
+        {"geometry", {
+           {"type", "LineString"},
+           {"coordinates", coordinates}}}
+      }
+    })}
+  };
+}
+
+nlohmann::json buildGeoReferencedVda5050MissionDocument(
+  const std::string & order_id,
+  const std::string & timestamp,
+  const std::vector<GeoPoint> & perimeter,
+  const std::vector<GeoPoint> & coverage_route,
+  const std::vector<std::vector<GeoPoint>> & no_go_zones,
+  const std::string & applied_pattern,
+  const std::string & source_recorded_map_id,
+  const std::string & source_recorded_map_run_started_at)
+{
+  nlohmann::json nodes = nlohmann::json::array();
+  nlohmann::json edges = nlohmann::json::array();
+  nlohmann::json working_zone_edge_ids = nlohmann::json::array();
+  nlohmann::json coverage_edge_ids = nlohmann::json::array();
+  nlohmann::json no_go_zone_documents = nlohmann::json::array();
+
+  auto append_node = [&nodes](const std::string & node_id, const GeoPoint & point, const double theta) {
+    nodes.push_back({
+      {"nodeId", node_id},
+      {"sequenceId", static_cast<int>(nodes.size()) * 2},
+      {"released", true},
+      {"nodePosition", {
+         {"x", point.longitude},
+         {"y", point.latitude},
+         {"theta", theta},
+         {"mapId", "mission_wgs84"}}}
+    });
+  };
+  auto append_edge = [&edges](
+    const std::string & edge_id,
+    const std::string & start_node_id,
+    const std::string & end_node_id,
+    const std::string & edge_type) {
+    edges.push_back({
+      {"edgeId", edge_id},
+      {"sequenceId", static_cast<int>(edges.size()) * 2 + 1},
+      {"released", true},
+      {"startNodeId", start_node_id},
+      {"endNodeId", end_node_id},
+      {"edgeType", edge_type}});
+  };
+
+  for (std::size_t index = 0U; index < perimeter.size(); ++index) {
+    const std::string node_id = "wz_node_" + std::to_string(index);
+    const GeoPoint & point = perimeter.at(index);
+    const GeoPoint & next = perimeter.at((index + 1U) % perimeter.size());
+    append_node(node_id, point, std::atan2(next.latitude - point.latitude, next.longitude - point.longitude));
+  }
+  for (std::size_t index = 0U; index < perimeter.size(); ++index) {
+    const std::string edge_id = "wz_edge_" + std::to_string(index);
+    append_edge(
+      edge_id,
+      "wz_node_" + std::to_string(index),
+      "wz_node_" + std::to_string((index + 1U) % perimeter.size()),
+      "boundary");
+    working_zone_edge_ids.push_back(edge_id);
+  }
+
+  for (std::size_t index = 0U; index < coverage_route.size(); ++index) {
+    const std::string node_id = "cp_node_" + std::to_string(index);
+    const GeoPoint & point = coverage_route.at(index);
+    double theta = 0.0;
+    if (index + 1U < coverage_route.size()) {
+      const auto & next = coverage_route.at(index + 1U);
+      theta = std::atan2(next.latitude - point.latitude, next.longitude - point.longitude);
+    } else if (index > 0U) {
+      const auto & previous = coverage_route.at(index - 1U);
+      theta = std::atan2(point.latitude - previous.latitude, point.longitude - previous.longitude);
+    }
+    append_node(node_id, point, theta);
+  }
+  for (std::size_t index = 0U; index + 1U < coverage_route.size(); ++index) {
+    const std::string edge_id = "cp_edge_" + std::to_string(index);
+    append_edge(
+      edge_id,
+      "cp_node_" + std::to_string(index),
+      "cp_node_" + std::to_string(index + 1U),
+      "coverage_path");
+    coverage_edge_ids.push_back(edge_id);
+  }
+
+  for (std::size_t zone_index = 0U; zone_index < no_go_zones.size(); ++zone_index) {
+    const auto & zone = no_go_zones.at(zone_index);
+    if (zone.size() < 4U) {
+      continue;
+    }
+    nlohmann::json zone_edge_ids = nlohmann::json::array();
+    for (std::size_t point_index = 0U; point_index < zone.size(); ++point_index) {
+      const std::string node_id =
+        "ngz_" + std::to_string(zone_index) + "_node_" + std::to_string(point_index);
+      const GeoPoint & point = zone.at(point_index);
+      const GeoPoint & next = zone.at((point_index + 1U) % zone.size());
+      append_node(node_id, point, std::atan2(next.latitude - point.latitude, next.longitude - point.longitude));
+    }
+    for (std::size_t point_index = 0U; point_index < zone.size(); ++point_index) {
+      const std::string edge_id =
+        "ngz_" + std::to_string(zone_index) + "_edge_" + std::to_string(point_index);
+      append_edge(
+        edge_id,
+        "ngz_" + std::to_string(zone_index) + "_node_" + std::to_string(point_index),
+        "ngz_" + std::to_string(zone_index) + "_node_" + std::to_string((point_index + 1U) % zone.size()),
+        "no_go_zone");
+      zone_edge_ids.push_back(edge_id);
+    }
+    no_go_zone_documents.push_back({
+      {"zoneId", "recorded_obstacle_" + std::to_string(zone_index)},
+      {"zoneType", "no_go"},
+      {"edgeIds", zone_edge_ids},
+    });
+  }
+
+  return {
+    {"orderId", order_id},
+    {"timestamp", timestamp},
+    {"version", "2.0.0"},
+    {"manufacturer", "amr_sweeper"},
+    {"serialNumber", "portable_recorded_mission"},
+    {"orderUpdateId", 0},
+    {"description", "Autonomous mission generated from RecordMap perimeter and embedded obstacle zones."},
+    {"missionReference", {
+       {"missionId", order_id + "_" + sanitizeUidToken(timestamp)},
+       {"mapId", "mission_wgs84"},
+       {"coordinateReferenceSystem", "EPSG:4326"},
+       {"xIsLongitude", true},
+       {"yIsLatitude", true}}},
+    {"missionMetadata", {
+       {"sourceRecordedMapId", source_recorded_map_id},
+       {"sourceRecordedMapRunStartedAt", source_recorded_map_run_started_at},
+       {"selectedSweepPattern", applied_pattern},
+       {"embeddedNoGoZoneCount", no_go_zone_documents.size()},
+       {"portableMission", true}}},
+    {"nodes", nodes},
+    {"edges", edges},
+    {"missionGeometries", {
+       {"workingZones", nlohmann::json::array({
+         {
+           {"zoneId", "recorded_work_area"},
+           {"zoneType", "working_zone"},
+           {"edgeIds", working_zone_edge_ids}
+         }
+       })},
+       {"noGoZones", no_go_zone_documents},
+       {"coveragePathEdgeIds", coverage_edge_ids}}}
+  };
+}
+
+RasterizedCostmap buildRecordMapCostmap(
+  const std::vector<MapPoint> & perimeter,
+  const std::vector<MapPoint> & obstacles)
+{
+  if (perimeter.size() < 4U) {
+    throw std::runtime_error("RecordMap perimeter is too small to build a working-area costmap");
+  }
+
+  double min_x = std::numeric_limits<double>::max();
+  double min_y = std::numeric_limits<double>::max();
+  double max_x = std::numeric_limits<double>::lowest();
+  double max_y = std::numeric_limits<double>::lowest();
+  for (const auto & point : perimeter) {
+    min_x = std::min(min_x, point.x);
+    min_y = std::min(min_y, point.y);
+    max_x = std::max(max_x, point.x);
+    max_y = std::max(max_y, point.y);
+  }
+
+  min_x -= kRecordMapCostmapPaddingMeters;
+  min_y -= kRecordMapCostmapPaddingMeters;
+  max_x += kRecordMapCostmapPaddingMeters;
+  max_y += kRecordMapCostmapPaddingMeters;
+
+  const unsigned int width_cells = std::max(
+    1U,
+    static_cast<unsigned int>(std::ceil((max_x - min_x) / kRecordMapCostmapResolutionMeters)));
+  const unsigned int height_cells = std::max(
+    1U,
+    static_cast<unsigned int>(std::ceil((max_y - min_y) / kRecordMapCostmapResolutionMeters)));
+
+  RasterizedCostmap map;
+  map.width_cells = width_cells;
+  map.height_cells = height_cells;
+  map.resolution = kRecordMapCostmapResolutionMeters;
+  map.origin_x = min_x;
+  map.origin_y = min_y;
+  map.costs.assign(static_cast<std::size_t>(width_cells) * height_cells, kRecordMapOutsideCost);
+
+  for (unsigned int row = 0U; row < height_cells; ++row) {
+    for (unsigned int col = 0U; col < width_cells; ++col) {
+      const MapPoint point{
+        min_x + (static_cast<double>(col) + 0.5) * map.resolution,
+        min_y + (static_cast<double>(row) + 0.5) * map.resolution};
+
+      const bool inside = pointInPolygon(point, perimeter);
+      const double edge_distance = nearestPerimeterDistance(point, perimeter);
+      unsigned char cost = kRecordMapOutsideCost;
+      if (inside) {
+        cost = edge_distance <= kRecordMapEdgeBandMeters ? kRecordMapEdgeBandCost : kRecordMapInsideCost;
+      } else if (edge_distance <= kRecordMapEdgeBandMeters) {
+        cost = kRecordMapEdgeBandCost;
+      }
+
+      map.costs.at(static_cast<std::size_t>(row) * width_cells + col) = cost;
+    }
+  }
+
+  const int obstacle_radius_cells = std::max(
+    1,
+    static_cast<int>(std::ceil(kRecordMapObstacleRadiusMeters / map.resolution)));
+  for (const auto & obstacle : obstacles) {
+    const int center_x = static_cast<int>(std::floor((obstacle.x - min_x) / map.resolution));
+    const int center_y = static_cast<int>(std::floor((obstacle.y - min_y) / map.resolution));
+    for (int dy = -obstacle_radius_cells; dy <= obstacle_radius_cells; ++dy) {
+      for (int dx = -obstacle_radius_cells; dx <= obstacle_radius_cells; ++dx) {
+        const int grid_x = center_x + dx;
+        const int grid_y = center_y + dy;
+        if (grid_x < 0 || grid_y < 0 ||
+          grid_x >= static_cast<int>(width_cells) ||
+          grid_y >= static_cast<int>(height_cells))
+        {
+          continue;
+        }
+
+        const double offset_x = static_cast<double>(dx) * map.resolution;
+        const double offset_y = static_cast<double>(dy) * map.resolution;
+        if (std::hypot(offset_x, offset_y) > kRecordMapObstacleRadiusMeters) {
+          continue;
+        }
+
+        const std::size_t index =
+          static_cast<std::size_t>(grid_y) * width_cells + static_cast<std::size_t>(grid_x);
+        map.costs.at(index) = kRecordMapObstacleCost;
+      }
+    }
+  }
+
+  return map;
 }
 
 std::chrono::system_clock::time_point parseUtcTimestamp(const std::string & value)
@@ -207,6 +1186,9 @@ MissionExecutorNode::MissionExecutorNode(const rclcpp::NodeOptions & options)
   manual_mapping_odometry_topic_ = declare_parameter<std::string>(
     "manual_mapping_odometry_topic",
     "odometry/fused");
+  manual_mapping_navsat_topic_ = declare_parameter<std::string>(
+    "manual_mapping_navsat_topic",
+    "gnss/navsat");
   mission_parser_node_name_ = declare_parameter<std::string>(
     "mission_parser_node_name",
     "vda5050_parser_node");
@@ -270,6 +1252,13 @@ MissionExecutorNode::MissionExecutorNode(const rclcpp::NodeOptions & options)
       this,
       std::placeholders::_1,
       std::placeholders::_2));
+  create_recorded_mission_service_ = create_service<srv::CreateRecordedMission>(
+    "create_recorded_mission",
+    std::bind(
+      &MissionExecutorNode::handleCreateRecordedMission,
+      this,
+      std::placeholders::_1,
+      std::placeholders::_2));
   prepare_manual_mission_service_ = create_service<srv::PrepareManualMission>(
     "prepare_manual_mission",
     std::bind(
@@ -303,13 +1292,17 @@ MissionExecutorNode::MissionExecutorNode(const rclcpp::NodeOptions & options)
     manual_mapping_odometry_topic_,
     rclcpp::SystemDefaultsQoS(),
     std::bind(&MissionExecutorNode::handleManualMissionOdometry, this, std::placeholders::_1));
+  manual_mapping_navsat_subscription_ = create_subscription<sensor_msgs::msg::NavSatFix>(
+    manual_mapping_navsat_topic_,
+    rclcpp::SystemDefaultsQoS(),
+    std::bind(&MissionExecutorNode::handleManualMissionNavSat, this, std::placeholders::_1));
   manual_mission_watchdog_timer_ = create_wall_timer(
     std::chrono::seconds(5),
     std::bind(&MissionExecutorNode::checkManualMissionInactivity, this));
 
   RCLCPP_INFO(
     get_logger(),
-    "Mission executor watching %s and manual templates %s with profile mapping scheduled=%u manual_mapping=%u routed=%u teleop=%u teleop odometry %s and manual mapping odometry %s",
+    "Mission executor watching %s and manual templates %s with profile mapping scheduled=%u manual_mapping=%u routed=%u teleop=%u teleop odometry %s manual mapping odometry %s and navsat %s",
     missions_directory_.c_str(),
     resolveManualMissionsDirectory().string().c_str(),
     scheduled_running_profile_id_,
@@ -317,7 +1310,8 @@ MissionExecutorNode::MissionExecutorNode(const rclcpp::NodeOptions & options)
     manual_routed_profile_id_,
     manual_teleop_profile_id_,
     teleop_odometry_topic_.c_str(),
-    manual_mapping_odometry_topic_.c_str());
+    manual_mapping_odometry_topic_.c_str(),
+    manual_mapping_navsat_topic_.c_str());
 }
 
 void MissionExecutorNode::handleListExecutableMissions(
@@ -373,18 +1367,16 @@ void MissionExecutorNode::handleUploadVda5050Mission(
 
     const std::string mission_id = deriveMissionId(mission_document, request->mission_id);
     const auto missions_root = resolveMissionsFromDbDirectory();
-    const auto mission_folder = missions_root / mission_id;
-    const auto mission_file = mission_folder / (mission_id + mission_file_extension_);
+    const auto mission_file = missions_root / (mission_id + mission_file_extension_);
 
-    if ((std::filesystem::exists(mission_folder) || std::filesystem::exists(mission_file)) &&
-      !request->overwrite_existing)
+    if (std::filesystem::exists(mission_file) && !request->overwrite_existing)
     {
       response->success = false;
       response->message = "Mission already exists for mission_id=" + mission_id;
       return;
     }
 
-    std::filesystem::create_directories(mission_folder);
+    std::filesystem::create_directories(missions_root);
 
     if (mission_document.contains("mission_type") &&
       mission_document.at("mission_type").is_string() &&
@@ -402,9 +1394,11 @@ void MissionExecutorNode::handleUploadVda5050Mission(
     mission_stream << std::setw(2) << mission_document << '\n';
 
     // Clear stale generated artifacts so the parser rebuilds from the new VDA5050 payload on execution.
+    const auto mission_folder = resolveMissionsLogDirectory() / mission_id;
     std::filesystem::remove(mission_folder / (mission_id + "_costmap.yaml"));
     std::filesystem::remove(mission_folder / (mission_id + "_costmap.pgm"));
     std::filesystem::remove(mission_folder / (mission_id + "_path.geojson"));
+    std::filesystem::remove(mission_folder / (mission_id + mission_file_extension_));
 
     const auto mission = classifyMissionFile(mission_file);
     if (!mission) {
@@ -418,6 +1412,137 @@ void MissionExecutorNode::handleUploadVda5050Mission(
     response->mission_folder = mission_folder.string();
     response->mission_type = mission->mission_type;
     response->running_profile_id = mission->running_profile_id;
+  } catch (const std::exception & exception) {
+    response->success = false;
+    response->message = exception.what();
+  }
+}
+
+void MissionExecutorNode::handleCreateRecordedMission(
+  const std::shared_ptr<srv::CreateRecordedMission::Request> request,
+  std::shared_ptr<srv::CreateRecordedMission::Response> response)
+{
+  try {
+    const std::filesystem::path latest_directory =
+      resolveMissionsLogDirectory() / kLatestRecordedMapDirectoryName;
+    const std::filesystem::path latest_metadata_file = latest_directory / kLatestRecordedMapMetadataFile;
+    if (!std::filesystem::exists(latest_metadata_file)) {
+      throw std::runtime_error("No latest recorded map is available yet");
+    }
+
+    const nlohmann::json latest_metadata = loadJsonDocument(latest_metadata_file);
+    const std::filesystem::path perimeter_route_file(
+      latest_metadata.value("recorded_work_area_route_file", std::string{}));
+    const std::filesystem::path costmap_yaml_file(
+      latest_metadata.value("recorded_work_area_costmap_yaml", std::string{}));
+    const std::filesystem::path costmap_image_file(
+      latest_metadata.value("recorded_work_area_costmap_image", std::string{}));
+    if (perimeter_route_file.empty() || !std::filesystem::exists(perimeter_route_file) ||
+      costmap_yaml_file.empty() || !std::filesystem::exists(costmap_yaml_file) ||
+      costmap_image_file.empty() || !std::filesystem::exists(costmap_image_file))
+    {
+      throw std::runtime_error("Latest recorded map artifacts are incomplete");
+    }
+
+    const std::vector<MapPoint> perimeter =
+      closePolygon(extractLineStringCoordinates(loadJsonDocument(perimeter_route_file)));
+    if (perimeter.size() < 4U) {
+      throw std::runtime_error("Latest recorded map perimeter is too small to create a mission");
+    }
+
+    std::string applied_pattern;
+    std::vector<MapPoint> route = buildSweepRouteForPattern(perimeter, request->sweep_pattern, applied_pattern);
+    if (route.size() < 2U) {
+      route = buildZigzagSweepRoute(perimeter);
+      applied_pattern = kZigzagSweepPattern;
+    }
+    std::vector<MapPoint> obstacle_points;
+    if (latest_metadata.contains("recorded_obstacle_points") &&
+      latest_metadata.at("recorded_obstacle_points").is_array())
+    {
+      for (const auto & point : latest_metadata.at("recorded_obstacle_points")) {
+        if (!point.is_object()) {
+          continue;
+        }
+        obstacle_points.push_back({
+          point.value("x", 0.0),
+          point.value("y", 0.0)});
+      }
+    }
+    const auto no_go_zones = buildObstacleNoGoZones(obstacle_points);
+    GeoTransform geo_transform;
+    if (latest_metadata.contains("geo_transform") && latest_metadata.at("geo_transform").is_object()) {
+      const auto & transform_document = latest_metadata.at("geo_transform");
+      geo_transform.valid = transform_document.value("valid", false);
+      if (transform_document.contains("longitude_coefficients") &&
+        transform_document.at("longitude_coefficients").is_array() &&
+        transform_document.at("longitude_coefficients").size() == 3U &&
+        transform_document.contains("latitude_coefficients") &&
+        transform_document.at("latitude_coefficients").is_array() &&
+        transform_document.at("latitude_coefficients").size() == 3U)
+      {
+        for (std::size_t index = 0U; index < 3U; ++index) {
+          geo_transform.longitude_coefficients[index] =
+            transform_document.at("longitude_coefficients").at(index).get<double>();
+          geo_transform.latitude_coefficients[index] =
+            transform_document.at("latitude_coefficients").at(index).get<double>();
+        }
+      } else {
+        geo_transform.valid = false;
+      }
+    }
+    if (!geo_transform.valid) {
+      throw std::runtime_error("Latest recorded map does not contain a valid WGS84 transform");
+    }
+    const std::vector<GeoPoint> geo_perimeter =
+      uniqueGeoPolygonVertices(convertToGeoPoints(uniquePolygonVertices(perimeter), geo_transform));
+    const std::vector<GeoPoint> geo_route = convertToGeoPoints(route, geo_transform);
+    const auto geo_no_go_zones = convertZonesToGeo(no_go_zones, geo_transform);
+
+    const auto now = std::chrono::system_clock::now();
+    const std::string mission_id = sanitizeMissionId(defaultIfEmpty(
+      request->mission_name,
+      "recorded_map_" + formatUtcTimestamp(now)));
+    if (mission_id.empty()) {
+      throw std::runtime_error("mission_name is required");
+    }
+
+    const std::filesystem::path mission_file =
+      resolveMissionsFromDbDirectory() / (mission_id + mission_file_extension_);
+    if (std::filesystem::exists(mission_file) && !request->overwrite_existing) {
+      throw std::runtime_error("Mission already exists for mission_name=" + mission_id);
+    }
+
+    std::filesystem::create_directories(resolveMissionsFromDbDirectory());
+    const std::string timestamp = formatUtcTimestamp(now);
+    nlohmann::json mission_document =
+      buildGeoReferencedVda5050MissionDocument(
+        mission_id,
+        timestamp,
+        geo_perimeter,
+        geo_route,
+        geo_no_go_zones,
+        applied_pattern,
+        latest_metadata.value("mission_id", std::string("RecordMap")),
+        latest_metadata.value("run_started_at", std::string{}));
+    mission_document["mission_type"] = kScheduledMissionType;
+    mission_document["name"] = mission_id;
+
+    {
+      std::ofstream mission_stream(mission_file, std::ios::trunc);
+      if (!mission_stream.is_open()) {
+        throw std::runtime_error("Failed to write recorded mission file: " + mission_file.string());
+      }
+      mission_stream << std::setw(2) << mission_document << '\n';
+    }
+
+    response->success = true;
+    response->message = "Recorded mission created";
+    response->mission_id = mission_id;
+    response->mission_file = mission_file.string();
+    response->mission_folder = (resolveMissionsLogDirectory() / mission_id).string();
+    response->applied_sweep_pattern = applied_pattern;
+    response->latest_recorded_map_file = latest_metadata_file.string();
   } catch (const std::exception & exception) {
     response->success = false;
     response->message = exception.what();
@@ -634,6 +1759,55 @@ void MissionExecutorNode::handleManualMissionOdometry(const nav_msgs::msg::Odome
   }
 }
 
+void MissionExecutorNode::handleManualMissionNavSat(const sensor_msgs::msg::NavSatFix::SharedPtr message)
+{
+  if (!message) {
+    return;
+  }
+
+  std::string actual_navsat_path_file;
+  {
+    std::lock_guard<std::mutex> lock(active_mission_mutex_);
+    if (!active_mission_running_ || !active_mission_is_manual_mapping_ ||
+      active_mission_id_ != "RecordMap" || active_actual_navsat_path_file_.empty())
+    {
+      return;
+    }
+    actual_navsat_path_file = active_actual_navsat_path_file_;
+  }
+
+  geometry_msgs::msg::Point point;
+  point.x = message->longitude;
+  point.y = message->latitude;
+  point.z = message->altitude;
+
+  {
+    std::lock_guard<std::mutex> lock(active_mission_mutex_);
+    if (!active_mission_running_ || !active_mission_is_manual_mapping_) {
+      return;
+    }
+    if (!manual_mapping_navsat_points_.empty()) {
+      const auto & previous = manual_mapping_navsat_points_.back();
+      const double distance = std::hypot(point.x - previous.x, point.y - previous.y);
+      if (distance < kNavSatSampleDistanceDegrees) {
+        return;
+      }
+    }
+    manual_mapping_navsat_points_.push_back(point);
+  }
+
+  nlohmann::json navsat_path_document;
+  {
+    std::lock_guard<std::mutex> lock(active_mission_mutex_);
+    navsat_path_document = buildNavSatGeoJson(manual_mapping_navsat_points_, "actual_path_navsat");
+  }
+
+  std::ofstream output_stream(actual_navsat_path_file, std::ios::trunc);
+  if (output_stream.is_open()) {
+    output_stream << std::setw(2) << navsat_path_document << '\n';
+  }
+}
+
 void MissionExecutorNode::checkManualMissionInactivity()
 {
   srv::EndMission::Request request;
@@ -818,6 +1992,15 @@ std::filesystem::path MissionExecutorNode::missionFolderPath(
   return mission_path.parent_path();
 }
 
+std::filesystem::path MissionExecutorNode::artifactsDirectoryForMission(
+  const ManualMissionInfo & mission) const
+{
+  if (toLower(mission.mission_type) == kScheduledMissionType) {
+    return resolveMissionsLogDirectory() / mission.mission_id;
+  }
+  return missionFolderPath(std::filesystem::path(mission.mission_path));
+}
+
 std::string MissionExecutorNode::missionStemForPath(const std::filesystem::path & mission_path) const
 {
   if (mission_path.has_parent_path() && mission_path.parent_path() != resolveMissionsFromDbDirectory()) {
@@ -890,7 +2073,7 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
 {
   namespace fs = std::filesystem;
   const std::filesystem::path mission_file(mission.mission_path);
-  const std::filesystem::path source_mission_folder = missionFolderPath(mission_file);
+  const std::filesystem::path source_mission_folder = artifactsDirectoryForMission(mission);
   const std::filesystem::path mission_costmap_yaml =
     source_mission_folder / (missionCostmapBasename(mission_file) + ".yaml");
   const std::filesystem::path mission_costmap_image =
@@ -937,6 +2120,7 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
   const fs::path run_costmap_image = mission_run_directory / history_costmap_image.filename();
   const fs::path run_route = mission_run_directory / history_route.filename();
   const fs::path actual_path_file = mission_run_directory / "actual_path.geojson";
+  const fs::path actual_path_navsat_file = mission_run_directory / "actual_path_navsat.geojson";
   const fs::path gaussian_output_directory = mission_run_directory / "gaussian";
   const fs::path captured_images_directory = mission_run_directory / "captured_images";
   const fs::path collected_artifacts_directory = mission_run_directory / "artifacts";
@@ -966,6 +2150,14 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
     }
     actual_path_stream << std::setw(2) << actual_path_document << '\n';
   }
+  {
+    nlohmann::json actual_path_navsat_document = buildNavSatGeoJson({}, "actual_path_navsat");
+    std::ofstream actual_path_navsat_stream(actual_path_navsat_file);
+    if (!actual_path_navsat_stream.is_open()) {
+      throw std::runtime_error("Failed to create actual navsat path artifact for mission_id=" + mission.mission_id);
+    }
+    actual_path_navsat_stream << std::setw(2) << actual_path_navsat_document << '\n';
+  }
 
   const nlohmann::json context{
     {"mission_id", mission.mission_id},
@@ -981,6 +2173,7 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
     {"run_started_at", run_timestamp},
     {"source_mission_file", mission_file.string()},
     {"actual_path_file", actual_path_file.string()},
+    {"actual_path_navsat_file", actual_path_navsat_file.string()},
     {"gaussian_output_directory", gaussian_output_directory.string()},
     {"captured_images_directory", captured_images_directory.string()},
     {"collected_artifacts_directory", collected_artifacts_directory.string()},
@@ -1115,6 +2308,8 @@ bool MissionExecutorNode::finalizeMissionExecution(
     return false;
   }
 
+  updateRecordMapArtifacts(*context_document);
+  writeLatestRecordedMapSnapshot(*context_document);
   recordMissionExecutionEnd(*context_document, request);
   clearActiveMissionState();
 
@@ -1123,6 +2318,208 @@ bool MissionExecutorNode::finalizeMissionExecution(
   }
 
   return true;
+}
+
+void MissionExecutorNode::updateRecordMapArtifacts(nlohmann::json & context_document) const
+{
+  const std::string execution_mode = toLower(context_document.value("execution_mode", std::string{}));
+  const std::string mission_type = toLower(context_document.value("mission_type", std::string{}));
+  if (execution_mode != kManualMappingExecutionMode && mission_type != kBuiltinManualMappingMissionType) {
+    return;
+  }
+
+  const std::filesystem::path actual_path_file(
+    context_document.value("actual_path_file", std::string{}));
+  const std::filesystem::path mission_route_file(
+    context_document.value("mission_route_file", std::string{}));
+  const std::filesystem::path mission_costmap_yaml(
+    context_document.value("mission_costmap_yaml", std::string{}));
+  const std::filesystem::path mission_folder(
+    context_document.value("mission_folder", std::string{}));
+  const std::filesystem::path gaussian_output_directory(
+    context_document.value("gaussian_output_directory", std::string{}));
+  const std::string mission_id = context_document.value("mission_id", std::string{});
+
+  if (actual_path_file.empty() || !std::filesystem::exists(actual_path_file) ||
+    mission_route_file.empty() || mission_costmap_yaml.empty() || mission_folder.empty() || mission_id.empty())
+  {
+    return;
+  }
+
+  const auto perimeter_points = closePolygon(extractLineStringCoordinates(loadJsonDocument(actual_path_file)));
+  if (perimeter_points.size() < 4U) {
+    return;
+  }
+
+  std::vector<MapPoint> obstacle_points;
+  if (!gaussian_output_directory.empty()) {
+    const auto gaussian_json_path = gaussian_output_directory / (mission_id + "_gaussian_map.json");
+    obstacle_points = loadGaussianObstaclePoints(gaussian_json_path);
+  }
+
+  const RasterizedCostmap map = buildRecordMapCostmap(perimeter_points, obstacle_points);
+  const std::filesystem::path mission_costmap_image = mission_costmap_yaml.parent_path() /
+    (mission_costmap_yaml.stem().string() + ".pgm");
+  saveCostmapArtifacts(map, mission_costmap_image, mission_costmap_yaml);
+
+  {
+    std::ofstream route_stream(mission_route_file, std::ios::trunc);
+    if (!route_stream.is_open()) {
+      throw std::runtime_error("Failed to write RecordMap perimeter route artifact");
+    }
+    route_stream << std::setw(2) << buildPerimeterGeoJson(perimeter_points) << '\n';
+  }
+
+  const std::filesystem::path history_route_file = mission_folder / mission_route_file.filename();
+  if (history_route_file != mission_route_file) {
+    std::ofstream route_stream(history_route_file, std::ios::trunc);
+    if (!route_stream.is_open()) {
+      throw std::runtime_error("Failed to write RecordMap history perimeter route artifact");
+    }
+    route_stream << std::setw(2) << buildPerimeterGeoJson(perimeter_points) << '\n';
+  }
+
+  const std::filesystem::path history_costmap_yaml = mission_folder / mission_costmap_yaml.filename();
+  const std::filesystem::path history_costmap_image = history_costmap_yaml.parent_path() /
+    (history_costmap_yaml.stem().string() + ".pgm");
+  if (history_costmap_yaml != mission_costmap_yaml) {
+    saveCostmapArtifacts(map, history_costmap_image, history_costmap_yaml);
+  }
+
+  context_document["recorded_work_area_route_file"] = mission_route_file.string();
+  context_document["recorded_work_area_costmap_yaml"] = mission_costmap_yaml.string();
+  context_document["recorded_work_area_costmap_image"] = mission_costmap_image.string();
+  context_document["recorded_obstacle_count"] = obstacle_points.size();
+  nlohmann::json obstacle_points_document = nlohmann::json::array();
+  for (const auto & point : obstacle_points) {
+    obstacle_points_document.push_back({{"x", point.x}, {"y", point.y}});
+  }
+  context_document["recorded_obstacle_points"] = obstacle_points_document;
+}
+
+void MissionExecutorNode::writeLatestRecordedMapSnapshot(const nlohmann::json & context_document) const
+{
+  const std::string execution_mode = toLower(context_document.value("execution_mode", std::string{}));
+  const std::string mission_type = toLower(context_document.value("mission_type", std::string{}));
+  const std::string mission_id = context_document.value("mission_id", std::string{});
+  if (execution_mode != kManualMappingExecutionMode ||
+    mission_type != kBuiltinManualMappingMissionType ||
+    mission_id != "RecordMap")
+  {
+    return;
+  }
+
+  const std::filesystem::path mission_route_file(
+    context_document.value("mission_route_file", std::string{}));
+  const std::filesystem::path actual_path_file(
+    context_document.value("actual_path_file", std::string{}));
+  const std::filesystem::path mission_costmap_yaml(
+    context_document.value("mission_costmap_yaml", std::string{}));
+  const std::filesystem::path mission_costmap_image(
+    context_document.value("recorded_work_area_costmap_image", std::string{}));
+  const std::string run_started_at = context_document.value("run_started_at", std::string{});
+
+  if (mission_route_file.empty() || !std::filesystem::exists(mission_route_file) ||
+    actual_path_file.empty() || !std::filesystem::exists(actual_path_file) ||
+    mission_costmap_yaml.empty() || !std::filesystem::exists(mission_costmap_yaml) ||
+    mission_costmap_image.empty() || !std::filesystem::exists(mission_costmap_image) ||
+    run_started_at.empty())
+  {
+    return;
+  }
+
+  const auto perimeter = closePolygon(extractLineStringCoordinates(loadJsonDocument(mission_route_file)));
+  if (perimeter.size() < 4U) {
+    return;
+  }
+  const std::filesystem::path navsat_route_file(
+    context_document.value("actual_path_navsat_file", std::string{}));
+  GeoTransform geo_transform;
+  if (!navsat_route_file.empty() && std::filesystem::exists(navsat_route_file)) {
+    geo_transform = buildGeoTransform(
+      extractLineStringCoordinates(loadJsonDocument(actual_path_file)),
+      extractGeoLineStringCoordinates(loadJsonDocument(navsat_route_file)));
+  }
+
+  const auto latest_directory = resolveMissionsLogDirectory() / kLatestRecordedMapDirectoryName;
+  const auto latest_metadata_file = latest_directory / kLatestRecordedMapMetadataFile;
+  const auto latest_route_file = latest_directory / (std::string(kLatestRecordedMapRouteStem) + ".geojson");
+  const auto latest_costmap_yaml_file = latest_directory / (std::string(kLatestRecordedMapCostmapStem) + ".yaml");
+  const auto latest_costmap_image_file = latest_directory / (std::string(kLatestRecordedMapCostmapStem) + ".pgm");
+  const auto latest_navsat_file = latest_directory / (std::string(kLatestRecordedMapNavSatStem) + ".geojson");
+  std::filesystem::create_directories(latest_directory);
+
+  {
+    std::ofstream route_stream(latest_route_file, std::ios::trunc);
+    if (!route_stream.is_open()) {
+      throw std::runtime_error("Failed to write latest recorded map route artifact");
+    }
+    route_stream << std::setw(2) << buildPerimeterGeoJson(perimeter) << '\n';
+  }
+
+  std::filesystem::copy_file(
+    mission_costmap_yaml,
+    latest_costmap_yaml_file,
+    std::filesystem::copy_options::overwrite_existing);
+  std::filesystem::copy_file(
+    mission_costmap_image,
+    latest_costmap_image_file,
+    std::filesystem::copy_options::overwrite_existing);
+
+  {
+    std::ifstream input_stream(latest_costmap_yaml_file);
+    if (!input_stream.is_open()) {
+      throw std::runtime_error("Failed to reopen latest recorded map costmap yaml");
+    }
+    std::ostringstream buffer;
+    buffer << input_stream.rdbuf();
+    std::string yaml_text = buffer.str();
+    const auto image_key = yaml_text.find("image:");
+    if (image_key != std::string::npos) {
+      const auto line_end = yaml_text.find('\n', image_key);
+      yaml_text.replace(
+        image_key,
+        (line_end == std::string::npos ? yaml_text.size() : line_end + 1U) - image_key,
+        "image: " + latest_costmap_image_file.filename().string() + "\n");
+    }
+    std::ofstream output_stream(latest_costmap_yaml_file, std::ios::trunc);
+    if (!output_stream.is_open()) {
+      throw std::runtime_error("Failed to update latest recorded map costmap yaml");
+    }
+    output_stream << yaml_text;
+  }
+
+  if (!navsat_route_file.empty() && std::filesystem::exists(navsat_route_file)) {
+    std::filesystem::copy_file(
+      navsat_route_file,
+      latest_navsat_file,
+      std::filesystem::copy_options::overwrite_existing);
+  }
+
+  nlohmann::json latest_metadata{
+    {"mission_id", mission_id},
+    {"run_started_at", run_started_at},
+    {"recorded_work_area_route_file", latest_route_file.string()},
+    {"recorded_work_area_costmap_yaml", latest_costmap_yaml_file.string()},
+    {"recorded_work_area_costmap_image", latest_costmap_image_file.string()},
+    {"recorded_work_area_navsat_file", std::filesystem::exists(latest_navsat_file) ? latest_navsat_file.string() : std::string{}},
+    {"recorded_obstacle_count", context_document.value("recorded_obstacle_count", 0)},
+    {"recorded_obstacle_points", context_document.value("recorded_obstacle_points", nlohmann::json::array())},
+    {"geo_transform", {
+      {"valid", geo_transform.valid},
+      {"longitude_coefficients", {
+        geo_transform.longitude_coefficients[0],
+        geo_transform.longitude_coefficients[1],
+        geo_transform.longitude_coefficients[2]}},
+      {"latitude_coefficients", {
+        geo_transform.latitude_coefficients[0],
+        geo_transform.latitude_coefficients[1],
+        geo_transform.latitude_coefficients[2]}}}}};
+  std::ofstream metadata_stream(latest_metadata_file, std::ios::trunc);
+  if (!metadata_stream.is_open()) {
+    throw std::runtime_error("Failed to write latest recorded map metadata");
+  }
+  metadata_stream << std::setw(2) << latest_metadata << '\n';
 }
 
 void MissionExecutorNode::refreshActiveMissionState(const nlohmann::json & context_document)
@@ -1135,7 +2532,9 @@ void MissionExecutorNode::refreshActiveMissionState(const nlohmann::json & conte
   active_mission_is_manual_mapping_ = toLower(active_execution_mode_) == kManualMappingExecutionMode;
   active_mission_uses_inactivity_watchdog_ = active_mission_is_teleop_ || active_mission_is_manual_mapping_;
   active_actual_path_file_ = context_document.value("actual_path_file", std::string{});
+  active_actual_navsat_path_file_ = context_document.value("actual_path_navsat_file", std::string{});
   teleop_traveled_path_points_.clear();
+  manual_mapping_navsat_points_.clear();
   last_manual_mission_motion_time_ = now();
 }
 
@@ -1149,7 +2548,9 @@ void MissionExecutorNode::clearActiveMissionState()
   active_mission_id_.clear();
   active_execution_mode_.clear();
   active_actual_path_file_.clear();
+  active_actual_navsat_path_file_.clear();
   teleop_traveled_path_points_.clear();
+  manual_mapping_navsat_points_.clear();
   last_manual_mission_motion_time_ = rclcpp::Time(0, 0, get_clock()->get_clock_type());
 }
 
@@ -1458,7 +2859,7 @@ void MissionExecutorNode::recordSafetyEvent(
 bool MissionExecutorNode::missionArtifactsReady(const ManualMissionInfo & mission) const
 {
   const std::filesystem::path mission_file(mission.mission_path);
-  const std::filesystem::path mission_folder = missionFolderPath(mission_file);
+  const std::filesystem::path mission_folder = artifactsDirectoryForMission(mission);
   return std::filesystem::exists(mission_file) &&
          std::filesystem::exists(mission_folder / (missionCostmapBasename(mission_file) + ".yaml")) &&
          std::filesystem::exists(mission_folder / (missionCostmapBasename(mission_file) + ".pgm")) &&

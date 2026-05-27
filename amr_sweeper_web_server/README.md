@@ -8,6 +8,7 @@ Responsibilities:
 - execute built-in manual missions and saved autonomous missions through `amr_sweeper_mission_executor`
 - stop the active mission through `amr_sweeper_mission_executor`
 - upload a VDA5050 mission JSON payload into `/missions_from_db` so it becomes executable
+- provide a dedicated `/record-map` workflow page for starting `RecordMap`, previewing the latest GNSS overlay on satellite imagery, and saving named autonomous missions from the latest recorded map
 
 Default operator URL:
 - `http://192.168.2.1:8080`

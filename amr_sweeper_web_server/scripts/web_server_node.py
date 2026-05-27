@@ -19,6 +19,7 @@ import rclpy
 from amr_sweeper_fsm.msg import FSMState, FSMStatus
 from amr_sweeper_fsm.srv import RequestState
 from amr_sweeper_mission_executor.srv import (
+    CreateRecordedMission,
     EndMission,
     ExecuteMission,
     ListExecutableMissions,
@@ -77,6 +78,10 @@ class MissionWebServerNode(Node):
             "upload_vda5050_mission_service",
             "upload_vda5050_mission",
         ).value
+        self._create_recorded_mission_service = self.declare_parameter(
+            "create_recorded_mission_service",
+            "create_recorded_mission",
+        ).value
         self._end_mission_service = self.declare_parameter(
             "end_mission_service",
             "end_mission",
@@ -103,6 +108,10 @@ class MissionWebServerNode(Node):
         self._upload_vda5050_mission_client = self.create_client(
             UploadVda5050Mission,
             self._upload_vda5050_mission_service,
+        )
+        self._create_recorded_mission_client = self.create_client(
+            CreateRecordedMission,
+            self._create_recorded_mission_service,
         )
         self._end_mission_client = self.create_client(
             EndMission,
@@ -170,6 +179,9 @@ class MissionWebServerNode(Node):
                 if parsed.path == "/map":
                     self._send_html(node.render_map_html())
                     return
+                if parsed.path == "/record-map":
+                    self._send_html(node.render_record_map_html())
+                    return
                 if parsed.path == "/api/status":
                     self._send_json(HTTPStatus.OK, node.status_snapshot())
                     return
@@ -190,6 +202,12 @@ class MissionWebServerNode(Node):
                 if parsed.path == "/api/map-data":
                     try:
                         self._send_json(HTTPStatus.OK, node.map_snapshot())
+                    except Exception as exc:  # noqa: BLE001
+                        self._send_json(HTTPStatus.BAD_GATEWAY, {"success": False, "message": str(exc)})
+                    return
+                if parsed.path == "/api/record-map":
+                    try:
+                        self._send_json(HTTPStatus.OK, node.record_map_snapshot())
                     except Exception as exc:  # noqa: BLE001
                         self._send_json(HTTPStatus.BAD_GATEWAY, {"success": False, "message": str(exc)})
                     return
@@ -234,6 +252,27 @@ class MissionWebServerNode(Node):
                 if parsed.path == "/api/reboot":
                     try:
                         response = node.request_reinitialize(payload)
+                        self._send_json(HTTPStatus.OK, response)
+                    except Exception as exc:  # noqa: BLE001
+                        self._send_json(HTTPStatus.BAD_GATEWAY, {"success": False, "message": str(exc)})
+                    return
+                if parsed.path == "/api/record-map/start":
+                    try:
+                        response = node.start_record_map(payload)
+                        self._send_json(HTTPStatus.OK, response)
+                    except Exception as exc:  # noqa: BLE001
+                        self._send_json(HTTPStatus.BAD_GATEWAY, {"success": False, "message": str(exc)})
+                    return
+                if parsed.path == "/api/record-map/stop":
+                    try:
+                        response = node.stop_record_map(payload)
+                        self._send_json(HTTPStatus.OK, response)
+                    except Exception as exc:  # noqa: BLE001
+                        self._send_json(HTTPStatus.BAD_GATEWAY, {"success": False, "message": str(exc)})
+                    return
+                if parsed.path == "/api/record-map/save-mission":
+                    try:
+                        response = node.create_recorded_mission(payload)
                         self._send_json(HTTPStatus.OK, response)
                     except Exception as exc:  # noqa: BLE001
                         self._send_json(HTTPStatus.BAD_GATEWAY, {"success": False, "message": str(exc)})
@@ -425,6 +464,42 @@ class MissionWebServerNode(Node):
             "mission_folder": response.mission_folder,
             "mission_type": response.mission_type,
             "running_profile_id": int(response.running_profile_id),
+        }
+
+    def start_record_map(self, payload: dict[str, Any]) -> dict[str, Any]:
+        request_payload = dict(payload)
+        request_payload.setdefault("reason", "record map requested from HTTP UI")
+        request_payload.setdefault("priority", 200)
+        return self.execute_manual_mission("RecordMap", request_payload)
+
+    def stop_record_map(self, payload: dict[str, Any]) -> dict[str, Any]:
+        request_payload = dict(payload)
+        request_payload.setdefault("mission_id", "RecordMap")
+        request_payload.setdefault("reason", "record map stop requested from HTTP UI")
+        request_payload.setdefault("outcome", "completed")
+        request_payload.setdefault("request_idling", True)
+        return self.stop_active_mission(request_payload)
+
+    def create_recorded_mission(self, payload: dict[str, Any]) -> dict[str, Any]:
+        request = CreateRecordedMission.Request()
+        request.mission_name = str(payload.get("mission_name", ""))
+        request.sweep_pattern = str(payload.get("sweep_pattern", ""))
+        request.overwrite_existing = bool(payload.get("overwrite_existing", False))
+
+        response = self._call_service(
+            self._create_recorded_mission_client,
+            request,
+            timeout_sec=15.0,
+            service_name=self._create_recorded_mission_service,
+        )
+        return {
+            "success": bool(response.success),
+            "message": response.message,
+            "mission_id": response.mission_id,
+            "mission_file": response.mission_file,
+            "mission_folder": response.mission_folder,
+            "applied_sweep_pattern": response.applied_sweep_pattern,
+            "latest_recorded_map_file": response.latest_recorded_map_file,
         }
 
     def stop_active_mission(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -726,6 +801,60 @@ class MissionWebServerNode(Node):
         except Exception:
             return None
 
+    def record_map_snapshot(self) -> dict[str, Any]:
+        with self._state_lock:
+            navsat = dict(self._latest_navsat) if self._latest_navsat is not None else None
+
+        active_execution = self._load_active_execution() or {}
+        active_recording = (
+            active_execution.get("mission_id") == "RecordMap" and
+            active_execution.get("active", True) is not False
+        )
+        active_navsat_geojson = None
+        active_navsat_file = active_execution.get("actual_path_navsat_file", "")
+        if active_navsat_file:
+            active_navsat_geojson = self._load_geojson_feature_collection(Path(active_navsat_file))
+        elif active_execution.get("execution_context_file"):
+            try:
+                context_document = json.loads(
+                    Path(active_execution["execution_context_file"]).read_text(encoding="utf-8")
+                )
+                navsat_path = context_document.get("actual_path_navsat_file", "")
+                if navsat_path:
+                    active_navsat_geojson = self._load_geojson_feature_collection(Path(navsat_path))
+            except Exception:
+                active_navsat_geojson = None
+
+        latest_directory = _resolve_path(self._missions_log_directory) / "latest_recorded_map"
+        latest_metadata_file = latest_directory / "latest_recorded_map.json"
+        latest_metadata = None
+        latest_route_geojson = None
+        latest_navsat_geojson = None
+        if latest_metadata_file.exists():
+            try:
+                latest_metadata = json.loads(latest_metadata_file.read_text(encoding="utf-8"))
+                route_path = Path(latest_metadata.get("recorded_work_area_route_file", ""))
+                navsat_path = Path(latest_metadata.get("recorded_work_area_navsat_file", ""))
+                if route_path:
+                    latest_route_geojson = self._load_geojson_feature_collection(route_path)
+                if navsat_path:
+                    latest_navsat_geojson = self._load_geojson_feature_collection(navsat_path)
+            except Exception as exc:  # noqa: BLE001
+                latest_metadata = {"error": str(exc), "path": str(latest_metadata_file)}
+
+        return {
+            "success": True,
+            "patterns": ["zigzag", "random", "spiral"],
+            "default_pattern": "zigzag",
+            "active_recording": active_recording,
+            "active_execution": active_execution,
+            "current_position": navsat,
+            "active_navsat_geojson": active_navsat_geojson,
+            "latest_recorded_map": latest_metadata,
+            "latest_route_geojson": latest_route_geojson,
+            "latest_navsat_geojson": latest_navsat_geojson,
+        }
+
     @staticmethod
     def _route_geojson_from_vda5050(document: dict[str, Any], mission_id: str) -> dict[str, Any] | None:
         nodes = {node["nodeId"]: node["nodePosition"] for node in document.get("nodes", []) if "nodeId" in node and "nodePosition" in node}
@@ -772,12 +901,21 @@ class MissionWebServerNode(Node):
 
     def map_snapshot(self) -> dict[str, Any]:
         missions_directory = _resolve_path(self._missions_from_db_directory)
+        missions_log_directory = _resolve_path(self._missions_log_directory)
         missions: list[dict[str, Any]] = []
-        for mission_file in sorted(missions_directory.glob("*.json")):
+        mission_files = list(missions_directory.glob("*.json"))
+        mission_files.extend(missions_directory.glob("*/*.json"))
+        seen_paths: set[Path] = set()
+        for mission_file in sorted(mission_files):
+            if mission_file in seen_paths:
+                continue
+            seen_paths.add(mission_file)
             mission_id = mission_file.stem
             document = self._load_geojson_feature_collection(mission_file)
             route_geojson = None
-            route_path = missions_directory / mission_id / f"{mission_id}_path.geojson"
+            route_path = mission_file.parent / f"{mission_id}_path.geojson"
+            if not route_path.exists():
+                route_path = missions_log_directory / mission_id / f"{mission_id}_path.geojson"
             if route_path.exists():
                 route_geojson = self._load_geojson_feature_collection(route_path)
             elif document is not None:
@@ -1018,6 +1156,7 @@ class MissionWebServerNode(Node):
         <a class="nav-link" href="/">Dashboard</a>
         <a class="nav-link" href="/calendar">Schedule Calendar</a>
         <a class="nav-link" href="/map">Mission Map</a>
+        <a class="nav-link" href="/record-map">Record Map</a>
       </div>
     </section>
 
@@ -1377,6 +1516,7 @@ class MissionWebServerNode(Node):
         <a class="nav-link" href="/">Dashboard</a>
         <a class="nav-link" href="/calendar">Schedule Calendar</a>
         <a class="nav-link" href="/map">Mission Map</a>
+        <a class="nav-link" href="/record-map">Record Map</a>
       </div>
     </section>
     <section class="toolbar">
@@ -1464,6 +1604,485 @@ class MissionWebServerNode(Node):
 
     const now = new Date();
     loadCalendar(`${{now.getFullYear()}}-${{String(now.getMonth() + 1).padStart(2, '0')}}`);
+  </script>
+</body>
+</html>
+"""
+
+    def render_record_map_html(self) -> str:
+        title = escape(self._site_title)
+        return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{title} - Record Map</title>
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  >
+  <style>
+    :root {{
+      --bg: #efe8db;
+      --card: rgba(255, 251, 244, 0.96);
+      --ink: #16222b;
+      --muted: #5a6972;
+      --accent: #0f766e;
+      --accent-strong: #115e59;
+      --danger: #b91c1c;
+      --line: #d9cfbe;
+      --gold: #b45309;
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      color: var(--ink);
+      font-family: "Segoe UI", "Helvetica Neue", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(15, 118, 110, 0.16), transparent 28%),
+        linear-gradient(150deg, #f5efe3 0%, #ece3d3 100%);
+    }}
+    main {{
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 24px;
+    }}
+    .card {{
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 18px;
+      box-shadow: 0 14px 36px rgba(22, 34, 43, 0.08);
+    }}
+    .hero {{
+      display: grid;
+      gap: 12px;
+    }}
+    .nav {{
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }}
+    .nav-link {{
+      display: inline-block;
+      text-decoration: none;
+      color: var(--ink);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 8px 14px;
+      background: rgba(255, 253, 248, 0.95);
+      font-size: 0.92rem;
+    }}
+    .layout {{
+      display: grid;
+      grid-template-columns: 1.6fr 1fr;
+      gap: 18px;
+      margin-top: 18px;
+    }}
+    .map-shell {{
+      min-height: 620px;
+      overflow: hidden;
+      padding: 0;
+    }}
+    #record-map {{
+      width: 100%;
+      min-height: 620px;
+      border-radius: 20px;
+    }}
+    .stack {{
+      display: grid;
+      gap: 16px;
+    }}
+    .toolbar {{
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }}
+    .status-chip {{
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 8px 12px;
+      background: rgba(15, 118, 110, 0.12);
+      color: var(--accent-strong);
+      font-weight: 600;
+      font-size: 0.92rem;
+    }}
+    .status-chip.idle {{
+      background: rgba(180, 83, 9, 0.12);
+      color: var(--gold);
+    }}
+    .muted {{ color: var(--muted); }}
+    .meta-grid {{
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }}
+    .meta {{
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px;
+      background: #fffdf8;
+    }}
+    label {{
+      display: block;
+      font-size: 0.9rem;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }}
+    input[type="text"], select {{
+      width: 100%;
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: white;
+      color: var(--ink);
+    }}
+    .pattern-list {{
+      display: grid;
+      gap: 10px;
+      margin-top: 8px;
+    }}
+    .pattern-option {{
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px;
+      background: #fffdf8;
+    }}
+    .pattern-option input {{
+      margin-right: 8px;
+    }}
+    button {{
+      border: 0;
+      border-radius: 999px;
+      padding: 11px 16px;
+      font-size: 0.95rem;
+      cursor: pointer;
+      color: white;
+      background: var(--accent);
+    }}
+    button:hover {{ background: var(--accent-strong); }}
+    button.stop {{ background: var(--danger); }}
+    button.secondary {{
+      color: var(--ink);
+      background: #efe7da;
+    }}
+    .banner {{
+      display: none;
+      border-radius: 14px;
+      padding: 12px 14px;
+      font-weight: 600;
+    }}
+    .banner.show {{ display: block; }}
+    .banner.ok {{ background: rgba(15, 118, 110, 0.12); color: var(--accent-strong); }}
+    .banner.error {{ background: rgba(185, 28, 28, 0.12); color: var(--danger); }}
+    .countdown {{
+      font-size: 0.88rem;
+      color: var(--gold);
+      min-height: 1.2rem;
+    }}
+    @media (max-width: 980px) {{
+      .layout {{ grid-template-columns: 1fr; }}
+      .meta-grid {{ grid-template-columns: 1fr; }}
+      #record-map {{ min-height: 440px; }}
+    }}
+  </style>
+</head>
+<body>
+  <main>
+    <section class="card hero">
+      <h1>Record Map And Create Missions</h1>
+      <div class="muted">Drive the robot around the working-area perimeter, let RecordMap update the latest recorded map, then create one or more named autonomous missions from that map using a sweep pattern.</div>
+      <div id="banner" class="banner"></div>
+      <div class="nav">
+        <a class="nav-link" href="/">Dashboard</a>
+        <a class="nav-link" href="/calendar">Schedule Calendar</a>
+        <a class="nav-link" href="/map">Mission Map</a>
+        <a class="nav-link" href="/record-map">Record Map</a>
+      </div>
+    </section>
+
+    <section class="layout">
+      <section class="card map-shell">
+        <div id="record-map"></div>
+      </section>
+      <section class="stack">
+        <section class="card">
+          <div class="toolbar">
+            <div id="recording-chip" class="status-chip idle">RecordMap idle</div>
+            <button id="record-button">Record</button>
+            <button id="stop-button" class="stop">Stop</button>
+          </div>
+          <div class="muted" style="margin-top: 12px;">The latest recorded map is overwritten whenever a new RecordMap session is completed.</div>
+        </section>
+
+        <section class="card">
+          <h2>Latest Recorded Map</h2>
+          <div class="meta-grid" style="margin-top: 12px;">
+            <div class="meta">
+              <strong>Recorded Run</strong>
+              <div id="latest-run" class="muted" style="margin-top: 6px;">No recording captured yet.</div>
+            </div>
+            <div class="meta">
+              <strong>Obstacle Count</strong>
+              <div id="latest-obstacles" class="muted" style="margin-top: 6px;">-</div>
+            </div>
+          </div>
+          <div id="latest-map-message" class="muted" style="margin-top: 12px;">Complete a RecordMap session to unlock mission creation.</div>
+        </section>
+
+        <section class="card">
+          <h2>Create Autonomous Mission</h2>
+          <div style="margin-top: 12px;">
+            <label for="mission-name">Mission name</label>
+            <input id="mission-name" type="text" placeholder="yard_east_zigzag">
+          </div>
+          <div style="margin-top: 14px;">
+            <strong>Pattern</strong>
+            <div id="pattern-countdown" class="countdown"></div>
+            <div class="pattern-list">
+              <label class="pattern-option"><input type="radio" name="pattern" value="zigzag"> Zigzag coverage</label>
+              <label class="pattern-option"><input type="radio" name="pattern" value="random"> Random roaming coverage</label>
+              <label class="pattern-option"><input type="radio" name="pattern" value="spiral"> Spiral inward coverage</label>
+            </div>
+          </div>
+          <div class="toolbar" style="margin-top: 16px;">
+            <button id="save-button">Save Mission</button>
+            <button id="refresh-button" class="secondary">Refresh</button>
+          </div>
+        </section>
+      </section>
+    </section>
+  </main>
+
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+  <script>
+    const banner = document.getElementById('banner');
+    const chip = document.getElementById('recording-chip');
+    const latestRun = document.getElementById('latest-run');
+    const latestObstacles = document.getElementById('latest-obstacles');
+    const latestMapMessage = document.getElementById('latest-map-message');
+    const patternCountdown = document.getElementById('pattern-countdown');
+    const patternInputs = [...document.querySelectorAll('input[name="pattern"]')];
+    const missionNameInput = document.getElementById('mission-name');
+    let patternTouched = false;
+    let countdownTimer = null;
+    let countdownSeconds = 20;
+    let lastLatestRunId = '';
+    let activePolyline = null;
+    let latestPolyline = null;
+    let perimeterPolyline = null;
+    let currentMarker = null;
+
+    const map = L.map('record-map', {{ zoomControl: true }}).setView([55.6761, 12.5683], 18);
+    L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{{z}}/{{y}}/{{x}}',
+      {{ maxZoom: 20, attribution: '&copy; Esri' }}
+    ).addTo(map);
+
+    function setBanner(kind, message) {{
+      banner.className = `banner show ${{kind}}`;
+      banner.textContent = message;
+      window.setTimeout(() => {{
+        banner.className = 'banner';
+        banner.textContent = '';
+      }}, 5000);
+    }}
+
+    function selectedPattern() {{
+      const selected = patternInputs.find((input) => input.checked);
+      return selected ? selected.value : '';
+    }}
+
+    function ensureDefaultPatternSelection() {{
+      if (!selectedPattern()) {{
+        const zigzag = patternInputs.find((input) => input.value === 'zigzag');
+        if (zigzag) {{
+          zigzag.checked = true;
+        }}
+      }}
+    }}
+
+    function startPatternCountdown() {{
+      window.clearInterval(countdownTimer);
+      countdownSeconds = 20;
+      patternTouched = false;
+      patternCountdown.textContent = 'Zigzag will be selected automatically in 20 seconds if you do not choose a pattern.';
+      countdownTimer = window.setInterval(() => {{
+        countdownSeconds -= 1;
+        if (patternTouched) {{
+          window.clearInterval(countdownTimer);
+          patternCountdown.textContent = '';
+          return;
+        }}
+        if (countdownSeconds <= 0) {{
+          ensureDefaultPatternSelection();
+          patternCountdown.textContent = 'No pattern was chosen in time, so zigzag is selected.';
+          window.clearInterval(countdownTimer);
+          return;
+        }}
+        patternCountdown.textContent = `Zigzag will be selected automatically in ${{countdownSeconds}} seconds if you do not choose a pattern.`;
+      }}, 1000);
+    }}
+
+    for (const input of patternInputs) {{
+      input.addEventListener('change', () => {{
+        patternTouched = true;
+        patternCountdown.textContent = '';
+      }});
+    }}
+
+    function lineStringLatLngs(geojson) {{
+      const latlngs = [];
+      for (const feature of geojson?.features || []) {{
+        if (feature?.geometry?.type !== 'LineString') {{
+          continue;
+        }}
+        for (const coordinate of feature.geometry.coordinates || []) {{
+          if (Array.isArray(coordinate) && coordinate.length >= 2) {{
+            latlngs.push([Number(coordinate[1]), Number(coordinate[0])]);
+          }}
+        }}
+      }}
+      return latlngs;
+    }}
+
+    function updateMap(data) {{
+      if (activePolyline) {{
+        map.removeLayer(activePolyline);
+        activePolyline = null;
+      }}
+      if (latestPolyline) {{
+        map.removeLayer(latestPolyline);
+        latestPolyline = null;
+      }}
+      if (perimeterPolyline) {{
+        map.removeLayer(perimeterPolyline);
+        perimeterPolyline = null;
+      }}
+      if (currentMarker) {{
+        map.removeLayer(currentMarker);
+        currentMarker = null;
+      }}
+
+      const bounds = [];
+      const activeLatLngs = lineStringLatLngs(data.active_navsat_geojson);
+      if (activeLatLngs.length > 1) {{
+        activePolyline = L.polyline(activeLatLngs, {{ color: '#dc2626', weight: 4 }}).addTo(map);
+        bounds.push(...activeLatLngs);
+      }}
+
+      const latestLatLngs = lineStringLatLngs(data.latest_navsat_geojson);
+      if (latestLatLngs.length > 1) {{
+        latestPolyline = L.polyline(latestLatLngs, {{ color: '#0f766e', weight: 4 }}).addTo(map);
+        bounds.push(...latestLatLngs);
+      }}
+
+      const perimeterLatLngs = lineStringLatLngs(data.latest_route_geojson);
+      if (perimeterLatLngs.length > 1) {{
+        perimeterPolyline = L.polyline(perimeterLatLngs, {{ color: '#f59e0b', weight: 3, dashArray: '8 8' }}).addTo(map);
+      }}
+
+      const position = data.current_position;
+      if (position && position.latitude !== undefined && position.longitude !== undefined) {{
+        currentMarker = L.circleMarker(
+          [Number(position.latitude), Number(position.longitude)],
+          {{ radius: 6, color: '#ffffff', weight: 2, fillColor: '#1d4ed8', fillOpacity: 1 }}
+        ).addTo(map);
+        bounds.push([Number(position.latitude), Number(position.longitude)]);
+      }}
+
+      if (bounds.length > 0) {{
+        map.fitBounds(bounds, {{ padding: [30, 30], maxZoom: 19 }});
+      }}
+    }}
+
+    async function loadRecordMapSnapshot() {{
+      const response = await fetch('/api/record-map', {{ cache: 'no-store' }});
+      const data = await response.json();
+      chip.textContent = data.active_recording ? 'RecordMap recording' : 'RecordMap idle';
+      chip.className = data.active_recording ? 'status-chip' : 'status-chip idle';
+
+      const latest = data.latest_recorded_map;
+      if (latest && !latest.error) {{
+        latestRun.textContent = latest.run_started_at || 'Latest recording available';
+        latestObstacles.textContent = String(latest.recorded_obstacle_count ?? '-');
+        latestMapMessage.textContent = 'This latest recorded map can be reused to make several missions with different patterns.';
+        const latestRunId = String(latest.run_started_at || '');
+        if (latestRunId && latestRunId !== lastLatestRunId) {{
+          startPatternCountdown();
+          lastLatestRunId = latestRunId;
+        }}
+      }} else {{
+        latestRun.textContent = 'No recording captured yet.';
+        latestObstacles.textContent = '-';
+        latestMapMessage.textContent = 'Complete a RecordMap session to unlock mission creation.';
+        window.clearInterval(countdownTimer);
+        patternCountdown.textContent = '';
+        lastLatestRunId = '';
+      }}
+
+      updateMap(data);
+      return data;
+    }}
+
+    async function postJson(path, body) {{
+      const response = await fetch(path, {{
+        method: 'POST',
+        headers: {{ 'Content-Type': 'application/json' }},
+        body: JSON.stringify(body || {{}})
+      }});
+      return response.json();
+    }}
+
+    document.getElementById('record-button').addEventListener('click', async () => {{
+      const data = await postJson('/api/record-map/start', {{}});
+      setBanner(data.success ? 'ok' : 'error', data.message || 'RecordMap request completed');
+      await loadRecordMapSnapshot();
+    }});
+
+    document.getElementById('stop-button').addEventListener('click', async () => {{
+      const data = await postJson('/api/record-map/stop', {{}});
+      setBanner(data.success ? 'ok' : 'error', data.message || 'RecordMap stop request completed');
+      await loadRecordMapSnapshot();
+    }});
+
+    document.getElementById('save-button').addEventListener('click', async () => {{
+      ensureDefaultPatternSelection();
+      const missionName = missionNameInput.value.trim();
+      if (!missionName) {{
+        setBanner('error', 'Enter a mission name before saving.');
+        return;
+      }}
+      const data = await postJson('/api/record-map/save-mission', {{
+        mission_name: missionName,
+        sweep_pattern: selectedPattern(),
+        overwrite_existing: false
+      }});
+      setBanner(data.success ? 'ok' : 'error', data.message || 'Save mission request completed');
+      if (data.success) {{
+        missionNameInput.value = '';
+      }}
+    }});
+
+    document.getElementById('refresh-button').addEventListener('click', async () => {{
+      await loadRecordMapSnapshot();
+    }});
+
+    ensureDefaultPatternSelection();
+    loadRecordMapSnapshot().catch((error) => {{
+      setBanner('error', error.message || 'Failed to load record map page state');
+    }});
+    window.setInterval(() => {{
+      loadRecordMapSnapshot().catch(() => null);
+    }}, 4000);
   </script>
 </body>
 </html>
@@ -1562,6 +2181,7 @@ class MissionWebServerNode(Node):
         <a class="nav-link" href="/">Dashboard</a>
         <a class="nav-link" href="/calendar">Schedule Calendar</a>
         <a class="nav-link" href="/map">Mission Map</a>
+        <a class="nav-link" href="/record-map">Record Map</a>
       </div>
     </section>
     <section class="map-layout">

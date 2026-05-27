@@ -183,7 +183,46 @@ std::vector<MissionPathWaypoint> buildCoverageWaypoints(
       continue;
     }
     waypoints.push_back(
-      MissionPathWaypoint{node_id, nodes_by_id.at(node_id), node_theta_by_id.at(node_id)});
+      MissionPathWaypoint{node_id, nodes_by_id.at(node_id), MapPoint{}, node_theta_by_id.at(node_id), false});
+  }
+  return waypoints;
+}
+
+std::vector<MapPoint> buildLocalPolygonFromEdgeIds(
+  const nlohmann::json & edge_ids_json,
+  const std::unordered_map<std::string, MapPoint> & nodes_by_id,
+  const std::unordered_map<std::string, nlohmann::json> & edges_by_id)
+{
+  const auto node_sequence = buildNodeSequenceFromEdgeIds(edge_ids_json, edges_by_id, true);
+  std::vector<MapPoint> polygon;
+  polygon.reserve(node_sequence.size());
+  for (const auto & node_id : node_sequence) {
+    polygon.push_back(nodes_by_id.at(node_id));
+  }
+  if (!polygon.empty() &&
+    polygon.front().x == polygon.back().x &&
+    polygon.front().y == polygon.back().y)
+  {
+    polygon.pop_back();
+  }
+  return polygon;
+}
+
+std::vector<MissionPathWaypoint> buildLocalCoverageWaypoints(
+  const nlohmann::json & edge_ids_json,
+  const std::unordered_map<std::string, MapPoint> & nodes_by_id,
+  const std::unordered_map<std::string, double> & node_theta_by_id,
+  const std::unordered_map<std::string, nlohmann::json> & edges_by_id)
+{
+  const auto node_sequence = buildNodeSequenceFromEdgeIds(edge_ids_json, edges_by_id, false);
+  std::vector<MissionPathWaypoint> waypoints;
+  waypoints.reserve(node_sequence.size());
+  for (const auto & node_id : node_sequence) {
+    if (!waypoints.empty() && waypoints.back().node_id == node_id) {
+      continue;
+    }
+    waypoints.push_back(
+      MissionPathWaypoint{node_id, GeoPoint{}, nodes_by_id.at(node_id), node_theta_by_id.at(node_id), true});
   }
   return waypoints;
 }
@@ -247,16 +286,31 @@ void Vda5050MissionParser::loadFromLegacyGeoJson(const nlohmann::json & document
 
 void Vda5050MissionParser::loadFromVda5050Mission(const nlohmann::json & document)
 {
+  const std::string coordinate_frame = document.contains("missionReference") &&
+    document.at("missionReference").is_object() &&
+    document.at("missionReference").contains("coordinateFrame") &&
+    document.at("missionReference").at("coordinateFrame").is_string() ?
+    normalizeZoneType(document.at("missionReference").at("coordinateFrame").get<std::string>()) :
+    std::string{};
+  const bool use_local_frame = coordinate_frame == "odom" || coordinate_frame == "local";
+
   std::unordered_map<std::string, GeoPoint> nodes_by_id;
+  std::unordered_map<std::string, MapPoint> local_nodes_by_id;
   std::unordered_map<std::string, double> node_theta_by_id;
   std::unordered_map<std::string, nlohmann::json> edges_by_id;
 
   for (const auto & node : document.at("nodes")) {
     const auto & position = node.at("nodePosition");
     const std::string node_id = node.at("nodeId").get<std::string>();
-    nodes_by_id.emplace(
-      node_id,
-      GeoPoint{position.at("y").get<double>(), position.at("x").get<double>()});
+    if (use_local_frame) {
+      local_nodes_by_id.emplace(
+        node_id,
+        MapPoint{position.at("x").get<double>(), position.at("y").get<double>()});
+    } else {
+      nodes_by_id.emplace(
+        node_id,
+        GeoPoint{position.at("y").get<double>(), position.at("x").get<double>()});
+    }
     node_theta_by_id.emplace(node_id, position.value("theta", 0.0));
   }
 
@@ -268,28 +322,56 @@ void Vda5050MissionParser::loadFromVda5050Mission(const nlohmann::json & documen
 
   if (mission_geometries.contains("workingZones")) {
     for (const auto & zone : mission_geometries.at("workingZones")) {
-      projectAndStoreZone(
-        buildPolygonFromEdgeIds(zone.at("edgeIds"), nodes_by_id, edges_by_id),
-        zone.value("zoneId", "working_zone"),
-        normalizeZoneType(zone.value("zoneType", config_.working_zone_value)));
+      if (use_local_frame) {
+        PolygonZone local_zone;
+        local_zone.name = zone.value("zoneId", "working_zone");
+        local_zone.zone_type = normalizeZoneType(zone.value("zoneType", config_.working_zone_value));
+        local_zone.vertices = buildLocalPolygonFromEdgeIds(zone.at("edgeIds"), local_nodes_by_id, edges_by_id);
+        if (local_zone.zone_type == normalizeZoneType(config_.no_go_zone_value)) {
+          no_go_zones_.push_back(local_zone);
+        } else {
+          working_zones_.push_back(local_zone);
+        }
+      } else {
+        projectAndStoreZone(
+          buildPolygonFromEdgeIds(zone.at("edgeIds"), nodes_by_id, edges_by_id),
+          zone.value("zoneId", "working_zone"),
+          normalizeZoneType(zone.value("zoneType", config_.working_zone_value)));
+      }
     }
   }
 
   if (mission_geometries.contains("noGoZones")) {
     for (const auto & zone : mission_geometries.at("noGoZones")) {
-      projectAndStoreZone(
-        buildPolygonFromEdgeIds(zone.at("edgeIds"), nodes_by_id, edges_by_id),
-        zone.value("zoneId", "no_go_zone"),
-        normalizeZoneType(zone.value("zoneType", config_.no_go_zone_value)));
+      if (use_local_frame) {
+        PolygonZone local_zone;
+        local_zone.name = zone.value("zoneId", "no_go_zone");
+        local_zone.zone_type = normalizeZoneType(zone.value("zoneType", config_.no_go_zone_value));
+        local_zone.vertices = buildLocalPolygonFromEdgeIds(zone.at("edgeIds"), local_nodes_by_id, edges_by_id);
+        no_go_zones_.push_back(local_zone);
+      } else {
+        projectAndStoreZone(
+          buildPolygonFromEdgeIds(zone.at("edgeIds"), nodes_by_id, edges_by_id),
+          zone.value("zoneId", "no_go_zone"),
+          normalizeZoneType(zone.value("zoneType", config_.no_go_zone_value)));
+      }
     }
   }
 
   if (mission_geometries.contains("coveragePathEdgeIds")) {
-    loadCoveragePath(
-      mission_geometries.at("coveragePathEdgeIds"),
-      nodes_by_id,
-      node_theta_by_id,
-      edges_by_id);
+    if (use_local_frame) {
+      mission_waypoints_ = buildLocalCoverageWaypoints(
+        mission_geometries.at("coveragePathEdgeIds"),
+        local_nodes_by_id,
+        node_theta_by_id,
+        edges_by_id);
+    } else {
+      loadCoveragePath(
+        mission_geometries.at("coveragePathEdgeIds"),
+        nodes_by_id,
+        node_theta_by_id,
+        edges_by_id);
+    }
   }
 }
 
@@ -405,15 +487,24 @@ void Vda5050MissionParser::saveMissionWaypointsArtifact(const std::string & path
   fs::create_directories(fs::path(path).parent_path());
 
   nlohmann::json coordinates = nlohmann::json::array();
+  bool use_local_frame = false;
   for (const auto & waypoint : mission_waypoints_) {
-    coordinates.push_back({waypoint.geo_point.longitude, waypoint.geo_point.latitude});
+    if (waypoint.use_local_frame) {
+      coordinates.push_back({waypoint.map_point.x, waypoint.map_point.y});
+      use_local_frame = true;
+    } else {
+      coordinates.push_back({waypoint.geo_point.longitude, waypoint.geo_point.latitude});
+    }
   }
 
   nlohmann::json document = {
     {"type", "FeatureCollection"},
     {"features", {{
       {"type", "Feature"},
-      {"properties", {{"name", "coverage_path"}, {"source", "vda5050_mission"}}},
+      {"properties", {
+         {"name", "coverage_path"},
+         {"source", "vda5050_mission"},
+         {"coordinate_frame", use_local_frame ? "odom" : "wgs84"}}},
       {"geometry", {{"type", "LineString"}, {"coordinates", coordinates}}}
     }}}
   };
@@ -640,6 +731,7 @@ MissionParserNode::MissionParserNode(const rclcpp::NodeOptions & options)
 {
   mission_path_ = declare_parameter<std::string>("mission_path", "");
   missions_directory_ = declare_parameter<std::string>("missions_directory", "src/missions_from_db");
+  missions_log_directory_ = declare_parameter<std::string>("missions_log_directory", "src/missions_log");
   mission_file_extension_ = declare_parameter<std::string>("mission_file_extension", ".json");
   costmap_output_basename_ = declare_parameter<std::string>("costmap_output_basename", "global_costmap");
   coverage_path_basename_ = declare_parameter<std::string>(
@@ -665,9 +757,10 @@ MissionParserNode::MissionParserNode(const rclcpp::NodeOptions & options)
 
   RCLCPP_INFO(
     get_logger(),
-    "MissionParserNode watching %s and writing artifacts to %s",
+    "MissionParserNode watching %s, reading source JSON from %s, and writing staged mission artifacts to %s",
     mission_path_.empty() ? "<auto-discovery>" : mission_path_.c_str(),
-    missions_directory_.c_str());
+    missions_directory_.c_str(),
+    missions_log_directory_.c_str());
 
   if (auto_build_on_start_) {
     buildIfNeeded();
@@ -802,7 +895,7 @@ std::optional<std::filesystem::path> MissionParserNode::selectActiveMissionPath(
 std::filesystem::path MissionParserNode::stageMissionFile(const std::filesystem::path & mission_path)
 {
   const MissionIdentity identity = mission_parser_->inspectMissionIdentity(mission_path.string());
-  const std::filesystem::path mission_folder = resolvePath(missions_directory_) / identity.stem;
+  const std::filesystem::path mission_folder = resolveMissionsLogDirectory() / identity.stem;
   const std::filesystem::path staged_path = mission_folder / (identity.stem + mission_file_extension_);
   std::filesystem::create_directories(mission_folder);
 
@@ -810,16 +903,10 @@ std::filesystem::path MissionParserNode::stageMissionFile(const std::filesystem:
     return staged_path;
   }
 
-  if (std::filesystem::exists(staged_path)) {
-    std::filesystem::copy_file(
-      mission_path,
-      staged_path,
-      std::filesystem::copy_options::overwrite_existing);
-    std::filesystem::remove(mission_path);
-    return staged_path;
-  }
-
-  std::filesystem::rename(mission_path, staged_path);
+  std::filesystem::copy_file(
+    mission_path,
+    staged_path,
+    std::filesystem::copy_options::overwrite_existing);
   return staged_path;
 }
 
@@ -913,6 +1000,11 @@ std::filesystem::path MissionParserNode::resolvePath(const std::string & path) c
     return workspace_relative;
   }
   return configured;
+}
+
+std::filesystem::path MissionParserNode::resolveMissionsLogDirectory() const
+{
+  return resolvePath(missions_log_directory_);
 }
 
 std::filesystem::file_time_type MissionParserNode::currentMissionStamp(

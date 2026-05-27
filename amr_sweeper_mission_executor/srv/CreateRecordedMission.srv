@@ -1,0 +1,11 @@
+string mission_name
+string sweep_pattern
+bool overwrite_existing
+---
+bool success
+string message
+string mission_id
+string mission_file
+string mission_folder
+string applied_sweep_pattern
+string latest_recorded_map_file

@@ -150,6 +150,7 @@ def generate_launch_description():
                 "use_sim_time": use_sim_time,
                 "mission_path": mission_path,
                 "missions_directory": missions_from_db_directory,
+                "missions_log_directory": missions_log_directory,
                 "costmap_output_basename": costmap_output_basename,
                 "coverage_path_basename": coverage_path_basename,
                 "auto_build_on_start": auto_build_on_start,

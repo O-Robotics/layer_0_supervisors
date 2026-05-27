@@ -13,16 +13,18 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/parameter_client.hpp>
 #include <rcl_interfaces/msg/set_parameters_result.hpp>
+#include <sensor_msgs/msg/nav_sat_fix.hpp>
 #include <std_srvs/srv/trigger.hpp>
 
-#include "amr_sweeper_safety_msgs/msg/safety_stop.hpp"
+#include "amr_sweeper_mission_executor/srv/create_recorded_mission.hpp"
 #include "amr_sweeper_mission_executor/srv/end_mission.hpp"
-#include "amr_sweeper_fsm/srv/request_state.hpp"
 #include "amr_sweeper_mission_executor/srv/execute_mission.hpp"
 #include "amr_sweeper_mission_executor/srv/list_executable_missions.hpp"
 #include "amr_sweeper_mission_executor/srv/list_manual_missions.hpp"
 #include "amr_sweeper_mission_executor/srv/prepare_manual_mission.hpp"
 #include "amr_sweeper_mission_executor/srv/upload_vda5050_mission.hpp"
+#include "amr_sweeper_safety_msgs/msg/safety_stop.hpp"
+#include "amr_sweeper_fsm/srv/request_state.hpp"
 
 namespace amr_sweeper_mission_executor
 {
@@ -60,6 +62,9 @@ private:
   void handleUploadVda5050Mission(
     const std::shared_ptr<srv::UploadVda5050Mission::Request> request,
     std::shared_ptr<srv::UploadVda5050Mission::Response> response);
+  void handleCreateRecordedMission(
+    const std::shared_ptr<srv::CreateRecordedMission::Request> request,
+    std::shared_ptr<srv::CreateRecordedMission::Response> response);
   void handlePrepareManualMission(
     const std::shared_ptr<srv::PrepareManualMission::Request> request,
     std::shared_ptr<srv::PrepareManualMission::Response> response);
@@ -71,6 +76,7 @@ private:
     std::shared_ptr<srv::EndMission::Response> response);
   void handleSafetyStop(const amr_sweeper_safety_msgs::msg::SafetyStop::SharedPtr message);
   void handleManualMissionOdometry(const nav_msgs::msg::Odometry::SharedPtr message);
+  void handleManualMissionNavSat(const sensor_msgs::msg::NavSatFix::SharedPtr message);
   void checkManualMissionInactivity();
 
   [[nodiscard]] std::vector<ManualMissionInfo> discoverManualMissions() const;
@@ -84,6 +90,7 @@ private:
   [[nodiscard]] std::filesystem::path resolveMissionsLogDirectory() const;
   [[nodiscard]] std::filesystem::path resolveManualMissionsDirectory() const;
   [[nodiscard]] std::filesystem::path missionFolderPath(const std::filesystem::path & mission_path) const;
+  [[nodiscard]] std::filesystem::path artifactsDirectoryForMission(const ManualMissionInfo & mission) const;
   [[nodiscard]] std::string missionStemForPath(const std::filesystem::path & mission_path) const;
   [[nodiscard]] std::string missionCostmapBasename(const std::filesystem::path & mission_path) const;
   [[nodiscard]] std::string missionRouteBasename(const std::filesystem::path & mission_path) const;
@@ -105,6 +112,8 @@ private:
     const srv::EndMission::Request & request,
     std::string & message,
     std::optional<nlohmann::json> context_document = std::nullopt);
+  void updateRecordMapArtifacts(nlohmann::json & context_document) const;
+  void writeLatestRecordedMapSnapshot(const nlohmann::json & context_document) const;
   void refreshActiveMissionState(const nlohmann::json & context_document);
   void clearActiveMissionState();
   void recordMissionExecutionStart(
@@ -143,6 +152,7 @@ private:
   std::string safety_stop_topic_;
   std::string teleop_odometry_topic_;
   std::string manual_mapping_odometry_topic_;
+  std::string manual_mapping_navsat_topic_;
   std::string mission_parser_node_name_;
   std::string mission_parser_build_service_;
   std::string fsm_request_service_;
@@ -163,12 +173,14 @@ private:
   rclcpp::Service<srv::ListExecutableMissions>::SharedPtr list_executable_missions_service_;
   rclcpp::Service<srv::ListManualMissions>::SharedPtr list_manual_missions_service_;
   rclcpp::Service<srv::UploadVda5050Mission>::SharedPtr upload_vda5050_mission_service_;
+  rclcpp::Service<srv::CreateRecordedMission>::SharedPtr create_recorded_mission_service_;
   rclcpp::Service<srv::PrepareManualMission>::SharedPtr prepare_manual_mission_service_;
   rclcpp::Service<srv::ExecuteMission>::SharedPtr execute_mission_service_;
   rclcpp::Service<srv::EndMission>::SharedPtr end_mission_service_;
   rclcpp::Subscription<amr_sweeper_safety_msgs::msg::SafetyStop>::SharedPtr safety_stop_subscription_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr teleop_odometry_subscription_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr manual_mapping_odometry_subscription_;
+  rclcpp::Subscription<sensor_msgs::msg::NavSatFix>::SharedPtr manual_mapping_navsat_subscription_;
   rclcpp::TimerBase::SharedPtr manual_mission_watchdog_timer_;
   mutable std::mutex active_mission_mutex_;
   bool active_mission_running_{false};
@@ -178,8 +190,10 @@ private:
   std::string active_mission_id_;
   std::string active_execution_mode_;
   std::string active_actual_path_file_;
+  std::string active_actual_navsat_path_file_;
   rclcpp::Time last_manual_mission_motion_time_;
   std::vector<geometry_msgs::msg::Point> teleop_traveled_path_points_;
+  std::vector<geometry_msgs::msg::Point> manual_mapping_navsat_points_;
 };
 
 }  // namespace amr_sweeper_mission_executor

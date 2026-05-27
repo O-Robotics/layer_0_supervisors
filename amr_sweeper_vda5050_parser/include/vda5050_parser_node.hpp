@@ -76,7 +76,9 @@ struct MissionPathWaypoint
 {
   std::string node_id;
   GeoPoint geo_point;
+  MapPoint map_point;
   double theta;
+  bool use_local_frame{false};
 };
 
 struct MissionIdentity
@@ -165,6 +167,7 @@ private:
     std::shared_ptr<std_srvs::srv::Trigger::Response> response);
   [[nodiscard]] std::filesystem::path resolveMissionPath() const;
   [[nodiscard]] std::filesystem::path resolvePath(const std::string & path) const;
+  [[nodiscard]] std::filesystem::path resolveMissionsLogDirectory() const;
   [[nodiscard]] std::filesystem::file_time_type currentMissionStamp(
     const std::filesystem::path & mission_path) const;
   [[nodiscard]] std::filesystem::path missionFolderPath(
@@ -178,6 +181,7 @@ private:
 
   std::string mission_path_;
   std::string missions_directory_;
+  std::string missions_log_directory_;
   std::string mission_file_extension_;
   std::string costmap_output_basename_;
   std::string coverage_path_basename_;

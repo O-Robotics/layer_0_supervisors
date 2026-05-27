@@ -6,6 +6,7 @@ Services:
 - `list_executable_missions`
 - `list_manual_missions`
 - `upload_vda5050_mission`
+- `create_recorded_mission`
 - `prepare_manual_mission`
 - `execute_mission`
 - `end_mission`
@@ -27,13 +28,16 @@ Responsibilities:
 - accept scheduled activations from the scheduler
 - accept external/manual activation calls for built-in missions
 - source built-in manual mission templates from `amr_sweeper_default_missions`
+- support one rerecordable built-in working-area capture mission: `RecordMap`
 - build VDA5050 mission artifacts on demand when scheduled missions are not ready yet
 - read synced schedules and VDA5050 mission payloads from `/missions_from_db`
 - prepare execution folders and active mission aliases before the FSM handoff
 - write execution history, active aliases, and the execution pointer under `/missions_log`
+- publish the most recent completed `RecordMap` output into `/missions_log/latest_recorded_map/` so operators can reuse or overwrite the latest working-area recording
 - append manual execution entries into the schedule log and stamp scheduled entries with actual start time
 - finalize mission runs with actual end time, outcome, and an FSM return to `IDLING`
 - calculate the traveled-path length from `actual_path.geojson` and append it into mission end metadata
 - subscribe to `safety_msgs/stop` and append dedicated `SAFETY` VEVENT log entries into the schedule
 - watch `diff_cont/odom` during teleop missions and `odometry/fused` during manual mapping missions, and automatically end either mission type after 5 minutes without motion
 - record teleop traveled path into the active run folder's `actual_path.geojson`
+- record `RecordMap` GNSS points into `actual_path_navsat.geojson` so the latest perimeter can be previewed on a satellite map

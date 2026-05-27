@@ -17,9 +17,11 @@ find_package(nav_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rcl_interfaces REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
+find_package(sensor_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
+  "srv/CreateRecordedMission.srv"
   "srv/EndMission.srv"
   "srv/ExecuteMission.srv"
   "srv/ListExecutableMissions.srv"
@@ -48,6 +50,7 @@ ament_target_dependencies(mission_executor_node
   nav_msgs
   rclcpp
   rcl_interfaces
+  sensor_msgs
   std_srvs
 )
 target_link_libraries(mission_executor_node
