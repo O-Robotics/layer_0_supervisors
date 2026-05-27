@@ -275,8 +275,8 @@ profiles:
               - type: "service"
                 target: "amr_sweeper_gaussian_node/get_parameters"
                 required: true
-              - type: "service"
-                target: "amr_sweeper_mapping_node/get_parameters"
+              - type: "topic"
+                target: "mapping/status"
                 required: true
             window_ms: 25000
           rosout_triggers:
