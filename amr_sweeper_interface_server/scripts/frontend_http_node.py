@@ -76,9 +76,6 @@ class MissionFrontendHttpNode(MissionBackendNode):
                 if parsed.path == "/record-map":
                     self._send_html(node.render_record_map_html())
                     return
-                if parsed.path == "/assets/logo-o-robotics.svg":
-                    self._send_file(node._brand_logo_path, "image/svg+xml; charset=utf-8")
-                    return
                 if parsed.path == "/api/status":
                     self._send_json(HTTPStatus.OK, node.status_snapshot())
                     return
@@ -301,12 +298,6 @@ class MissionFrontendHttpNode(MissionBackendNode):
         repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.35) 0 8px, rgba(0, 0, 0, 0.1) 8px 16px);
       box-shadow: inset 0 0 0 1px rgba(253, 202, 15, 0.32);
     }}
-    .brand-logo {{
-      width: min(320px, 70vw);
-      height: auto;
-      display: block;
-      filter: brightness(0) saturate(100%) invert(85%) sepia(64%) saturate(872%) hue-rotate(356deg) brightness(103%) contrast(98%);
-    }}
     .grid {{
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
@@ -480,7 +471,6 @@ class MissionFrontendHttpNode(MissionBackendNode):
   <main>
     <section class="hero">
       <h1>{title}</h1>
-      <img class="brand-logo" src="/assets/logo-o-robotics.svg" alt="O-Robotics logo">
       <div class="brand-band"></div>
       <div id="banner" class="banner"></div>
       <div class="nav">
@@ -760,20 +750,6 @@ class MissionFrontendHttpNode(MissionBackendNode):
         linear-gradient(90deg, var(--accent) 0 24%, transparent 24% 28%, var(--accent) 28% 52%, transparent 52% 56%, var(--accent) 56% 100%),
         repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.35) 0 8px, rgba(0, 0, 0, 0.1) 8px 16px);
     }}
-    .brand-logo {{
-      width: min(300px, 68vw);
-      height: auto;
-      display: block;
-      margin-top: 10px;
-      filter: brightness(0) saturate(100%) invert(85%) sepia(64%) saturate(872%) hue-rotate(356deg) brightness(103%) contrast(98%);
-    }}
-    .brand-logo {{
-      width: min(300px, 68vw);
-      height: auto;
-      display: block;
-      margin-top: 10px;
-      filter: brightness(0) saturate(100%) invert(85%) sepia(64%) saturate(872%) hue-rotate(356deg) brightness(103%) contrast(98%);
-    }}
     .nav {{
       display: flex;
       gap: 10px;
@@ -952,7 +928,6 @@ class MissionFrontendHttpNode(MissionBackendNode):
   <main>
     <section class="card">
       <h1>Calendar</h1>
-      <img class="brand-logo" src="/assets/logo-o-robotics.svg" alt="O-Robotics logo">
       <div class="brand-band"></div>
       <div class="muted">View the active schedule as a weekly planner with full 24-hour day lanes.</div>
       <div class="nav">
@@ -1218,12 +1193,6 @@ class MissionFrontendHttpNode(MissionBackendNode):
         linear-gradient(90deg, var(--accent) 0 24%, transparent 24% 28%, var(--accent) 28% 52%, transparent 52% 56%, var(--accent) 56% 100%),
         repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.35) 0 8px, rgba(0, 0, 0, 0.1) 8px 16px);
     }}
-    .brand-logo {{
-      width: min(320px, 72vw);
-      height: auto;
-      display: block;
-      filter: brightness(0) saturate(100%) invert(85%) sepia(64%) saturate(872%) hue-rotate(356deg) brightness(103%) contrast(98%);
-    }}
     .nav {{
       display: flex;
       gap: 10px;
@@ -1367,7 +1336,6 @@ class MissionFrontendHttpNode(MissionBackendNode):
   <main>
     <section class="card hero">
       <h1>Record Map And Create Missions</h1>
-      <img class="brand-logo" src="/assets/logo-o-robotics.svg" alt="O-Robotics logo">
       <div class="brand-band"></div>
       <div class="muted">Drive the robot around the working-area perimeter, let RecordMap update the latest recorded map, then create one or more named autonomous missions from that map using a sweep pattern.</div>
       <div id="banner" class="banner"></div>
@@ -1719,13 +1687,6 @@ class MissionFrontendHttpNode(MissionBackendNode):
         linear-gradient(90deg, var(--accent) 0 24%, transparent 24% 28%, var(--accent) 28% 52%, transparent 52% 56%, var(--accent) 56% 100%),
         repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.35) 0 8px, rgba(0, 0, 0, 0.1) 8px 16px);
     }}
-    .brand-logo {{
-      width: min(300px, 68vw);
-      height: auto;
-      display: block;
-      margin-top: 10px;
-      filter: brightness(0) saturate(100%) invert(85%) sepia(64%) saturate(872%) hue-rotate(356deg) brightness(103%) contrast(98%);
-    }}
     .nav {{
       display: flex;
       gap: 10px;
@@ -1810,7 +1771,6 @@ class MissionFrontendHttpNode(MissionBackendNode):
   <main>
     <section class="card">
       <h1>Missions</h1>
-      <img class="brand-logo" src="/assets/logo-o-robotics.svg" alt="O-Robotics logo">
       <div class="brand-band"></div>
       <div class="muted">Preview built or decoded mission routes from the synced mission database, and upload VDA5050 missions.</div>
       <div id="banner" class="banner"></div>
@@ -2050,13 +2010,6 @@ class MissionFrontendHttpNode(MissionBackendNode):
         linear-gradient(90deg, #fdca0f 0 24%, transparent 24% 28%, #fdca0f 28% 52%, transparent 52% 56%, #fdca0f 56% 100%),
         repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.35) 0 8px, rgba(0, 0, 0, 0.1) 8px 16px);
     }}
-    .brand-logo {{
-      width: min(300px, 68vw);
-      height: auto;
-      display: block;
-      margin-top: 10px;
-      filter: brightness(0) saturate(100%) invert(85%) sepia(64%) saturate(872%) hue-rotate(356deg) brightness(103%) contrast(98%);
-    }}
     .nav {{
       display: flex;
       gap: 10px;
@@ -2111,7 +2064,6 @@ class MissionFrontendHttpNode(MissionBackendNode):
   <main>
     <section class="card">
       <h1>Developer</h1>
-      <img class="brand-logo" src="/assets/logo-o-robotics.svg" alt="O-Robotics logo">
       <div class="brand-band"></div>
       <div class="muted">Inspect recent ROS warning/error logs and the raw web status payload.</div>
       <div class="nav">

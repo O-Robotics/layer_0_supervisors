@@ -103,8 +103,6 @@ class MissionBackendNode(Node):
             "clear_safety_stop_service",
             "amr_sweeper_safety_controller/clear_safety_stop",
         ).value
-        self._brand_logo_path = Path(__file__).resolve().parent.parent / "assets" / "logo_o_robotics.svg"
-
         self._list_missions_client = self.create_client(
             ListExecutableMissions,
             self._list_missions_service,
