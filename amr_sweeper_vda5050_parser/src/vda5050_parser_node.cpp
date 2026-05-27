@@ -903,10 +903,29 @@ std::filesystem::path MissionParserNode::stageMissionFile(const std::filesystem:
     return staged_path;
   }
 
-  std::filesystem::copy_file(
-    mission_path,
-    staged_path,
-    std::filesystem::copy_options::overwrite_existing);
+  const auto source_stamp = currentMissionStamp(mission_path);
+  bool should_copy = true;
+  if (std::filesystem::exists(staged_path) && std::filesystem::is_regular_file(staged_path)) {
+    std::error_code size_error;
+    const auto source_size = std::filesystem::file_size(mission_path, size_error);
+    if (!size_error) {
+      std::error_code staged_size_error;
+      const auto staged_size = std::filesystem::file_size(staged_path, staged_size_error);
+      if (!staged_size_error) {
+        const auto staged_stamp = currentMissionStamp(staged_path);
+        should_copy = (source_size != staged_size) || (source_stamp != staged_stamp);
+      }
+    }
+  }
+
+  if (should_copy) {
+    std::filesystem::copy_file(
+      mission_path,
+      staged_path,
+      std::filesystem::copy_options::overwrite_existing);
+    std::error_code stamp_error;
+    std::filesystem::last_write_time(staged_path, source_stamp, stamp_error);
+  }
   return staged_path;
 }
 
