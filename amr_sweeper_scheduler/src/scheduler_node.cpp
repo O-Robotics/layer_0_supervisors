@@ -587,12 +587,12 @@ SchedulerNode::SchedulerNode(const rclcpp::NodeOptions & options)
   mission_executor_execute_client_ =
     create_client<amr_sweeper_mission_executor::srv::ExecuteMission>(
     mission_executor_execute_service_,
-    rmw_qos_profile_services_default,
+    rclcpp::ServicesQoS(),
     mission_executor_client_callback_group_);
   mission_executor_prepare_client_ =
     create_client<amr_sweeper_mission_executor::srv::PrepareManualMission>(
     mission_executor_prepare_service_,
-    rmw_qos_profile_services_default,
+    rclcpp::ServicesQoS(),
     mission_executor_client_callback_group_);
 
   reload_srv_ = create_service<std_srvs::srv::Trigger>(

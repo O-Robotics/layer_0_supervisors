@@ -106,6 +106,7 @@ class MissionWebServerNode(Node):
             "clear_safety_stop_service",
             "amr_sweeper_safety_controller/clear_safety_stop",
         ).value
+        self._brand_logo_path = Path(__file__).resolve().parent.parent / "assets" / "logo_o_robotics.svg"
 
         self._list_missions_client = self.create_client(
             ListExecutableMissions,
@@ -201,6 +202,9 @@ class MissionWebServerNode(Node):
                 if parsed.path == "/record-map":
                     self._send_html(node.render_record_map_html())
                     return
+                if parsed.path == "/assets/logo-o-robotics.svg":
+                    self._send_file(node._brand_logo_path, "image/svg+xml; charset=utf-8")
+                    return
                 if parsed.path == "/api/status":
                     self._send_json(HTTPStatus.OK, node.status_snapshot())
                     return
@@ -213,8 +217,8 @@ class MissionWebServerNode(Node):
                 if parsed.path == "/api/schedule":
                     try:
                         query = urllib.parse.parse_qs(parsed.query)
-                        month = query.get("month", [""])[0]
-                        self._send_json(HTTPStatus.OK, node.schedule_snapshot(month))
+                        week = query.get("week", [""])[0]
+                        self._send_json(HTTPStatus.OK, node.schedule_snapshot(week))
                     except Exception as exc:  # noqa: BLE001
                         self._send_json(HTTPStatus.BAD_GATEWAY, {"success": False, "message": str(exc)})
                     return
@@ -337,6 +341,18 @@ class MissionWebServerNode(Node):
                 self.send_response(status)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(encoded)))
+                self.end_headers()
+                self.wfile.write(encoded)
+
+            def _send_file(self, path: Path, content_type: str) -> None:
+                if not path.exists() or not path.is_file():
+                    self._send_json(HTTPStatus.NOT_FOUND, {"success": False, "message": "Asset not found"})
+                    return
+                encoded = path.read_bytes()
+                self.send_response(HTTPStatus.OK)
+                self.send_header("Content-Type", content_type)
+                self.send_header("Cache-Control", "public, max-age=3600")
                 self.send_header("Content-Length", str(len(encoded)))
                 self.end_headers()
                 self.wfile.write(encoded)
@@ -749,18 +765,29 @@ class MissionWebServerNode(Node):
         except IndexError:
             return None
 
-    def _expand_event_occurrences(self, event: dict[str, Any], year: int, month: int) -> list[dict[str, Any]]:
+    def _expand_event_occurrences(
+        self,
+        event: dict[str, Any],
+        range_start: datetime,
+        range_end: datetime,
+    ) -> list[dict[str, Any]]:
         if "DTSTART" not in event:
             return []
 
         start = self._parse_ics_datetime(event["DTSTART"])
-        end = self._parse_ics_datetime(event["DTEND"]) if "DTEND" in event else start + self._parse_ics_duration(event.get("DURATION", "PT0S"))
+        end = (
+            self._parse_ics_datetime(event["DTEND"])
+            if "DTEND" in event
+            else start + self._parse_ics_duration(event.get("DURATION", "PT0S"))
+        )
         duration = end - start
         rrule = self._parse_rrule(event.get("RRULE", ""))
         occurrences: list[dict[str, Any]] = []
 
         def append_occurrence(occurrence_start: datetime) -> None:
             occurrence_end = occurrence_start + duration
+            if occurrence_end <= range_start or occurrence_start >= range_end:
+                return
             occurrences.append(
                 {
                     "uid": event.get("UID", ""),
@@ -773,20 +800,20 @@ class MissionWebServerNode(Node):
                     "end": occurrence_end.isoformat(),
                     "date": occurrence_start.strftime("%Y-%m-%d"),
                     "time": occurrence_start.strftime("%H:%M"),
+                    "end_time": occurrence_end.strftime("%H:%M"),
                 }
             )
 
         if not rrule:
-            if start.year == year and start.month == month:
-                append_occurrence(start)
+            append_occurrence(start)
             return occurrences
 
         freq = rrule.get("FREQ", "")
         if freq == "DAILY":
             current = start
-            while current.year < year or (current.year == year and current.month < month):
+            while current + duration <= range_start:
                 current += timedelta(days=1)
-            while current.year == year and current.month == month:
+            while current < range_end:
                 append_occurrence(current)
                 current += timedelta(days=1)
             return occurrences
@@ -805,42 +832,58 @@ class MissionWebServerNode(Node):
             }
             weekday = weekday_lookup.get(byday)
             if weekday is not None:
-                occurrence_day = self._nth_weekday_of_month(year, month, weekday, bysetpos)
-                if occurrence_day is not None:
-                    append_occurrence(
-                        occurrence_day.replace(
-                            hour=start.hour,
-                            minute=start.minute,
-                            second=start.second,
-                        )
+                current_month = datetime(range_start.year, range_start.month, 1)
+                last_month = datetime(range_end.year, range_end.month, 1)
+                while current_month <= last_month:
+                    occurrence_day = self._nth_weekday_of_month(
+                        current_month.year,
+                        current_month.month,
+                        weekday,
+                        bysetpos,
                     )
+                    if occurrence_day is not None:
+                        append_occurrence(
+                            occurrence_day.replace(
+                                hour=start.hour,
+                                minute=start.minute,
+                                second=start.second,
+                            )
+                        )
+                    if current_month.month == 12:
+                        current_month = datetime(current_month.year + 1, 1, 1)
+                    else:
+                        current_month = datetime(current_month.year, current_month.month + 1, 1)
             return occurrences
 
-        if start.year == year and start.month == month:
-            append_occurrence(start)
+        append_occurrence(start)
         return occurrences
 
-    def schedule_snapshot(self, month: str) -> dict[str, Any]:
-        if month:
-            selected_year, selected_month = month.split("-", 1)
-            year = int(selected_year)
-            month_number = int(selected_month)
+    def schedule_snapshot(self, week: str) -> dict[str, Any]:
+        if week:
+            selected_year, selected_week = week.split("-W", 1)
+            week_start = datetime.fromisocalendar(int(selected_year), int(selected_week), 1)
         else:
             now = datetime.now()
-            year = now.year
-            month_number = now.month
+            iso_year, iso_week, _ = now.isocalendar()
+            week_start = datetime.fromisocalendar(iso_year, iso_week, 1)
 
+        week_end = week_start + timedelta(days=7)
         schedule_path, events = self._load_schedule_events()
         occurrences: list[dict[str, Any]] = []
         for event in events:
-            occurrences.extend(self._expand_event_occurrences(event, year, month_number))
+            occurrences.extend(self._expand_event_occurrences(event, week_start, week_end))
         occurrences.sort(key=lambda item: item["start"])
+
+        iso_year, iso_week, _ = week_start.isocalendar()
 
         return {
             "success": True,
             "schedule_path": str(schedule_path) if schedule_path is not None else "",
-            "month": f"{year:04d}-{month_number:02d}",
-            "month_name": f"{calendar.month_name[month_number]} {year}",
+            "week": f"{iso_year:04d}-W{iso_week:02d}",
+            "week_number": int(iso_week),
+            "week_label": f"Week {iso_week:02d} · {week_start.strftime('%d %b')} - {(week_end - timedelta(days=1)).strftime('%d %b %Y')}",
+            "week_start": week_start.strftime("%Y-%m-%d"),
+            "week_end": (week_end - timedelta(days=1)).strftime("%Y-%m-%d"),
             "events": occurrences,
         }
 
@@ -1043,11 +1086,11 @@ class MissionWebServerNode(Node):
   <title>{title}</title>
   <style>
     :root {{
-      --bg: #0d0f10;
-      --bg-alt: #1a1d1e;
-      --card: rgba(28, 31, 32, 0.94);
-      --card-strong: rgba(18, 20, 21, 0.98);
-      --panel: rgba(52, 53, 53, 0.42);
+      --bg: #1b1e20;
+      --bg-alt: #2b2f31;
+      --card: rgba(54, 58, 60, 0.94);
+      --card-strong: rgba(42, 46, 48, 0.98);
+      --panel: rgba(88, 92, 94, 0.48);
       --ink: #f5f1df;
       --muted: #c4bb98;
       --accent: #fdca0f;
@@ -1086,7 +1129,7 @@ class MissionWebServerNode(Node):
       padding: 24px;
       border: 1px solid rgba(253, 202, 15, 0.28);
       background:
-        linear-gradient(135deg, rgba(253, 202, 15, 0.14), rgba(18, 20, 21, 0.22) 42%),
+        linear-gradient(135deg, rgba(253, 202, 15, 0.16), rgba(42, 46, 48, 0.18) 42%),
         var(--card-strong);
       border-radius: 20px;
       box-shadow: 0 18px 44px rgba(0, 0, 0, 0.28);
@@ -1099,6 +1142,12 @@ class MissionWebServerNode(Node):
         linear-gradient(90deg, var(--accent) 0 24%, transparent 24% 28%, var(--accent) 28% 52%, transparent 52% 56%, var(--accent) 56% 100%),
         repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.35) 0 8px, rgba(0, 0, 0, 0.1) 8px 16px);
       box-shadow: inset 0 0 0 1px rgba(253, 202, 15, 0.32);
+    }}
+    .brand-logo {{
+      width: min(320px, 70vw);
+      height: auto;
+      display: block;
+      filter: brightness(0) saturate(100%) invert(85%) sepia(64%) saturate(872%) hue-rotate(356deg) brightness(103%) contrast(98%);
     }}
     .grid {{
       display: grid;
@@ -1273,11 +1322,12 @@ class MissionWebServerNode(Node):
   <main>
     <section class="hero">
       <h1>{title}</h1>
+      <img class="brand-logo" src="/assets/logo-o-robotics.svg" alt="O-Robotics logo">
       <div class="brand-band"></div>
       <div id="banner" class="banner"></div>
       <div class="nav">
         <a class="nav-link" href="/">Dashboard</a>
-        <a class="nav-link" href="/calendar">Schedule Calendar</a>
+        <a class="nav-link" href="/calendar">Calendar</a>
         <a class="nav-link" href="/map">Missions</a>
         <a class="nav-link" href="/developer">Developer</a>
         <a class="nav-link" href="/record-map">Record Map</a>
@@ -1501,13 +1551,13 @@ class MissionWebServerNode(Node):
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{title} - Schedule Calendar</title>
+  <title>{title} - Calendar</title>
   <style>
     :root {{
-      --bg: #0d0f10;
-      --bg-alt: #1a1d1e;
-      --card: rgba(28, 31, 32, 0.94);
-      --panel: rgba(52, 53, 53, 0.42);
+      --bg: #1b1e20;
+      --bg-alt: #2b2f31;
+      --card: rgba(54, 58, 60, 0.94);
+      --panel: rgba(88, 92, 94, 0.48);
       --ink: #f5f1df;
       --muted: #c4bb98;
       --accent: #fdca0f;
@@ -1552,6 +1602,20 @@ class MissionWebServerNode(Node):
         linear-gradient(90deg, var(--accent) 0 24%, transparent 24% 28%, var(--accent) 28% 52%, transparent 52% 56%, var(--accent) 56% 100%),
         repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.35) 0 8px, rgba(0, 0, 0, 0.1) 8px 16px);
     }}
+    .brand-logo {{
+      width: min(300px, 68vw);
+      height: auto;
+      display: block;
+      margin-top: 10px;
+      filter: brightness(0) saturate(100%) invert(85%) sepia(64%) saturate(872%) hue-rotate(356deg) brightness(103%) contrast(98%);
+    }}
+    .brand-logo {{
+      width: min(300px, 68vw);
+      height: auto;
+      display: block;
+      margin-top: 10px;
+      filter: brightness(0) saturate(100%) invert(85%) sepia(64%) saturate(872%) hue-rotate(356deg) brightness(103%) contrast(98%);
+    }}
     .nav {{
       display: flex;
       gap: 10px;
@@ -1578,6 +1642,12 @@ class MissionWebServerNode(Node):
       flex-wrap: wrap;
       margin: 18px 0;
     }}
+    .toolbar-group {{
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }}
     button {{
       border: 0;
       border-radius: 999px;
@@ -1591,39 +1661,93 @@ class MissionWebServerNode(Node):
       letter-spacing: 0.04em;
     }}
     button:hover {{ background: var(--accent-strong); }}
-    .calendar-grid {{
-      display: grid;
-      grid-template-columns: repeat(7, minmax(0, 1fr));
-      gap: 8px;
+    .week-shell {{
+      overflow-x: auto;
     }}
-    .day-head, .day-cell {{
+    .week-grid {{
+      display: grid;
+      grid-template-columns: 88px repeat(7, minmax(140px, 1fr));
+      gap: 8px;
+      min-width: 1100px;
+      align-items: start;
+    }}
+    .corner, .day-head, .time-rail, .day-column {{
       border: 1px solid var(--line);
       border-radius: 14px;
       background: var(--panel);
-      min-height: 110px;
-      padding: 10px;
+    }}
+    .corner, .day-head {{
+      min-height: 86px;
+      padding: 10px 12px;
     }}
     .day-head {{
-      min-height: auto;
       font-weight: 700;
-      text-align: center;
       background: rgba(253, 202, 15, 0.14);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }}
+    .day-name {{
+      font-size: 0.82rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
     }}
     .day-number {{
       font-weight: 700;
-      margin-bottom: 8px;
+      font-size: 1.1rem;
+    }}
+    .corner {{
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      font-size: 0.82rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }}
+    .time-rail {{
+      min-height: 1536px;
+      padding: 0;
+      overflow: hidden;
+    }}
+    .time-slot {{
+      height: 64px;
+      padding: 6px 10px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: flex-end;
+      color: var(--muted);
+      font-size: 0.82rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }}
+    .day-column {{
+      position: relative;
+      min-height: 1536px;
+      overflow: hidden;
+      background:
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+      background-size: 100% 64px;
     }}
     .event-chip {{
-      display: block;
-      border-radius: 10px;
-      padding: 6px 8px;
-      font-size: 0.8rem;
-      color: white;
-      margin-bottom: 6px;
+      position: absolute;
+      left: 8px;
+      right: 8px;
+      border-radius: 12px;
+      padding: 8px 10px;
+      font-size: 0.78rem;
+      color: #101214;
+      overflow: hidden;
+      border: 1px solid rgba(16, 18, 20, 0.18);
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.18);
     }}
     .event-chip.WORK {{ background: var(--work); }}
-    .event-chip.NO_WORK {{ background: var(--nowork); }}
-    .event-chip.SAFETY {{ background: var(--safety); }}
+    .event-chip.NO_WORK {{ background: var(--nowork); color: var(--ink); }}
+    .event-chip.SAFETY {{ background: var(--safety); color: #fff4ec; }}
+    .event-time {{
+      font-weight: 700;
+      margin-bottom: 4px;
+    }}
     .muted {{ color: var(--muted); }}
     .legend {{
       display: flex;
@@ -1632,30 +1756,43 @@ class MissionWebServerNode(Node):
       margin-top: 12px;
       font-size: 0.9rem;
     }}
+    @media (max-width: 900px) {{
+      .toolbar {{
+        align-items: flex-start;
+      }}
+    }}
   </style>
 </head>
 <body>
   <main>
     <section class="card">
-      <h1>Schedule Calendar</h1>
+      <h1>Calendar</h1>
+      <img class="brand-logo" src="/assets/logo-o-robotics.svg" alt="O-Robotics logo">
       <div class="brand-band"></div>
-      <div class="muted">View the currently active ICS schedule as a calendar month.</div>
+      <div class="muted">View the active schedule as a weekly planner with full 24-hour day lanes.</div>
       <div class="nav">
         <a class="nav-link" href="/">Dashboard</a>
-        <a class="nav-link" href="/calendar">Schedule Calendar</a>
+        <a class="nav-link" href="/calendar">Calendar</a>
         <a class="nav-link" href="/map">Missions</a>
         <a class="nav-link" href="/developer">Developer</a>
         <a class="nav-link" href="/record-map">Record Map</a>
       </div>
     </section>
     <section class="toolbar">
-      <button id="prev-month">Previous</button>
-      <div id="month-label" style="font-size: 1.2rem; font-weight: 700;">Loading...</div>
-      <button id="next-month">Next</button>
+      <div class="toolbar-group">
+        <button id="prev-week">Previous Week</button>
+        <button id="next-week">Next Week</button>
+      </div>
+      <div class="toolbar-group">
+        <div id="week-number" style="font-size: 0.95rem; font-weight: 700; color: var(--accent);">Week --</div>
+        <div id="week-label" style="font-size: 1.2rem; font-weight: 700;">Loading...</div>
+      </div>
     </section>
     <section class="card">
       <div id="schedule-path" class="muted" style="margin-bottom: 12px;">Schedule: -</div>
-      <div id="calendar-grid" class="calendar-grid"></div>
+      <div class="week-shell">
+        <div id="calendar-grid" class="week-grid"></div>
+      </div>
       <div class="legend">
         <span><strong style="color: var(--work);">WORK</strong> mission windows</span>
         <span><strong style="color: var(--nowork);">NO_WORK</strong> blackout windows</span>
@@ -1664,75 +1801,133 @@ class MissionWebServerNode(Node):
     </section>
   </main>
   <script>
-    let activeMonth = '';
+    let activeWeek = '';
     const weekdayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const hourHeight = 64;
 
-    function shiftMonth(month, delta) {{
-      const [year, monthNumber] = month.split('-').map(Number);
-      const date = new Date(year, monthNumber - 1 + delta, 1);
-      return `${{date.getFullYear()}}-${{String(date.getMonth() + 1).padStart(2, '0')}}`;
+    function shiftWeek(week, delta) {{
+      const [yearPart, weekPart] = week.split('-W');
+      const year = Number(yearPart);
+      const weekNumber = Number(weekPart);
+      const monday = isoWeekStart(year, weekNumber);
+      monday.setDate(monday.getDate() + (delta * 7));
+      return toIsoWeekString(monday);
     }}
 
-    async function loadCalendar(month) {{
-      const response = await fetch(`/api/schedule?month=${{encodeURIComponent(month)}}`, {{ cache: 'no-store' }});
+    function isoWeekStart(year, weekNumber) {{
+      const januaryFourth = new Date(Date.UTC(year, 0, 4));
+      const weekday = januaryFourth.getUTCDay() || 7;
+      const monday = new Date(januaryFourth);
+      monday.setUTCDate(januaryFourth.getUTCDate() - weekday + 1 + ((weekNumber - 1) * 7));
+      return monday;
+    }}
+
+    function toIsoWeekString(date) {{
+      const utcDate = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+      const weekday = utcDate.getUTCDay() || 7;
+      utcDate.setUTCDate(utcDate.getUTCDate() + 4 - weekday);
+      const yearStart = new Date(Date.UTC(utcDate.getUTCFullYear(), 0, 1));
+      const weekNumber = Math.ceil((((utcDate - yearStart) / 86400000) + 1) / 7);
+      return `${{utcDate.getUTCFullYear()}}-W${{String(weekNumber).padStart(2, '0')}}`;
+    }}
+
+    function minutesSinceMidnight(dateText) {{
+      const date = new Date(dateText);
+      return (date.getHours() * 60) + date.getMinutes();
+    }}
+
+    function clamp(value, min, max) {{
+      return Math.max(min, Math.min(max, value));
+    }}
+
+    async function loadCalendar(week) {{
+      const response = await fetch(`/api/schedule?week=${{encodeURIComponent(week)}}`, {{ cache: 'no-store' }});
       const data = await response.json();
-      activeMonth = data.month;
-      document.getElementById('month-label').textContent = data.month_name || data.month;
+      activeWeek = data.week;
+      document.getElementById('week-label').textContent = data.week_label || data.week;
+      document.getElementById('week-number').textContent = `CW ${{data.week_number ?? '--'}}`;
       document.getElementById('schedule-path').textContent = `Schedule: ${{data.schedule_path || '-'}}`;
 
       const grid = document.getElementById('calendar-grid');
       grid.innerHTML = '';
-      for (const name of weekdayNames) {{
+      const weekStart = new Date(`${{data.week_start}}T00:00:00`);
+
+      const corner = document.createElement('div');
+      corner.className = 'corner';
+      corner.textContent = '24H';
+      grid.appendChild(corner);
+
+      const timeRail = document.createElement('div');
+      timeRail.className = 'time-rail';
+      for (let hour = 0; hour < 24; hour += 1) {{
+        const slot = document.createElement('div');
+        slot.className = 'time-slot';
+        slot.textContent = `${{String(hour).padStart(2, '0')}}:00`;
+        timeRail.appendChild(slot);
+      }}
+
+      const dayColumns = [];
+      for (let index = 0; index < 7; index += 1) {{
+        const current = new Date(weekStart);
+        current.setDate(weekStart.getDate() + index);
+
         const head = document.createElement('div');
         head.className = 'day-head';
-        head.textContent = name;
+        head.innerHTML = `
+          <div class="day-name">${{weekdayNames[index]}}</div>
+          <div class="day-number">${{String(current.getDate()).padStart(2, '0')}}.${{String(current.getMonth() + 1).padStart(2, '0')}}</div>
+        `;
         grid.appendChild(head);
       }}
 
-      const [year, monthNumber] = data.month.split('-').map(Number);
-      const firstDay = new Date(year, monthNumber - 1, 1);
-      const monthDays = new Date(year, monthNumber, 0).getDate();
-      const firstWeekday = (firstDay.getDay() + 6) % 7;
-      const eventsByDate = new Map();
+      grid.appendChild(timeRail);
+      for (let dayIndex = 0; dayIndex < 7; dayIndex += 1) {{
+        const dayColumn = document.createElement('div');
+        dayColumn.className = 'day-column';
+        dayColumn.dataset.dayIndex = String(dayIndex);
+        dayColumns.push(dayColumn);
+        grid.appendChild(dayColumn);
+      }}
+
+      const weekStartMs = weekStart.getTime();
       for (const event of data.events || []) {{
-        const existing = eventsByDate.get(event.date) || [];
-        existing.push(event);
-        eventsByDate.set(event.date, existing);
-      }}
-
-      for (let i = 0; i < firstWeekday; i += 1) {{
-        const empty = document.createElement('div');
-        empty.className = 'day-cell';
-        grid.appendChild(empty);
-      }}
-
-      for (let day = 1; day <= monthDays; day += 1) {{
-        const dateKey = `${{year}}-${{String(monthNumber).padStart(2, '0')}}-${{String(day).padStart(2, '0')}}`;
-        const cell = document.createElement('div');
-        cell.className = 'day-cell';
-        const events = eventsByDate.get(dateKey) || [];
-        cell.innerHTML = `<div class="day-number">${{day}}</div>`;
-        for (const event of events) {{
-          const chip = document.createElement('div');
-          chip.className = `event-chip ${{event.schedule_type || 'WORK'}}`;
-          chip.textContent = `${{event.time}} ${{event.summary || event.schedule_type || 'Event'}}`;
-          chip.title = event.description || event.summary || '';
-          cell.appendChild(chip);
+        const start = new Date(event.start);
+        const end = new Date(event.end);
+        const dayIndex = Math.floor((start.getTime() - weekStartMs) / 86400000);
+        if (dayIndex < 0 || dayIndex > 6) {{
+          continue;
         }}
-        grid.appendChild(cell);
+        const column = dayColumns[dayIndex];
+        const startMinutes = clamp(minutesSinceMidnight(event.start), 0, 1440);
+        const startDate = new Date(event.start);
+        const endDate = new Date(event.end);
+        const sameDay = startDate.toDateString() === endDate.toDateString();
+        const endMinutes = sameDay ? clamp(minutesSinceMidnight(event.end), 0, 1440) : 1440;
+        const durationMinutes = Math.max(30, endMinutes - startMinutes);
+
+        const chip = document.createElement('div');
+        chip.className = `event-chip ${{event.schedule_type || 'WORK'}}`;
+        chip.style.top = `${{(startMinutes / 60) * hourHeight + 6}}px`;
+        chip.style.height = `${{Math.max(28, (durationMinutes / 60) * hourHeight - 8)}}px`;
+        chip.title = event.description || event.summary || '';
+        chip.innerHTML = `
+          <div class="event-time">${{event.time}} - ${{event.end_time || ''}}</div>
+          <div><strong>${{event.summary || event.schedule_type || 'Event'}}</strong></div>
+          <div>${{event.mission_id || event.robot_id || ''}}</div>
+        `;
+        column.appendChild(chip);
       }}
     }}
 
-    document.getElementById('prev-month').addEventListener('click', async () => {{
-      await loadCalendar(shiftMonth(activeMonth, -1));
+    document.getElementById('prev-week').addEventListener('click', async () => {{
+      await loadCalendar(shiftWeek(activeWeek, -1));
     }});
 
-    document.getElementById('next-month').addEventListener('click', async () => {{
-      await loadCalendar(shiftMonth(activeMonth, 1));
+    document.getElementById('next-week').addEventListener('click', async () => {{
+      await loadCalendar(shiftWeek(activeWeek, 1));
     }});
 
-    const now = new Date();
-    loadCalendar(`${{now.getFullYear()}}-${{String(now.getMonth() + 1).padStart(2, '0')}}`);
+    loadCalendar(toIsoWeekString(new Date()));
   </script>
 </body>
 </html>
@@ -1754,11 +1949,11 @@ class MissionWebServerNode(Node):
   >
   <style>
     :root {{
-      --bg: #0d0f10;
-      --bg-alt: #1a1d1e;
-      --card: rgba(28, 31, 32, 0.94);
-      --card-strong: rgba(18, 20, 21, 0.98);
-      --panel: rgba(52, 53, 53, 0.42);
+      --bg: #1b1e20;
+      --bg-alt: #2b2f31;
+      --card: rgba(54, 58, 60, 0.94);
+      --card-strong: rgba(42, 46, 48, 0.98);
+      --panel: rgba(88, 92, 94, 0.48);
       --ink: #f5f1df;
       --muted: #c4bb98;
       --accent: #fdca0f;
@@ -1794,7 +1989,7 @@ class MissionWebServerNode(Node):
       display: grid;
       gap: 12px;
       background:
-        linear-gradient(135deg, rgba(253, 202, 15, 0.14), rgba(18, 20, 21, 0.22) 42%),
+        linear-gradient(135deg, rgba(253, 202, 15, 0.16), rgba(42, 46, 48, 0.18) 42%),
         var(--card-strong);
     }}
     h1, h2 {{
@@ -1809,6 +2004,12 @@ class MissionWebServerNode(Node):
       background:
         linear-gradient(90deg, var(--accent) 0 24%, transparent 24% 28%, var(--accent) 28% 52%, transparent 52% 56%, var(--accent) 56% 100%),
         repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.35) 0 8px, rgba(0, 0, 0, 0.1) 8px 16px);
+    }}
+    .brand-logo {{
+      width: min(320px, 72vw);
+      height: auto;
+      display: block;
+      filter: brightness(0) saturate(100%) invert(85%) sepia(64%) saturate(872%) hue-rotate(356deg) brightness(103%) contrast(98%);
     }}
     .nav {{
       display: flex;
@@ -1925,7 +2126,7 @@ class MissionWebServerNode(Node):
     button.stop {{ background: var(--danger); }}
     button.secondary {{
       color: var(--ink);
-      background: rgba(52, 53, 53, 0.78);
+      background: rgba(96, 100, 102, 0.72);
       border: 1px solid var(--line);
     }}
     .banner {{
@@ -1953,12 +2154,13 @@ class MissionWebServerNode(Node):
   <main>
     <section class="card hero">
       <h1>Record Map And Create Missions</h1>
+      <img class="brand-logo" src="/assets/logo-o-robotics.svg" alt="O-Robotics logo">
       <div class="brand-band"></div>
       <div class="muted">Drive the robot around the working-area perimeter, let RecordMap update the latest recorded map, then create one or more named autonomous missions from that map using a sweep pattern.</div>
       <div id="banner" class="banner"></div>
       <div class="nav">
         <a class="nav-link" href="/">Dashboard</a>
-        <a class="nav-link" href="/calendar">Schedule Calendar</a>
+        <a class="nav-link" href="/calendar">Calendar</a>
         <a class="nav-link" href="/map">Missions</a>
         <a class="nav-link" href="/developer">Developer</a>
         <a class="nav-link" href="/record-map">Record Map</a>
@@ -2258,10 +2460,10 @@ class MissionWebServerNode(Node):
   <title>{title} - Missions</title>
   <style>
     :root {{
-      --bg: #0d0f10;
-      --bg-alt: #1a1d1e;
-      --card: rgba(28, 31, 32, 0.94);
-      --panel: rgba(52, 53, 53, 0.42);
+      --bg: #1b1e20;
+      --bg-alt: #2b2f31;
+      --card: rgba(54, 58, 60, 0.94);
+      --panel: rgba(88, 92, 94, 0.48);
       --ink: #f5f1df;
       --muted: #c4bb98;
       --accent: #fdca0f;
@@ -2303,6 +2505,13 @@ class MissionWebServerNode(Node):
       background:
         linear-gradient(90deg, var(--accent) 0 24%, transparent 24% 28%, var(--accent) 28% 52%, transparent 52% 56%, var(--accent) 56% 100%),
         repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.35) 0 8px, rgba(0, 0, 0, 0.1) 8px 16px);
+    }}
+    .brand-logo {{
+      width: min(300px, 68vw);
+      height: auto;
+      display: block;
+      margin-top: 10px;
+      filter: brightness(0) saturate(100%) invert(85%) sepia(64%) saturate(872%) hue-rotate(356deg) brightness(103%) contrast(98%);
     }}
     .nav {{
       display: flex;
@@ -2388,12 +2597,13 @@ class MissionWebServerNode(Node):
   <main>
     <section class="card">
       <h1>Missions</h1>
+      <img class="brand-logo" src="/assets/logo-o-robotics.svg" alt="O-Robotics logo">
       <div class="brand-band"></div>
       <div class="muted">Preview built or decoded mission routes from the synced mission database, and upload VDA5050 missions.</div>
       <div id="banner" class="banner"></div>
       <div class="nav">
         <a class="nav-link" href="/">Dashboard</a>
-        <a class="nav-link" href="/calendar">Schedule Calendar</a>
+        <a class="nav-link" href="/calendar">Calendar</a>
         <a class="nav-link" href="/map">Missions</a>
         <a class="nav-link" href="/developer">Developer</a>
         <a class="nav-link" href="/record-map">Record Map</a>
@@ -2512,7 +2722,7 @@ class MissionWebServerNode(Node):
 
       frame.innerHTML = `
         <svg viewBox="0 0 ${{viewWidth}} ${{viewHeight}}" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-          <rect x="0" y="0" width="${{viewWidth}}" height="${{viewHeight}}" fill="#171919" />
+          <rect x="0" y="0" width="${{viewWidth}}" height="${{viewHeight}}" fill="#2c3032" />
           <g opacity="0.15">
             <line x1="40" y1="40" x2="40" y2="${{viewHeight - 40}}" stroke="#eef3eb" />
             <line x1="40" y1="${{viewHeight - 40}}" x2="${{viewWidth - 40}}" y2="${{viewHeight - 40}}" stroke="#eef3eb" />
@@ -2584,10 +2794,10 @@ class MissionWebServerNode(Node):
   <title>{title} - Developer</title>
   <style>
     :root {{
-      --bg: #0d0f10;
-      --bg-alt: #1a1d1e;
-      --card: rgba(28, 31, 32, 0.94);
-      --panel: rgba(52, 53, 53, 0.42);
+      --bg: #1b1e20;
+      --bg-alt: #2b2f31;
+      --card: rgba(54, 58, 60, 0.94);
+      --panel: rgba(88, 92, 94, 0.48);
       --ink: #f5f1df;
       --muted: #c4bb98;
       --line: rgba(253, 202, 15, 0.22);
@@ -2626,6 +2836,13 @@ class MissionWebServerNode(Node):
       background:
         linear-gradient(90deg, #fdca0f 0 24%, transparent 24% 28%, #fdca0f 28% 52%, transparent 52% 56%, #fdca0f 56% 100%),
         repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.35) 0 8px, rgba(0, 0, 0, 0.1) 8px 16px);
+    }}
+    .brand-logo {{
+      width: min(300px, 68vw);
+      height: auto;
+      display: block;
+      margin-top: 10px;
+      filter: brightness(0) saturate(100%) invert(85%) sepia(64%) saturate(872%) hue-rotate(356deg) brightness(103%) contrast(98%);
     }}
     .nav {{
       display: flex;
@@ -2681,11 +2898,12 @@ class MissionWebServerNode(Node):
   <main>
     <section class="card">
       <h1>Developer</h1>
+      <img class="brand-logo" src="/assets/logo-o-robotics.svg" alt="O-Robotics logo">
       <div class="brand-band"></div>
       <div class="muted">Inspect recent ROS warning/error logs and the raw web status payload.</div>
       <div class="nav">
         <a class="nav-link" href="/">Dashboard</a>
-        <a class="nav-link" href="/calendar">Schedule Calendar</a>
+        <a class="nav-link" href="/calendar">Calendar</a>
         <a class="nav-link" href="/map">Missions</a>
         <a class="nav-link" href="/developer">Developer</a>
         <a class="nav-link" href="/record-map">Record Map</a>
