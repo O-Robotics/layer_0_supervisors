@@ -34,8 +34,20 @@ profiles:
               - type: "topic"
                 target: "system_info"
                 required: true
+              - type: "topic"
+                target: "gnss/navsat"
+                required: true
+              - type: "topic"
+                target: "battery_state"
+                required: true
               - type: "service"
                 target: "amr_sweeper_battery_node/get_parameters"
+                required: true
+              - type: "service"
+                target: "amr_sweeper_system_info_node/get_parameters"
+                required: true
+              - type: "service"
+                target: "amr_sweeper_gnss_ublox_node/get_parameters"
                 required: true
             window_ms: 10000
           rosout_triggers:
