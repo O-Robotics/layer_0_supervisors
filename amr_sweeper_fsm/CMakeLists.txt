@@ -24,6 +24,7 @@ find_package(lifecycle_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(builtin_interfaces REQUIRED)
 find_package(rcl_interfaces REQUIRED)
+find_package(controller_manager_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 
 # -----------------------------
@@ -61,6 +62,7 @@ ament_target_dependencies(fsm_state_common
   lifecycle_msgs
   ament_index_cpp
   rcl_interfaces
+  controller_manager_msgs
 )
 
 target_link_libraries(fsm_state_common
@@ -87,6 +89,7 @@ ament_target_dependencies(supervisor_node
   lifecycle_msgs
   ament_index_cpp
   rcl_interfaces
+  controller_manager_msgs
 )
 
 target_link_libraries(supervisor_node
@@ -109,6 +112,7 @@ function(add_state_node target src)
     rclcpp_lifecycle
     lifecycle_msgs
     rcl_interfaces
+    controller_manager_msgs
   )
   target_link_libraries(${target}
     fsm_state_common

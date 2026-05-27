@@ -55,7 +55,16 @@ profiles:
                 target: "imu/data_raw"
                 required: true
               - type: "topic"
+                target: "imu/data_acc_gyro"
+                required: true
+              - type: "topic"
+                target: "imu/data_heading"
+                required: true
+              - type: "topic"
                 target: "gnss/navsat"
+                required: true
+              - type: "topic"
+                target: "battery_state"
                 required: true
               - type: "topic"
                 target: "robot_description"
@@ -85,10 +94,37 @@ profiles:
                 target: "depth_camera/depth/color/points"
                 required: false
               - type: "service"
+                target: "robot_state_publisher/get_parameters"
+                required: true
+              - type: "service"
                 target: "amr_sweeper_battery_node/get_parameters"
                 required: true
               - type: "service"
+                target: "amr_sweeper_system_info_node/get_parameters"
+                required: true
+              - type: "service"
+                target: "imu_node/get_parameters"
+                required: true
+              - type: "service"
+                target: "amr_sweeper_gnss_ublox_node/get_parameters"
+                required: true
+              - type: "service"
+                target: "ntrip_client/get_parameters"
+                required: true
+              - type: "service"
                 target: "controller_manager/list_controllers"
+                required: true
+              - type: "service"
+                target: "controller_manager/list_hardware_components"
+                required: true
+              - type: "controller"
+                target: "joint_broad"
+                required: true
+              - type: "controller"
+                target: "diff_cont"
+                required: true
+              - type: "controller"
+                target: "controller_steadydrive"
                 required: true
             window_ms: 20000
           rosout_triggers:
@@ -157,6 +193,24 @@ profiles:
                 required: true
               - type: "service"
                 target: "amr_sweeper_safety_controller/enable_controller"
+                required: true
+              - type: "service"
+                target: "wheel_command_stamper/get_parameters"
+                required: true
+              - type: "service"
+                target: "tool_controller_node/get_parameters"
+                required: true
+              - type: "service"
+                target: "sweeping_controller_node/get_parameters"
+                required: true
+              - type: "service"
+                target: "collision_detector/get_parameters"
+                required: true
+              - type: "service"
+                target: "safety_controller/get_parameters"
+                required: true
+              - type: "service"
+                target: "amr_sweeper_collision_detector/enable_detector"
                 required: true
             window_ms: 15000
           rosout_triggers:

@@ -181,6 +181,8 @@ namespace {
             pp.ready_topics.push_back(target);
           } else if (type == "service") {
             pp.ready_services.push_back(target);
+          } else if (type == "controller") {
+            pp.ready_active_controllers.push_back(target);
           }
         }
       }
@@ -1163,6 +1165,48 @@ bool StateNodeBase::graph_has_service(const std::string & service_name)
   return false;
 }
 
+bool StateNodeBase::controller_is_active(const std::string & controller_name, std::string & why_not)
+{
+  const std::string srv = qualify_to_ns("controller_manager/list_controllers");
+
+  // Make probe node name unique to avoid rosout publisher collisions if checks repeat/overlap.
+  const uint64_t id = g_probe_seq.fetch_add(1, std::memory_order_relaxed);
+  const std::string probe_name = "fsm_cprobe_" + std::to_string(id);
+  auto probe = std::make_shared<rclcpp::Node>(
+    probe_name,
+    rclcpp::NodeOptions().context(this->get_node_base_interface()->get_context()));
+
+  auto client = probe->create_client<controller_manager_msgs::srv::ListControllers>(srv);
+  if (!client->wait_for_service(std::chrono::milliseconds(0))) {
+    why_not = "controller manager service not available: '" + srv + "'";
+    return false;
+  }
+
+  auto req = std::make_shared<controller_manager_msgs::srv::ListControllers::Request>();
+  auto future = client->async_send_request(req);
+  const auto rc = future.wait_for(std::chrono::milliseconds(500));
+  if (rc != std::future_status::ready) {
+    why_not = "controller manager did not answer list_controllers for '" + controller_name + "'";
+    return false;
+  }
+
+  const auto resp = future.get();
+  for (const auto & controller : resp->controller) {
+    if (controller.name == controller_name) {
+      if (controller.state == "active") {
+        why_not.clear();
+        return true;
+      }
+      why_not =
+        "controller '" + controller_name + "' state is '" + controller.state + "' (expected 'active')";
+      return false;
+    }
+  }
+
+  why_not = "controller '" + controller_name + "' not listed by controller_manager";
+  return false;
+}
+
 
 bool StateNodeBase::lifecycle_node_meets_requirement(
   const ReadySpec::LifecycleNodeRequirement & req,
@@ -1235,7 +1279,7 @@ bool StateNodeBase::wait_for_readiness(std::string & why_not)
   for (const auto & pp : profile_processes_) {
     if (pp.importance == ProcessImportance::CRITICAL &&
         pp.window_ms > 0 &&
-        (!pp.ready_topics.empty() || !pp.ready_services.empty())) {
+        (!pp.ready_topics.empty() || !pp.ready_services.empty() || !pp.ready_active_controllers.empty())) {
       has_profile_critical_reqs = true;
       break;
     }
@@ -1328,6 +1372,18 @@ bool StateNodeBase::wait_for_readiness(std::string & why_not)
           if (!graph_has_service(s)) {
             proc_waiting = true;
             why_not = missing_reason_for("service", s);
+            break;
+          }
+        }
+      }
+
+      if (!proc_waiting) {
+        for (const auto & c : pp.ready_active_controllers) {
+          std::string cwhy;
+          if (!controller_is_active(c, cwhy)) {
+            proc_waiting = true;
+            const std::string pname = pp.name.empty() ? pp.command : pp.name;
+            why_not = "profile process '" + pname + "' not ready: " + cwhy;
             break;
           }
         }
@@ -1796,6 +1852,14 @@ bool StateNodeBase::profile_process_readiness_satisfied_(
     }
   }
 
+  for (const auto & c : pp.ready_active_controllers) {
+    if (!controller_is_active(c, why_not)) {
+      const std::string pname = pp.name.empty() ? pp.command : pp.name;
+      why_not = "profile process '" + pname + "' not ready: " + why_not;
+      return false;
+    }
+  }
+
   why_not.clear();
   return true;
 }
@@ -1804,7 +1868,7 @@ bool StateNodeBase::wait_for_profile_process_readiness_(
   const ProfileProcess & pp,
   std::string & why_not)
 {
-  if (pp.ready_topics.empty() && pp.ready_services.empty()) {
+  if (pp.ready_topics.empty() && pp.ready_services.empty() && pp.ready_active_controllers.empty()) {
     why_not.clear();
     return true;
   }
@@ -1840,7 +1904,10 @@ bool StateNodeBase::start_state_processes(std::string & why_not)
     for (const auto & pp : profile_processes_) {
       const auto cmd = resolve_placeholders(pp.command);
       const std::string pname = pp.name.empty() ? cmd : pp.name;
-      const bool has_process_readiness = !pp.ready_topics.empty() || !pp.ready_services.empty();
+      const bool has_process_readiness =
+        !pp.ready_topics.empty() ||
+        !pp.ready_services.empty() ||
+        !pp.ready_active_controllers.empty();
       std::string err;
 
       if (!procman_.start(cmd, err)) {

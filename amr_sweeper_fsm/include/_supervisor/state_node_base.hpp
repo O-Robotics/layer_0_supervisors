@@ -3,11 +3,13 @@
 #include "amr_sweeper_fsm/srv/request_state.hpp"
 
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <set>
 #include <string>
 #include <vector>
 
+#include "controller_manager_msgs/srv/list_controllers.hpp"
 #include "_supervisor/process_manager.hpp"
 #include "rcl_interfaces/msg/log.hpp"
 #include "rclcpp/rclcpp.hpp"
@@ -35,6 +37,7 @@ struct ProfileProcess
 
   std::vector<std::string> ready_topics;
   std::vector<std::string> ready_services;
+  std::vector<std::string> ready_active_controllers;
 
 
   // Optional per-process error policy (declared under `errors:` in the profile YAML).
@@ -188,6 +191,9 @@ protected:
 
   // Helper: true if service exists in ROS graph.
   bool graph_has_service(const std::string & service_name);
+
+  // Helper: true if the named ros2_control controller is listed as active.
+  bool controller_is_active(const std::string & controller_name, std::string & why_not);
 
   // Helper: true if lifecycle node state is >= required minimum.
   bool lifecycle_node_meets_requirement(
