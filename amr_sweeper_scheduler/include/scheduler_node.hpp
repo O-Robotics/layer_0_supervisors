@@ -136,6 +136,7 @@ private:
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr reload_srv_;
   rclcpp::Service<amr_sweeper_scheduler::srv::PrepareMissionExecution>::SharedPtr
     prepare_mission_execution_srv_;
+  rclcpp::CallbackGroup::SharedPtr mission_executor_client_callback_group_;
   rclcpp::Client<amr_sweeper_mission_executor::srv::ExecuteMission>::SharedPtr
     mission_executor_execute_client_;
   rclcpp::Client<amr_sweeper_mission_executor::srv::PrepareManualMission>::SharedPtr

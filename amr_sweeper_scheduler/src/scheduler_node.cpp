@@ -582,12 +582,18 @@ SchedulerNode::SchedulerNode(const rclcpp::NodeOptions & options)
     trigger_pub_ = create_publisher<std_msgs::msg::String>(trigger_topic_name_, 10);
   }
 
+  mission_executor_client_callback_group_ =
+    create_callback_group(rclcpp::CallbackGroupType::Reentrant);
   mission_executor_execute_client_ =
     create_client<amr_sweeper_mission_executor::srv::ExecuteMission>(
-    mission_executor_execute_service_);
+    mission_executor_execute_service_,
+    rmw_qos_profile_services_default,
+    mission_executor_client_callback_group_);
   mission_executor_prepare_client_ =
     create_client<amr_sweeper_mission_executor::srv::PrepareManualMission>(
-    mission_executor_prepare_service_);
+    mission_executor_prepare_service_,
+    rmw_qos_profile_services_default,
+    mission_executor_client_callback_group_);
 
   reload_srv_ = create_service<std_srvs::srv::Trigger>(
     "reload_schedule",
@@ -1013,7 +1019,9 @@ int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
   auto node = std::make_shared<amr_sweeper_scheduler::SchedulerNode>();
-  rclcpp::spin(node);
+  rclcpp::executors::MultiThreadedExecutor executor;
+  executor.add_node(node);
+  executor.spin();
   rclcpp::shutdown();
   return 0;
 }
