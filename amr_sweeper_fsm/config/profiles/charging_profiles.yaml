@@ -39,10 +39,25 @@ profiles:
               - type: "topic"
                 target: "imu/data_raw"
                 required: true
+              - type: "topic"
+                target: "gnss/navsat"
+                required: true
+              - type: "topic"
+                target: "robot_description"
+                required: true
+              - type: "topic"
+                target: "joint_states"
+                required: true
+              - type: "topic"
+                target: "diff_cont/odom"
+                required: true
               - type: "service"
                 target: "amr_sweeper_battery_node/get_parameters"
                 required: true
-            window_ms: 8000
+              - type: "service"
+                target: "controller_manager/list_controllers"
+                required: true
+            window_ms: 20000
           rosout_triggers:
             - "node=amr_sweeper_system_info_node;level>=ERROR;action=FAULT"
             - "node=amr_sweeper_system_info_node;level>=WARN;action=DEGRADED"

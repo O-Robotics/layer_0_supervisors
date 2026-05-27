@@ -51,10 +51,13 @@ profiles:
               - type: "topic"
                 target: "system_info"
                 required: true
+              - type: "topic"
+                target: "robot_description"
+                required: true
               - type: "service"
                 target: "amr_sweeper_battery_node/get_parameters"
                 required: true
-            window_ms: 8000
+            window_ms: 10000
           rosout_triggers:
             - "node=amr_sweeper_system_info_node;level>=ERROR;action=FAULT"
             - "node=amr_sweeper_system_info_node;level>=WARN;action=DEGRADED"

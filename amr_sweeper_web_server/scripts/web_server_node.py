@@ -1043,24 +1043,28 @@ class MissionWebServerNode(Node):
   <title>{title}</title>
   <style>
     :root {{
-      --bg: #f4f1ea;
-      --card: #fffaf2;
-      --ink: #10212b;
-      --muted: #5d6c74;
-      --accent: #0f766e;
-      --accent-strong: #115e59;
-      --warn: #b45309;
-      --danger: #b91c1c;
-      --line: #d9d3c7;
+      --bg: #0d0f10;
+      --bg-alt: #1a1d1e;
+      --card: rgba(28, 31, 32, 0.94);
+      --card-strong: rgba(18, 20, 21, 0.98);
+      --panel: rgba(52, 53, 53, 0.42);
+      --ink: #f5f1df;
+      --muted: #c4bb98;
+      --accent: #fdca0f;
+      --accent-strong: #ffe06b;
+      --warn: #fdca0f;
+      --danger: #ff7b5c;
+      --line: rgba(253, 202, 15, 0.22);
     }}
     * {{ box-sizing: border-box; }}
     body {{
       margin: 0;
-      font-family: "Segoe UI", "Helvetica Neue", sans-serif;
+      font-family: "Avenir Next", "Segoe UI", sans-serif;
       color: var(--ink);
       background:
-        radial-gradient(circle at top left, rgba(15, 118, 110, 0.12), transparent 30%),
-        linear-gradient(160deg, #f5f1e7 0%, #ece8df 100%);
+        radial-gradient(circle at top left, rgba(253, 202, 15, 0.18), transparent 26%),
+        radial-gradient(circle at top right, rgba(255, 255, 255, 0.06), transparent 20%),
+        linear-gradient(180deg, var(--bg) 0%, var(--bg-alt) 100%);
     }}
     main {{
       max-width: 1100px;
@@ -1069,14 +1073,32 @@ class MissionWebServerNode(Node):
     }}
     h1, h2 {{
       margin: 0 0 12px;
-      letter-spacing: 0.02em;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+      font-family: "Avenir Next Condensed", "Franklin Gothic Medium", "Arial Narrow", sans-serif;
+    }}
+    h3 {{
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-family: "Avenir Next Condensed", "Franklin Gothic Medium", "Arial Narrow", sans-serif;
     }}
     .hero {{
       padding: 24px;
-      border-bottom: 4px solid var(--accent);
-      background: rgba(255, 250, 242, 0.92);
+      border: 1px solid rgba(253, 202, 15, 0.28);
+      background:
+        linear-gradient(135deg, rgba(253, 202, 15, 0.14), rgba(18, 20, 21, 0.22) 42%),
+        var(--card-strong);
       border-radius: 20px;
-      box-shadow: 0 16px 40px rgba(16, 33, 43, 0.08);
+      box-shadow: 0 18px 44px rgba(0, 0, 0, 0.28);
+    }}
+    .brand-band {{
+      width: min(280px, 100%);
+      height: 12px;
+      border-radius: 999px;
+      background:
+        linear-gradient(90deg, var(--accent) 0 24%, transparent 24% 28%, var(--accent) 28% 52%, transparent 52% 56%, var(--accent) 56% 100%),
+        repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.35) 0 8px, rgba(0, 0, 0, 0.1) 8px 16px);
+      box-shadow: inset 0 0 0 1px rgba(253, 202, 15, 0.32);
     }}
     .grid {{
       display: grid;
@@ -1085,11 +1107,12 @@ class MissionWebServerNode(Node):
       margin-top: 18px;
     }}
     .card {{
-      background: rgba(255, 250, 242, 0.96);
+      background: var(--card);
       border: 1px solid var(--line);
       border-radius: 18px;
       padding: 18px;
-      box-shadow: 0 10px 28px rgba(16, 33, 43, 0.06);
+      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.22);
+      backdrop-filter: blur(4px);
     }}
     .status-card {{
       grid-column: span 2;
@@ -1104,7 +1127,7 @@ class MissionWebServerNode(Node):
       border: 1px solid var(--line);
       border-radius: 16px;
       padding: 14px;
-      background: #fffdf8;
+      background: var(--panel);
     }}
     .status-panel h3 {{
       margin: 0 0 10px;
@@ -1129,7 +1152,7 @@ class MissionWebServerNode(Node):
       border: 1px solid var(--line);
       border-radius: 16px;
       padding: 14px;
-      background: #fffdf8;
+      background: var(--panel);
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -1142,15 +1165,18 @@ class MissionWebServerNode(Node):
       padding: 10px 16px;
       font-size: 0.95rem;
       cursor: pointer;
-      color: white;
+      color: #08100a;
       background: var(--accent);
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
     }}
     button:hover {{ background: var(--accent-strong); }}
     button.stop {{ background: var(--danger); }}
     button:disabled {{
       cursor: not-allowed;
-      background: #98a3aa;
-      color: #eef2f4;
+      background: #5c5b55;
+      color: #d7ddd8;
     }}
     button.stop:disabled {{
       background: #98a3aa;
@@ -1185,8 +1211,10 @@ class MissionWebServerNode(Node):
       border: 1px solid var(--line);
       border-radius: 999px;
       padding: 8px 14px;
-      background: rgba(255, 253, 248, 0.95);
+      background: rgba(52, 53, 53, 0.72);
       font-size: 0.92rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
     }}
     .actions {{
       display: flex;
@@ -1203,7 +1231,7 @@ class MissionWebServerNode(Node):
       border: 1px solid var(--line);
       border-radius: 14px;
       padding: 12px;
-      background: #fffdf8;
+      background: var(--panel);
     }}
     .log-entry.warn {{
       border-color: rgba(180, 83, 9, 0.35);
@@ -1232,7 +1260,7 @@ class MissionWebServerNode(Node):
       border: 1px solid var(--line);
       border-radius: 12px;
       padding: 10px 12px;
-      background: #fffdf8;
+      background: rgba(10, 16, 12, 0.5);
     }}
     @media (max-width: 780px) {{
       .status-card {{
@@ -1245,6 +1273,7 @@ class MissionWebServerNode(Node):
   <main>
     <section class="hero">
       <h1>{title}</h1>
+      <div class="brand-band"></div>
       <div id="banner" class="banner"></div>
       <div class="nav">
         <a class="nav-link" href="/">Dashboard</a>
@@ -1475,21 +1504,26 @@ class MissionWebServerNode(Node):
   <title>{title} - Schedule Calendar</title>
   <style>
     :root {{
-      --bg: #f4f1ea;
-      --card: #fffaf2;
-      --ink: #10212b;
-      --muted: #5d6c74;
-      --accent: #0f766e;
-      --line: #d9d3c7;
-      --work: #0f766e;
-      --nowork: #b45309;
-      --safety: #b91c1c;
+      --bg: #0d0f10;
+      --bg-alt: #1a1d1e;
+      --card: rgba(28, 31, 32, 0.94);
+      --panel: rgba(52, 53, 53, 0.42);
+      --ink: #f5f1df;
+      --muted: #c4bb98;
+      --accent: #fdca0f;
+      --accent-strong: #ffe06b;
+      --line: rgba(253, 202, 15, 0.22);
+      --work: #fdca0f;
+      --nowork: #7f8a8f;
+      --safety: #ff7b5c;
     }}
     body {{
       margin: 0;
-      font-family: "Segoe UI", "Helvetica Neue", sans-serif;
+      font-family: "Avenir Next", "Segoe UI", sans-serif;
       color: var(--ink);
-      background: linear-gradient(160deg, #f5f1e7 0%, #ece8df 100%);
+      background:
+        radial-gradient(circle at top left, rgba(253, 202, 15, 0.18), transparent 26%),
+        linear-gradient(180deg, var(--bg) 0%, var(--bg-alt) 100%);
     }}
     main {{
       max-width: 1200px;
@@ -1497,11 +1531,26 @@ class MissionWebServerNode(Node):
       padding: 24px;
     }}
     .card {{
-      background: rgba(255, 250, 242, 0.96);
+      background: var(--card);
       border: 1px solid var(--line);
       border-radius: 18px;
       padding: 18px;
-      box-shadow: 0 10px 28px rgba(16, 33, 43, 0.06);
+      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.22);
+      backdrop-filter: blur(4px);
+    }}
+    h1, h2 {{
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+      font-family: "Avenir Next Condensed", "Franklin Gothic Medium", "Arial Narrow", sans-serif;
+    }}
+    .brand-band {{
+      width: min(240px, 100%);
+      height: 12px;
+      margin: 10px 0 0;
+      border-radius: 999px;
+      background:
+        linear-gradient(90deg, var(--accent) 0 24%, transparent 24% 28%, var(--accent) 28% 52%, transparent 52% 56%, var(--accent) 56% 100%),
+        repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.35) 0 8px, rgba(0, 0, 0, 0.1) 8px 16px);
     }}
     .nav {{
       display: flex;
@@ -1516,8 +1565,10 @@ class MissionWebServerNode(Node):
       border: 1px solid var(--line);
       border-radius: 999px;
       padding: 8px 14px;
-      background: rgba(255, 253, 248, 0.95);
+      background: rgba(52, 53, 53, 0.72);
       font-size: 0.92rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
     }}
     .toolbar {{
       display: flex;
@@ -1533,9 +1584,13 @@ class MissionWebServerNode(Node):
       padding: 10px 16px;
       font-size: 0.95rem;
       cursor: pointer;
-      color: white;
+      color: #08100a;
       background: var(--accent);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
     }}
+    button:hover {{ background: var(--accent-strong); }}
     .calendar-grid {{
       display: grid;
       grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -1544,7 +1599,7 @@ class MissionWebServerNode(Node):
     .day-head, .day-cell {{
       border: 1px solid var(--line);
       border-radius: 14px;
-      background: #fffdf8;
+      background: var(--panel);
       min-height: 110px;
       padding: 10px;
     }}
@@ -1552,7 +1607,7 @@ class MissionWebServerNode(Node):
       min-height: auto;
       font-weight: 700;
       text-align: center;
-      background: #f6f1e8;
+      background: rgba(253, 202, 15, 0.14);
     }}
     .day-number {{
       font-weight: 700;
@@ -1583,6 +1638,7 @@ class MissionWebServerNode(Node):
   <main>
     <section class="card">
       <h1>Schedule Calendar</h1>
+      <div class="brand-band"></div>
       <div class="muted">View the currently active ICS schedule as a calendar month.</div>
       <div class="nav">
         <a class="nav-link" href="/">Dashboard</a>
@@ -1698,24 +1754,28 @@ class MissionWebServerNode(Node):
   >
   <style>
     :root {{
-      --bg: #efe8db;
-      --card: rgba(255, 251, 244, 0.96);
-      --ink: #16222b;
-      --muted: #5a6972;
-      --accent: #0f766e;
-      --accent-strong: #115e59;
-      --danger: #b91c1c;
-      --line: #d9cfbe;
-      --gold: #b45309;
+      --bg: #0d0f10;
+      --bg-alt: #1a1d1e;
+      --card: rgba(28, 31, 32, 0.94);
+      --card-strong: rgba(18, 20, 21, 0.98);
+      --panel: rgba(52, 53, 53, 0.42);
+      --ink: #f5f1df;
+      --muted: #c4bb98;
+      --accent: #fdca0f;
+      --accent-strong: #ffe06b;
+      --danger: #ff7b5c;
+      --line: rgba(253, 202, 15, 0.22);
+      --gold: #fdca0f;
     }}
     * {{ box-sizing: border-box; }}
     body {{
       margin: 0;
       color: var(--ink);
-      font-family: "Segoe UI", "Helvetica Neue", sans-serif;
+      font-family: "Avenir Next", "Segoe UI", sans-serif;
       background:
-        radial-gradient(circle at top left, rgba(15, 118, 110, 0.16), transparent 28%),
-        linear-gradient(150deg, #f5efe3 0%, #ece3d3 100%);
+        radial-gradient(circle at top left, rgba(253, 202, 15, 0.18), transparent 26%),
+        radial-gradient(circle at top right, rgba(255, 255, 255, 0.06), transparent 20%),
+        linear-gradient(180deg, var(--bg) 0%, var(--bg-alt) 100%);
     }}
     main {{
       max-width: 1280px;
@@ -1727,11 +1787,28 @@ class MissionWebServerNode(Node):
       border: 1px solid var(--line);
       border-radius: 20px;
       padding: 18px;
-      box-shadow: 0 14px 36px rgba(22, 34, 43, 0.08);
+      box-shadow: 0 14px 36px rgba(0, 0, 0, 0.24);
+      backdrop-filter: blur(4px);
     }}
     .hero {{
       display: grid;
       gap: 12px;
+      background:
+        linear-gradient(135deg, rgba(253, 202, 15, 0.14), rgba(18, 20, 21, 0.22) 42%),
+        var(--card-strong);
+    }}
+    h1, h2 {{
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+      font-family: "Avenir Next Condensed", "Franklin Gothic Medium", "Arial Narrow", sans-serif;
+    }}
+    .brand-band {{
+      width: min(260px, 100%);
+      height: 12px;
+      border-radius: 999px;
+      background:
+        linear-gradient(90deg, var(--accent) 0 24%, transparent 24% 28%, var(--accent) 28% 52%, transparent 52% 56%, var(--accent) 56% 100%),
+        repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.35) 0 8px, rgba(0, 0, 0, 0.1) 8px 16px);
     }}
     .nav {{
       display: flex;
@@ -1745,8 +1822,10 @@ class MissionWebServerNode(Node):
       border: 1px solid var(--line);
       border-radius: 999px;
       padding: 8px 14px;
-      background: rgba(255, 253, 248, 0.95);
+      background: rgba(52, 53, 53, 0.72);
       font-size: 0.92rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
     }}
     .layout {{
       display: grid;
@@ -1779,10 +1858,12 @@ class MissionWebServerNode(Node):
       align-items: center;
       border-radius: 999px;
       padding: 8px 12px;
-      background: rgba(15, 118, 110, 0.12);
-      color: var(--accent-strong);
+      background: rgba(253, 202, 15, 0.12);
+      color: var(--accent);
       font-weight: 600;
       font-size: 0.92rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
     }}
     .status-chip.idle {{
       background: rgba(180, 83, 9, 0.12);
@@ -1798,7 +1879,7 @@ class MissionWebServerNode(Node):
       border: 1px solid var(--line);
       border-radius: 14px;
       padding: 12px;
-      background: #fffdf8;
+      background: var(--panel);
     }}
     label {{
       display: block;
@@ -1811,7 +1892,7 @@ class MissionWebServerNode(Node):
       padding: 12px;
       border-radius: 12px;
       border: 1px solid var(--line);
-      background: white;
+      background: rgba(18, 20, 21, 0.82);
       color: var(--ink);
     }}
     .pattern-list {{
@@ -1823,7 +1904,7 @@ class MissionWebServerNode(Node):
       border: 1px solid var(--line);
       border-radius: 14px;
       padding: 12px;
-      background: #fffdf8;
+      background: var(--panel);
     }}
     .pattern-option input {{
       margin-right: 8px;
@@ -1834,14 +1915,18 @@ class MissionWebServerNode(Node):
       padding: 11px 16px;
       font-size: 0.95rem;
       cursor: pointer;
-      color: white;
+      color: #08100a;
       background: var(--accent);
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
     }}
     button:hover {{ background: var(--accent-strong); }}
     button.stop {{ background: var(--danger); }}
     button.secondary {{
       color: var(--ink);
-      background: #efe7da;
+      background: rgba(52, 53, 53, 0.78);
+      border: 1px solid var(--line);
     }}
     .banner {{
       display: none;
@@ -1868,6 +1953,7 @@ class MissionWebServerNode(Node):
   <main>
     <section class="card hero">
       <h1>Record Map And Create Missions</h1>
+      <div class="brand-band"></div>
       <div class="muted">Drive the robot around the working-area perimeter, let RecordMap update the latest recorded map, then create one or more named autonomous missions from that map using a sweep pattern.</div>
       <div id="banner" class="banner"></div>
       <div class="nav">
@@ -2172,20 +2258,24 @@ class MissionWebServerNode(Node):
   <title>{title} - Missions</title>
   <style>
     :root {{
-      --bg: #f4f1ea;
-      --card: #fffaf2;
-      --ink: #10212b;
-      --muted: #5d6c74;
-      --accent: #0f766e;
-      --accent-strong: #115e59;
-      --line: #d9d3c7;
-      --danger: #b91c1c;
+      --bg: #0d0f10;
+      --bg-alt: #1a1d1e;
+      --card: rgba(28, 31, 32, 0.94);
+      --panel: rgba(52, 53, 53, 0.42);
+      --ink: #f5f1df;
+      --muted: #c4bb98;
+      --accent: #fdca0f;
+      --accent-strong: #ffe06b;
+      --line: rgba(253, 202, 15, 0.22);
+      --danger: #ff7b5c;
     }}
     body {{
       margin: 0;
-      font-family: "Segoe UI", "Helvetica Neue", sans-serif;
+      font-family: "Avenir Next", "Segoe UI", sans-serif;
       color: var(--ink);
-      background: linear-gradient(160deg, #f5f1e7 0%, #ece8df 100%);
+      background:
+        radial-gradient(circle at top left, rgba(253, 202, 15, 0.18), transparent 26%),
+        linear-gradient(180deg, var(--bg) 0%, var(--bg-alt) 100%);
     }}
     main {{
       max-width: 1200px;
@@ -2193,11 +2283,26 @@ class MissionWebServerNode(Node):
       padding: 24px;
     }}
     .card {{
-      background: rgba(255, 250, 242, 0.96);
+      background: var(--card);
       border: 1px solid var(--line);
       border-radius: 18px;
       padding: 18px;
-      box-shadow: 0 10px 28px rgba(16, 33, 43, 0.06);
+      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.22);
+      backdrop-filter: blur(4px);
+    }}
+    h1, h2 {{
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+      font-family: "Avenir Next Condensed", "Franklin Gothic Medium", "Arial Narrow", sans-serif;
+    }}
+    .brand-band {{
+      width: min(240px, 100%);
+      height: 12px;
+      margin: 10px 0 0;
+      border-radius: 999px;
+      background:
+        linear-gradient(90deg, var(--accent) 0 24%, transparent 24% 28%, var(--accent) 28% 52%, transparent 52% 56%, var(--accent) 56% 100%),
+        repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.35) 0 8px, rgba(0, 0, 0, 0.1) 8px 16px);
     }}
     .nav {{
       display: flex;
@@ -2212,8 +2317,10 @@ class MissionWebServerNode(Node):
       border: 1px solid var(--line);
       border-radius: 999px;
       padding: 8px 14px;
-      background: rgba(255, 253, 248, 0.95);
+      background: rgba(52, 53, 53, 0.72);
       font-size: 0.92rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
     }}
     .map-layout {{
       display: grid;
@@ -2226,7 +2333,7 @@ class MissionWebServerNode(Node):
       min-height: 520px;
       border: 1px solid var(--line);
       border-radius: 16px;
-      background: #fffdf8;
+      background: var(--panel);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -2240,7 +2347,7 @@ class MissionWebServerNode(Node):
       border: 1px solid var(--line);
       border-radius: 14px;
       padding: 12px;
-      background: #fffdf8;
+      background: var(--panel);
     }}
     button {{
       appearance: none;
@@ -2250,9 +2357,11 @@ class MissionWebServerNode(Node):
       font-size: 0.95rem;
       font-weight: 600;
       cursor: pointer;
-      color: white;
+      color: #08100a;
       background: var(--accent);
       transition: transform 0.12s ease, box-shadow 0.12s ease;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
     }}
     button:hover {{
       background: var(--accent-strong);
@@ -2279,6 +2388,7 @@ class MissionWebServerNode(Node):
   <main>
     <section class="card">
       <h1>Missions</h1>
+      <div class="brand-band"></div>
       <div class="muted">Preview built or decoded mission routes from the synced mission database, and upload VDA5050 missions.</div>
       <div id="banner" class="banner"></div>
       <div class="nav">
@@ -2302,10 +2412,10 @@ class MissionWebServerNode(Node):
       <h2>Upload VDA5050 Mission</h2>
       <div class="muted">Paste a VDA5050 mission JSON document. You can optionally provide a mission id; otherwise `orderId` is used.</div>
       <div style="display: grid; gap: 12px; margin-top: 14px;">
-        <input id="upload-file" type="file" accept=".json,application/json" style="padding: 12px; border-radius: 12px; border: 1px solid var(--line); background: white;">
-        <input id="upload-mission-id" type="text" placeholder="Optional mission id" style="padding: 12px; border-radius: 12px; border: 1px solid var(--line);">
+        <input id="upload-file" type="file" accept=".json,application/json" style="padding: 12px; border-radius: 12px; border: 1px solid var(--line); background: rgba(18, 20, 21, 0.82); color: var(--ink);">
+        <input id="upload-mission-id" type="text" placeholder="Optional mission id" style="padding: 12px; border-radius: 12px; border: 1px solid var(--line); background: rgba(18, 20, 21, 0.82); color: var(--ink);">
         <label class="muted"><input id="upload-overwrite" type="checkbox"> Overwrite existing mission with same id</label>
-        <textarea id="upload-json" rows="14" placeholder='{{"orderId":"field_block_12","nodes":[...],"edges":[...]}}' style="width: 100%; padding: 12px; border-radius: 12px; border: 1px solid var(--line); font-family: monospace;"></textarea>
+        <textarea id="upload-json" rows="14" placeholder='{{"orderId":"field_block_12","nodes":[...],"edges":[...]}}' style="width: 100%; padding: 12px; border-radius: 12px; border: 1px solid var(--line); background: rgba(18, 20, 21, 0.82); color: var(--ink); font-family: monospace;"></textarea>
         <div>
           <button id="upload-button">Upload Mission</button>
         </div>
@@ -2314,7 +2424,7 @@ class MissionWebServerNode(Node):
   </main>
   <script>
     const banner = document.getElementById('banner');
-    const palette = ['#0f766e', '#b45309', '#1d4ed8', '#be123c', '#4338ca', '#0f172a'];
+    const palette = ['#fdca0f', '#f5f1df', '#d2a500', '#ff7b5c', '#9aa0a3', '#ffe06b'];
 
     function setBanner(kind, message) {{
       banner.className = `banner show ${{kind}}`;
@@ -2402,10 +2512,10 @@ class MissionWebServerNode(Node):
 
       frame.innerHTML = `
         <svg viewBox="0 0 ${{viewWidth}} ${{viewHeight}}" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-          <rect x="0" y="0" width="${{viewWidth}}" height="${{viewHeight}}" fill="#fffdf8" />
+          <rect x="0" y="0" width="${{viewWidth}}" height="${{viewHeight}}" fill="#171919" />
           <g opacity="0.15">
-            <line x1="40" y1="40" x2="40" y2="${{viewHeight - 40}}" stroke="#10212b" />
-            <line x1="40" y1="${{viewHeight - 40}}" x2="${{viewWidth - 40}}" y2="${{viewHeight - 40}}" stroke="#10212b" />
+            <line x1="40" y1="40" x2="40" y2="${{viewHeight - 40}}" stroke="#eef3eb" />
+            <line x1="40" y1="${{viewHeight - 40}}" x2="${{viewWidth - 40}}" y2="${{viewHeight - 40}}" stroke="#eef3eb" />
           </g>
           ${{polylines}}
         </svg>
@@ -2474,17 +2584,21 @@ class MissionWebServerNode(Node):
   <title>{title} - Developer</title>
   <style>
     :root {{
-      --bg: #f4f1ea;
-      --card: #fffaf2;
-      --ink: #10212b;
-      --muted: #5d6c74;
-      --line: #d9d3c7;
+      --bg: #0d0f10;
+      --bg-alt: #1a1d1e;
+      --card: rgba(28, 31, 32, 0.94);
+      --panel: rgba(52, 53, 53, 0.42);
+      --ink: #f5f1df;
+      --muted: #c4bb98;
+      --line: rgba(253, 202, 15, 0.22);
     }}
     body {{
       margin: 0;
-      font-family: "Segoe UI", "Helvetica Neue", sans-serif;
+      font-family: "Avenir Next", "Segoe UI", sans-serif;
       color: var(--ink);
-      background: linear-gradient(160deg, #f5f1e7 0%, #ece8df 100%);
+      background:
+        radial-gradient(circle at top left, rgba(253, 202, 15, 0.18), transparent 26%),
+        linear-gradient(180deg, var(--bg) 0%, var(--bg-alt) 100%);
     }}
     main {{
       max-width: 1200px;
@@ -2492,11 +2606,26 @@ class MissionWebServerNode(Node):
       padding: 24px;
     }}
     .card {{
-      background: rgba(255, 250, 242, 0.96);
+      background: var(--card);
       border: 1px solid var(--line);
       border-radius: 18px;
       padding: 18px;
-      box-shadow: 0 10px 28px rgba(16, 33, 43, 0.06);
+      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.22);
+      backdrop-filter: blur(4px);
+    }}
+    h1, h2 {{
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+      font-family: "Avenir Next Condensed", "Franklin Gothic Medium", "Arial Narrow", sans-serif;
+    }}
+    .brand-band {{
+      width: min(240px, 100%);
+      height: 12px;
+      margin: 10px 0 0;
+      border-radius: 999px;
+      background:
+        linear-gradient(90deg, #fdca0f 0 24%, transparent 24% 28%, #fdca0f 28% 52%, transparent 52% 56%, #fdca0f 56% 100%),
+        repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.35) 0 8px, rgba(0, 0, 0, 0.1) 8px 16px);
     }}
     .nav {{
       display: flex;
@@ -2511,8 +2640,10 @@ class MissionWebServerNode(Node):
       border: 1px solid var(--line);
       border-radius: 999px;
       padding: 8px 14px;
-      background: rgba(255, 253, 248, 0.95);
+      background: rgba(52, 53, 53, 0.72);
       font-size: 0.92rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
     }}
     .log-list {{
       display: grid;
@@ -2523,7 +2654,7 @@ class MissionWebServerNode(Node):
       border: 1px solid var(--line);
       border-radius: 14px;
       padding: 12px;
-      background: #fffdf8;
+      background: var(--panel);
     }}
     .log-entry.warn {{
       border-color: rgba(180, 83, 9, 0.35);
@@ -2541,6 +2672,7 @@ class MissionWebServerNode(Node):
       white-space: pre-wrap;
       word-break: break-word;
       font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      color: var(--ink);
     }}
     .muted {{ color: var(--muted); }}
   </style>
@@ -2549,6 +2681,7 @@ class MissionWebServerNode(Node):
   <main>
     <section class="card">
       <h1>Developer</h1>
+      <div class="brand-band"></div>
       <div class="muted">Inspect recent ROS warning/error logs and the raw web status payload.</div>
       <div class="nav">
         <a class="nav-link" href="/">Dashboard</a>
