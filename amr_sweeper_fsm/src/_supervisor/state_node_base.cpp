@@ -184,7 +184,7 @@ namespace {
           } else if (type == "controller") {
             pp.ready_active_controllers.push_back(target);
           } else if (type == "lifecycle") {
-            LifecycleNodeRequirement req;
+            fsm_layer_0::LifecycleNodeRequirement req;
             req.node = target;
             req.raw = target;
             req.min_state_id = lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE;
