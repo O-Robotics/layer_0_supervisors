@@ -90,6 +90,7 @@ profiles:
               - "use_amr_sweeper_wheel_controller:=true"
               - "use_amr_sweeper_tool_controller:=true"
               - "use_amr_sweeper_attitude_controller:=true"
+              - "use_amr_sweeper_collision_detector:=true"
               - "use_amr_sweeper_safety_controller:=true"
             ready:
               - type: "topic"
@@ -97,6 +98,9 @@ profiles:
                 required: true
               - type: "topic"
                 target: "controller_steadydrive/commands"
+                required: true
+              - type: "topic"
+                target: "collision_detector/impact_detected"
                 required: true
             window_ms: 8000
           rosout_triggers:

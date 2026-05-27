@@ -29,6 +29,8 @@ from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from rcl_interfaces.msg import Log
 from sensor_msgs.msg import BatteryState, NavSatFix
+from std_msgs.msg import String
+from std_srvs.srv import Trigger
 
 
 def _resolve_path(configured_path: str) -> Path:
@@ -96,6 +98,14 @@ class MissionWebServerNode(Node):
         self._battery_topic = self.declare_parameter("battery_topic", "battery_state").value
         self._rosout_topic = self.declare_parameter("rosout_topic", "/rosout").value
         self._max_log_entries = int(self.declare_parameter("max_log_entries", 100).value)
+        self._safety_web_status_topic = self.declare_parameter(
+            "safety_web_status_topic",
+            "safety_controller/web_status",
+        ).value
+        self._clear_safety_stop_service = self.declare_parameter(
+            "clear_safety_stop_service",
+            "amr_sweeper_safety_controller/clear_safety_stop",
+        ).value
 
         self._list_missions_client = self.create_client(
             ListExecutableMissions,
@@ -121,12 +131,17 @@ class MissionWebServerNode(Node):
             RequestState,
             self._fsm_request_service,
         )
+        self._clear_safety_stop_client = self.create_client(
+            Trigger,
+            self._clear_safety_stop_service,
+        )
 
         self._state_lock = threading.Lock()
         self._latest_fsm_state: dict[str, Any] | None = None
         self._latest_fsm_status: dict[str, Any] | None = None
         self._latest_navsat: dict[str, Any] | None = None
         self._latest_battery: dict[str, Any] | None = None
+        self._latest_safety_status: dict[str, Any] | None = None
         self._recent_logs: deque[dict[str, Any]] = deque(maxlen=max(1, self._max_log_entries))
 
         self.create_subscription(FSMState, self._fsm_state_topic, self._handle_fsm_state, 10)
@@ -134,6 +149,7 @@ class MissionWebServerNode(Node):
         self.create_subscription(NavSatFix, self._gnss_topic, self._handle_navsat, 10)
         self.create_subscription(BatteryState, self._battery_topic, self._handle_battery, 10)
         self.create_subscription(Log, self._rosout_topic, self._handle_rosout, 100)
+        self.create_subscription(String, self._safety_web_status_topic, self._handle_safety_web_status, 10)
 
         self._http_server: ThreadingHTTPServer | None = None
 
@@ -252,6 +268,13 @@ class MissionWebServerNode(Node):
                 if parsed.path == "/api/reboot":
                     try:
                         response = node.request_reinitialize(payload)
+                        self._send_json(HTTPStatus.OK, response)
+                    except Exception as exc:  # noqa: BLE001
+                        self._send_json(HTTPStatus.BAD_GATEWAY, {"success": False, "message": str(exc)})
+                    return
+                if parsed.path == "/api/safety/clear":
+                    try:
+                        response = node.clear_safety_stop(payload)
                         self._send_json(HTTPStatus.OK, response)
                     except Exception as exc:  # noqa: BLE001
                         self._send_json(HTTPStatus.BAD_GATEWAY, {"success": False, "message": str(exc)})
@@ -385,6 +408,17 @@ class MissionWebServerNode(Node):
                     "line": int(message.line),
                 }
             )
+
+    def _handle_safety_web_status(self, message: String) -> None:
+        try:
+            decoded = json.loads(message.data)
+        except json.JSONDecodeError:
+            self.get_logger().warning("Ignoring invalid JSON on safety web status topic")
+            return
+        if not isinstance(decoded, dict):
+            return
+        with self._state_lock:
+            self._latest_safety_status = decoded
 
     def list_executable_missions(self) -> dict[str, Any]:
         response = self._call_service(
@@ -551,12 +585,26 @@ class MissionWebServerNode(Node):
             "desired_profile_id": int(response.desired_profile_id),
         }
 
+    def clear_safety_stop(self, payload: dict[str, Any]) -> dict[str, Any]:
+        del payload
+        response = self._call_service(
+            self._clear_safety_stop_client,
+            Trigger.Request(),
+            timeout_sec=10.0,
+            service_name=self._clear_safety_stop_service,
+        )
+        return {
+            "success": bool(response.success),
+            "message": response.message,
+        }
+
     def status_snapshot(self) -> dict[str, Any]:
         with self._state_lock:
             fsm_state = dict(self._latest_fsm_state) if self._latest_fsm_state is not None else None
             fsm_status = dict(self._latest_fsm_status) if self._latest_fsm_status is not None else None
             navsat = dict(self._latest_navsat) if self._latest_navsat is not None else None
             battery = dict(self._latest_battery) if self._latest_battery is not None else None
+            safety_status = dict(self._latest_safety_status) if self._latest_safety_status is not None else None
             recent_logs = list(self._recent_logs)
 
         active_execution = self._load_active_execution()
@@ -568,6 +616,7 @@ class MissionWebServerNode(Node):
             "fsm_status": fsm_status,
             "position": navsat,
             "battery": battery,
+            "safety_stop": safety_status,
             "active_execution": active_execution,
             "recent_logs": recent_logs,
         }
@@ -1144,6 +1193,24 @@ class MissionWebServerNode(Node):
       color: var(--muted);
       margin-bottom: 6px;
     }}
+    .safety-card {{
+      border-color: rgba(185, 28, 28, 0.2);
+    }}
+    .safety-card.active {{
+      background: rgba(185, 28, 28, 0.08);
+      border-color: rgba(185, 28, 28, 0.35);
+    }}
+    .cause-list {{
+      display: grid;
+      gap: 8px;
+      margin-top: 12px;
+    }}
+    .cause-item {{
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: #fffdf8;
+    }}
   </style>
 </head>
 <body>
@@ -1187,6 +1254,15 @@ class MissionWebServerNode(Node):
         <div id="battery-percent" class="stat">--</div>
         <div id="battery-voltage" class="muted">Voltage: --</div>
         <div id="battery-current" class="muted">Current: --</div>
+      </article>
+      <article id="safety-card" class="card safety-card">
+        <h2>Safety Stop</h2>
+        <div id="safety-state" class="stat">Clear</div>
+        <div id="safety-summary" class="muted">No active safety stop.</div>
+        <div class="actions">
+          <button class="stop" id="clear-safety-button">Clear Safety Stop</button>
+        </div>
+        <div id="safety-causes" class="cause-list"></div>
       </article>
     </section>
 
@@ -1242,8 +1318,10 @@ class MissionWebServerNode(Node):
       const fsm = data.fsm_status || data.fsm_state || {{}};
       const position = data.position || {{}};
       const battery = data.battery || {{}};
+      const safety = data.safety_stop || {{}};
       const active = data.active_execution || {{}};
       const recentLogs = data.recent_logs || [];
+      const safetyCauses = Array.isArray(safety.causes) ? safety.causes : [];
       const hasActiveMission = Boolean(
         active &&
         active.mission_id &&
@@ -1269,6 +1347,31 @@ class MissionWebServerNode(Node):
         battery.voltage !== undefined ? `Voltage: ${{Number(battery.voltage).toFixed(2)}} V` : 'Voltage: --';
       document.getElementById('battery-current').textContent =
         battery.current !== undefined ? `Current: ${{Number(battery.current).toFixed(2)}} A` : 'Current: --';
+
+      const safetyCard = document.getElementById('safety-card');
+      const safetyLatched = Boolean(safety.latched);
+      document.getElementById('safety-state').textContent = safetyLatched ? 'Latched' : 'Clear';
+      document.getElementById('safety-summary').textContent = safetyLatched
+        ? `${{safety.active_sender || 'unknown_sender'}}: ${{safety.active_reason || 'stop requested'}}`
+        : 'No active safety stop.';
+      document.getElementById('clear-safety-button').disabled = !safetyLatched;
+      safetyCard.classList.toggle('active', safetyLatched);
+
+      const safetyCauseList = document.getElementById('safety-causes');
+      safetyCauseList.innerHTML = '';
+      if (!safetyLatched || safetyCauses.length === 0) {{
+        safetyCauseList.innerHTML = '<div class="muted">No latched safety-stop causes are being reported.</div>';
+      }} else {{
+        for (const cause of safetyCauses) {{
+          const item = document.createElement('div');
+          item.className = 'cause-item';
+          item.innerHTML = `
+            <strong>${{cause.sender || 'unknown_sender'}}</strong><br>
+            <span class="muted">${{cause.reason || 'stop requested'}}</span>
+          `;
+          safetyCauseList.appendChild(item);
+        }}
+      }}
 
       document.getElementById('active-mission').textContent =
         hasActiveMission ? active.mission_id : 'No Active Missions';
@@ -1374,6 +1477,17 @@ class MissionWebServerNode(Node):
       }});
       const data = await response.json();
       setBanner(data.success ? 'ok' : 'error', data.message || 'Reboot request completed');
+      await loadStatus();
+    }});
+
+    document.getElementById('clear-safety-button').addEventListener('click', async () => {{
+      const response = await fetch('/api/safety/clear', {{
+        method: 'POST',
+        headers: {{ 'Content-Type': 'application/json' }},
+        body: JSON.stringify({{}})
+      }});
+      const data = await response.json();
+      setBanner(data.success ? 'ok' : 'error', data.message || 'Safety clear request completed');
       await loadStatus();
     }});
 
