@@ -17,6 +17,8 @@
 
 namespace {
   std::atomic<uint64_t> g_probe_seq{0};
+  constexpr char kAnsiLightMagenta[] = "\033[95m";
+  constexpr char kAnsiReset[] = "\033[0m";
 
   struct TriggerLine
   {
@@ -54,6 +56,23 @@ namespace {
       return fsm_layer_0::ProcessImportance::DEGRADED;
     }
     return fsm_layer_0::ProcessImportance::CRITICAL;
+  }
+
+  bool is_layer_bringup_command(const std::string & command)
+  {
+    return
+      command.find("ros2 launch amr_sweeper_layer_1_hardware_bringup ") != std::string::npos ||
+      command.find("ros2 launch amr_sweeper_layer_2_controllers_bringup ") != std::string::npos ||
+      command.find("ros2 launch amr_sweeper_layer_3_navigation_bringup ") != std::string::npos;
+  }
+
+  std::string format_started_message(const std::string & command)
+  {
+    const std::string message = "Started: " + command;
+    if (!is_layer_bringup_command(command)) {
+      return message;
+    }
+    return std::string(kAnsiLightMagenta) + message + kAnsiReset;
   }
 
   bool load_profile_processes(
@@ -1833,7 +1852,8 @@ bool StateNodeBase::start_state_processes(std::string & why_not)
         continue;
       }
 
-      RCLCPP_INFO(get_logger(), "Started: %s", cmd.c_str());
+      const auto started_message = format_started_message(cmd);
+      RCLCPP_INFO(get_logger(), "%s", started_message.c_str());
 
       if (pp.importance != ProcessImportance::CRITICAL) {
         continue;
@@ -1862,7 +1882,8 @@ bool StateNodeBase::start_state_processes(std::string & why_not)
     if (!procman_.start(cmd, err)) {
       RCLCPP_WARN(get_logger(), "Failed to start command: '%s' (%s)", cmd.c_str(), err.c_str());
     } else {
-      RCLCPP_INFO(get_logger(), "Started: %s", cmd.c_str());
+      const auto started_message = format_started_message(cmd);
+      RCLCPP_INFO(get_logger(), "%s", started_message.c_str());
     }
   }
 

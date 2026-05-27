@@ -83,6 +83,10 @@ bool ProcessManager::start(const std::string & command, std::string & err_out)
     std::filesystem::create_directories(ros_log_dir, ec);
     ::setenv("ROS_LOG_DIR", ros_log_dir.c_str(), 1);
 
+    // Force ANSI severity colors for FSM-managed launch trees even when they are
+    // spawned under a supervisor instead of directly from an interactive shell.
+    ::setenv("RCUTILS_COLORIZED_OUTPUT", "1", 1);
+
     // Fast DDS shared-memory transport can leave stale lock files behind when many
     // short-lived launch trees cycle quickly. Disable SHM for FSM-managed subprocesses
     // to avoid spurious RTPS transport startup errors.
