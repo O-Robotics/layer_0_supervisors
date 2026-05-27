@@ -51,7 +51,7 @@ class MissionWebServerNode(Node):
 
         self._http_host = self.declare_parameter("http_host", "0.0.0.0").value
         self._http_port = int(self.declare_parameter("http_port", 8080).value)
-        self._site_title = self.declare_parameter("site_title", "AMR Sweeper Mission Control").value
+        self._site_title = self.declare_parameter("site_title", "AMR-Sweeper").value
         self._public_base_url = self.declare_parameter(
             "public_base_url",
             "http://192.168.2.1:8080",
@@ -194,6 +194,9 @@ class MissionWebServerNode(Node):
                     return
                 if parsed.path == "/map":
                     self._send_html(node.render_map_html())
+                    return
+                if parsed.path == "/developer":
+                    self._send_html(node.render_developer_html())
                     return
                 if parsed.path == "/record-map":
                     self._send_html(node.render_record_map_html())
@@ -1088,6 +1091,26 @@ class MissionWebServerNode(Node):
       padding: 18px;
       box-shadow: 0 10px 28px rgba(16, 33, 43, 0.06);
     }}
+    .status-card {{
+      grid-column: span 2;
+    }}
+    .status-sections {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px;
+      margin-top: 14px;
+    }}
+    .status-panel {{
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 14px;
+      background: #fffdf8;
+    }}
+    .status-panel h3 {{
+      margin: 0 0 10px;
+      font-size: 1rem;
+      letter-spacing: 0.02em;
+    }}
     .stat {{
       font-size: 1.8rem;
       font-weight: 700;
@@ -1211,36 +1234,55 @@ class MissionWebServerNode(Node):
       padding: 10px 12px;
       background: #fffdf8;
     }}
+    @media (max-width: 780px) {{
+      .status-card {{
+        grid-column: span 1;
+      }}
+    }}
   </style>
 </head>
 <body>
   <main>
     <section class="hero">
       <h1>{title}</h1>
-      <p class="muted">Open <strong>{public_base_url}</strong> on the robot Wi-Fi for manual mission launch, saved autonomous mission execution, VDA5050 upload, and live runtime status.</p>
       <div id="banner" class="banner"></div>
       <div class="nav">
         <a class="nav-link" href="/">Dashboard</a>
         <a class="nav-link" href="/calendar">Schedule Calendar</a>
-        <a class="nav-link" href="/map">Mission Map</a>
+        <a class="nav-link" href="/map">Missions</a>
+        <a class="nav-link" href="/developer">Developer</a>
         <a class="nav-link" href="/record-map">Record Map</a>
       </div>
     </section>
 
     <section class="grid">
-      <article class="card">
-        <h2>FSM</h2>
-        <div id="fsm-state" class="stat">Waiting...</div>
-        <div id="fsm-profile" class="muted">Profile: -</div>
-        <div id="fsm-transition" class="muted">Transition: -</div>
-      </article>
-      <article class="card">
-        <h2>Active Mission</h2>
-        <div id="active-mission" class="stat">No Active Missions</div>
-        <div id="active-directory" class="muted">Run folder: -</div>
-        <div class="actions">
-          <button class="stop" id="stop-button" disabled>Stop Mission</button>
-          <button id="reboot-button">Reboot</button>
+      <article id="safety-card" class="card safety-card status-card">
+        <h2>System Status</h2>
+        <div class="status-sections">
+          <section class="status-panel">
+            <h3>FSM</h3>
+            <div id="fsm-state" class="stat">Waiting...</div>
+            <div id="fsm-profile" class="muted">Profile: -</div>
+            <div id="fsm-transition" class="muted">Transition: -</div>
+          </section>
+          <section class="status-panel">
+            <h3>Active Mission</h3>
+            <div id="active-mission" class="stat">No Active Missions</div>
+            <div id="active-directory" class="muted">Run folder: -</div>
+            <div class="actions">
+              <button class="stop" id="stop-button" disabled>Stop Mission</button>
+              <button id="reboot-button">Reboot</button>
+            </div>
+          </section>
+          <section class="status-panel">
+            <h3>Safety Stop</h3>
+            <div id="safety-state" class="stat">Clear</div>
+            <div id="safety-summary" class="muted">No active safety stop.</div>
+            <div class="actions">
+              <button class="stop" id="clear-safety-button">Clear Safety Stop</button>
+            </div>
+            <div id="safety-causes" class="cause-list"></div>
+          </section>
         </div>
       </article>
       <article class="card">
@@ -1255,53 +1297,17 @@ class MissionWebServerNode(Node):
         <div id="battery-voltage" class="muted">Voltage: --</div>
         <div id="battery-current" class="muted">Current: --</div>
       </article>
-      <article id="safety-card" class="card safety-card">
-        <h2>Safety Stop</h2>
-        <div id="safety-state" class="stat">Clear</div>
-        <div id="safety-summary" class="muted">No active safety stop.</div>
-        <div class="actions">
-          <button class="stop" id="clear-safety-button">Clear Safety Stop</button>
-        </div>
-        <div id="safety-causes" class="cause-list"></div>
-      </article>
     </section>
 
     <section class="card" style="margin-top: 18px;">
       <h2>Executable Missions</h2>
       <div id="mission-list" class="mission-list"></div>
     </section>
-
-    <section class="card" style="margin-top: 18px;">
-      <h2>Upload VDA5050 Mission</h2>
-      <div class="muted">Paste a VDA5050 mission JSON document. You can optionally provide a mission id; otherwise `orderId` is used.</div>
-      <div style="display: grid; gap: 12px; margin-top: 14px;">
-        <input id="upload-file" type="file" accept=".json,application/json" style="padding: 12px; border-radius: 12px; border: 1px solid var(--line); background: white;">
-        <input id="upload-mission-id" type="text" placeholder="Optional mission id" style="padding: 12px; border-radius: 12px; border: 1px solid var(--line);">
-        <label class="muted"><input id="upload-overwrite" type="checkbox"> Overwrite existing mission with same id</label>
-        <textarea id="upload-json" rows="14" placeholder='{{"orderId":"field_block_12","nodes":[...],"edges":[...]}}' style="width: 100%; padding: 12px; border-radius: 12px; border: 1px solid var(--line); font-family: monospace;"></textarea>
-        <div>
-          <button id="upload-button">Upload Mission</button>
-        </div>
-      </div>
-    </section>
-
-    <section class="card" style="margin-top: 18px;">
-      <h2>System Log</h2>
-      <div class="muted">Shows recent `WARN`, `ERROR`, and `FATAL` messages from ROS.</div>
-      <div id="log-list" class="log-list"></div>
-    </section>
-
-    <section class="card" style="margin-top: 18px;">
-      <h2>Raw Status</h2>
-      <pre id="raw-status">{{}}</pre>
-    </section>
   </main>
 
   <script>
     const banner = document.getElementById('banner');
     const missionList = document.getElementById('mission-list');
-    const logList = document.getElementById('log-list');
-    const rawStatus = document.getElementById('raw-status');
 
     function setBanner(kind, message) {{
       banner.className = `banner show ${{kind}}`;
@@ -1320,7 +1326,6 @@ class MissionWebServerNode(Node):
       const battery = data.battery || {{}};
       const safety = data.safety_stop || {{}};
       const active = data.active_execution || {{}};
-      const recentLogs = data.recent_logs || [];
       const safetyCauses = Array.isArray(safety.causes) ? safety.causes : [];
       const hasActiveMission = Boolean(
         active &&
@@ -1378,23 +1383,6 @@ class MissionWebServerNode(Node):
       document.getElementById('active-directory').textContent =
         `Run folder: ${{hasActiveMission ? (active.mission_run_directory || '-') : '-'}}`;
       document.getElementById('stop-button').disabled = !hasActiveMission;
-
-      logList.innerHTML = '';
-      if (recentLogs.length === 0) {{
-        logList.innerHTML = '<div class="muted">No warning, error, or fatal messages captured yet.</div>';
-      }} else {{
-        for (const entry of recentLogs) {{
-          const item = document.createElement('div');
-          item.className = `log-entry ${{String(entry.level || '').toLowerCase()}}`;
-          item.innerHTML = `
-            <div class="log-meta">${{entry.level || 'WARN'}} | ${{entry.name || '-'}} | line ${{entry.line ?? '-'}} </div>
-            <div>${{entry.msg || ''}}</div>
-          `;
-          logList.appendChild(item);
-        }}
-      }}
-
-      rawStatus.textContent = JSON.stringify(data, null, 2);
     }}
 
     async function loadMissions() {{
@@ -1427,36 +1415,6 @@ class MissionWebServerNode(Node):
         missionList.appendChild(item);
       }}
     }}
-
-    document.getElementById('upload-file').addEventListener('change', async (event) => {{
-      const file = event.target.files && event.target.files[0];
-      if (!file) {{
-        return;
-      }}
-      const text = await file.text();
-      document.getElementById('upload-json').value = text;
-    }});
-
-    document.getElementById('upload-button').addEventListener('click', async () => {{
-      const missionId = document.getElementById('upload-mission-id').value;
-      const missionJson = document.getElementById('upload-json').value;
-      const overwriteExisting = document.getElementById('upload-overwrite').checked;
-      const response = await fetch('/api/missions/upload-vda5050', {{
-        method: 'POST',
-        headers: {{ 'Content-Type': 'application/json' }},
-        body: JSON.stringify({{
-          mission_id: missionId,
-          mission_json: missionJson,
-          overwrite_existing: overwriteExisting
-        }})
-      }});
-      const data = await response.json();
-      setBanner(data.success ? 'ok' : 'error', data.message || 'Upload completed');
-      if (data.success) {{
-        document.getElementById('upload-mission-id').value = '';
-      }}
-      await loadMissions();
-    }});
 
     document.getElementById('stop-button').addEventListener('click', async () => {{
       const response = await fetch('/api/stop', {{
@@ -1629,7 +1587,8 @@ class MissionWebServerNode(Node):
       <div class="nav">
         <a class="nav-link" href="/">Dashboard</a>
         <a class="nav-link" href="/calendar">Schedule Calendar</a>
-        <a class="nav-link" href="/map">Mission Map</a>
+        <a class="nav-link" href="/map">Missions</a>
+        <a class="nav-link" href="/developer">Developer</a>
         <a class="nav-link" href="/record-map">Record Map</a>
       </div>
     </section>
@@ -1914,7 +1873,8 @@ class MissionWebServerNode(Node):
       <div class="nav">
         <a class="nav-link" href="/">Dashboard</a>
         <a class="nav-link" href="/calendar">Schedule Calendar</a>
-        <a class="nav-link" href="/map">Mission Map</a>
+        <a class="nav-link" href="/map">Missions</a>
+        <a class="nav-link" href="/developer">Developer</a>
         <a class="nav-link" href="/record-map">Record Map</a>
       </div>
     </section>
@@ -2209,7 +2169,7 @@ class MissionWebServerNode(Node):
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{title} - Mission Map</title>
+  <title>{title} - Missions</title>
   <style>
     :root {{
       --bg: #f4f1ea;
@@ -2217,7 +2177,9 @@ class MissionWebServerNode(Node):
       --ink: #10212b;
       --muted: #5d6c74;
       --accent: #0f766e;
+      --accent-strong: #115e59;
       --line: #d9d3c7;
+      --danger: #b91c1c;
     }}
     body {{
       margin: 0;
@@ -2280,6 +2242,33 @@ class MissionWebServerNode(Node):
       padding: 12px;
       background: #fffdf8;
     }}
+    button {{
+      appearance: none;
+      border: none;
+      border-radius: 12px;
+      padding: 12px 16px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      color: white;
+      background: var(--accent);
+      transition: transform 0.12s ease, box-shadow 0.12s ease;
+    }}
+    button:hover {{
+      background: var(--accent-strong);
+      transform: translateY(-1px);
+      box-shadow: 0 12px 18px rgba(15, 118, 110, 0.16);
+    }}
+    .banner {{
+      display: none;
+      border-radius: 14px;
+      padding: 12px 14px;
+      font-weight: 600;
+      margin-top: 14px;
+    }}
+    .banner.show {{ display: block; }}
+    .banner.ok {{ background: rgba(15, 118, 110, 0.12); color: var(--accent-strong); }}
+    .banner.error {{ background: rgba(185, 28, 28, 0.12); color: var(--danger); }}
     .muted {{ color: var(--muted); }}
     @media (max-width: 900px) {{
       .map-layout {{ grid-template-columns: 1fr; }}
@@ -2289,12 +2278,14 @@ class MissionWebServerNode(Node):
 <body>
   <main>
     <section class="card">
-      <h1>Mission Map</h1>
-      <div class="muted">Preview built or decoded mission routes from the synced mission database.</div>
+      <h1>Missions</h1>
+      <div class="muted">Preview built or decoded mission routes from the synced mission database, and upload VDA5050 missions.</div>
+      <div id="banner" class="banner"></div>
       <div class="nav">
         <a class="nav-link" href="/">Dashboard</a>
         <a class="nav-link" href="/calendar">Schedule Calendar</a>
-        <a class="nav-link" href="/map">Mission Map</a>
+        <a class="nav-link" href="/map">Missions</a>
+        <a class="nav-link" href="/developer">Developer</a>
         <a class="nav-link" href="/record-map">Record Map</a>
       </div>
     </section>
@@ -2307,9 +2298,32 @@ class MissionWebServerNode(Node):
         <div id="legend-list" class="legend-list"></div>
       </section>
     </section>
+    <section class="card" style="margin-top: 18px;">
+      <h2>Upload VDA5050 Mission</h2>
+      <div class="muted">Paste a VDA5050 mission JSON document. You can optionally provide a mission id; otherwise `orderId` is used.</div>
+      <div style="display: grid; gap: 12px; margin-top: 14px;">
+        <input id="upload-file" type="file" accept=".json,application/json" style="padding: 12px; border-radius: 12px; border: 1px solid var(--line); background: white;">
+        <input id="upload-mission-id" type="text" placeholder="Optional mission id" style="padding: 12px; border-radius: 12px; border: 1px solid var(--line);">
+        <label class="muted"><input id="upload-overwrite" type="checkbox"> Overwrite existing mission with same id</label>
+        <textarea id="upload-json" rows="14" placeholder='{{"orderId":"field_block_12","nodes":[...],"edges":[...]}}' style="width: 100%; padding: 12px; border-radius: 12px; border: 1px solid var(--line); font-family: monospace;"></textarea>
+        <div>
+          <button id="upload-button">Upload Mission</button>
+        </div>
+      </div>
+    </section>
   </main>
   <script>
+    const banner = document.getElementById('banner');
     const palette = ['#0f766e', '#b45309', '#1d4ed8', '#be123c', '#4338ca', '#0f172a'];
+
+    function setBanner(kind, message) {{
+      banner.className = `banner show ${{kind}}`;
+      banner.textContent = message;
+      setTimeout(() => {{
+        banner.className = 'banner';
+        banner.textContent = '';
+      }}, 5000);
+    }}
 
     function extractLineCoordinates(geojson) {{
       const lines = [];
@@ -2414,7 +2428,178 @@ class MissionWebServerNode(Node):
       renderMap(data.missions || [], data.active_route_geojson || null);
     }}
 
+    document.getElementById('upload-file').addEventListener('change', async (event) => {{
+      const file = event.target.files && event.target.files[0];
+      if (!file) {{
+        return;
+      }}
+      const text = await file.text();
+      document.getElementById('upload-json').value = text;
+    }});
+
+    document.getElementById('upload-button').addEventListener('click', async () => {{
+      const missionId = document.getElementById('upload-mission-id').value;
+      const missionJson = document.getElementById('upload-json').value;
+      const overwriteExisting = document.getElementById('upload-overwrite').checked;
+      const response = await fetch('/api/missions/upload-vda5050', {{
+        method: 'POST',
+        headers: {{ 'Content-Type': 'application/json' }},
+        body: JSON.stringify({{
+          mission_id: missionId,
+          mission_json: missionJson,
+          overwrite_existing: overwriteExisting
+        }})
+      }});
+      const data = await response.json();
+      setBanner(data.success ? 'ok' : 'error', data.message || 'Upload completed');
+      if (data.success) {{
+        document.getElementById('upload-mission-id').value = '';
+      }}
+      await loadMap();
+    }});
+
     loadMap();
+  </script>
+</body>
+</html>
+"""
+
+    def render_developer_html(self) -> str:
+        title = escape(self._site_title)
+        return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{title} - Developer</title>
+  <style>
+    :root {{
+      --bg: #f4f1ea;
+      --card: #fffaf2;
+      --ink: #10212b;
+      --muted: #5d6c74;
+      --line: #d9d3c7;
+    }}
+    body {{
+      margin: 0;
+      font-family: "Segoe UI", "Helvetica Neue", sans-serif;
+      color: var(--ink);
+      background: linear-gradient(160deg, #f5f1e7 0%, #ece8df 100%);
+    }}
+    main {{
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px;
+    }}
+    .card {{
+      background: rgba(255, 250, 242, 0.96);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 18px;
+      box-shadow: 0 10px 28px rgba(16, 33, 43, 0.06);
+    }}
+    .nav {{
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+    }}
+    .nav-link {{
+      display: inline-block;
+      text-decoration: none;
+      color: var(--ink);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 8px 14px;
+      background: rgba(255, 253, 248, 0.95);
+      font-size: 0.92rem;
+    }}
+    .log-list {{
+      display: grid;
+      gap: 12px;
+      margin-top: 14px;
+    }}
+    .log-entry {{
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px;
+      background: #fffdf8;
+    }}
+    .log-entry.warn {{
+      border-color: rgba(180, 83, 9, 0.35);
+    }}
+    .log-entry.error, .log-entry.fatal {{
+      border-color: rgba(185, 28, 28, 0.35);
+    }}
+    .log-meta {{
+      font-size: 0.82rem;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }}
+    pre {{
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    }}
+    .muted {{ color: var(--muted); }}
+  </style>
+</head>
+<body>
+  <main>
+    <section class="card">
+      <h1>Developer</h1>
+      <div class="muted">Inspect recent ROS warning/error logs and the raw web status payload.</div>
+      <div class="nav">
+        <a class="nav-link" href="/">Dashboard</a>
+        <a class="nav-link" href="/calendar">Schedule Calendar</a>
+        <a class="nav-link" href="/map">Missions</a>
+        <a class="nav-link" href="/developer">Developer</a>
+        <a class="nav-link" href="/record-map">Record Map</a>
+      </div>
+    </section>
+
+    <section class="card" style="margin-top: 18px;">
+      <h2>System Log</h2>
+      <div class="muted">Shows recent `WARN`, `ERROR`, and `FATAL` messages from ROS.</div>
+      <div id="log-list" class="log-list"></div>
+    </section>
+
+    <section class="card" style="margin-top: 18px;">
+      <h2>Raw Status</h2>
+      <pre id="raw-status">{{}}</pre>
+    </section>
+  </main>
+
+  <script>
+    const logList = document.getElementById('log-list');
+    const rawStatus = document.getElementById('raw-status');
+
+    async function loadStatus() {{
+      const response = await fetch('/api/status', {{ cache: 'no-store' }});
+      const data = await response.json();
+      const recentLogs = data.recent_logs || [];
+
+      logList.innerHTML = '';
+      if (recentLogs.length === 0) {{
+        logList.innerHTML = '<div class="muted">No warning, error, or fatal messages captured yet.</div>';
+      }} else {{
+        for (const entry of recentLogs) {{
+          const item = document.createElement('div');
+          item.className = `log-entry ${{String(entry.level || '').toLowerCase()}}`;
+          item.innerHTML = `
+            <div class="log-meta">${{entry.level || 'WARN'}} | ${{entry.name || '-'}} | line ${{entry.line ?? '-'}} </div>
+            <div>${{entry.msg || ''}}</div>
+          `;
+          logList.appendChild(item);
+        }}
+      }}
+
+      rawStatus.textContent = JSON.stringify(data, null, 2);
+    }}
+
+    loadStatus();
+    setInterval(loadStatus, 2000);
   </script>
 </body>
 </html>

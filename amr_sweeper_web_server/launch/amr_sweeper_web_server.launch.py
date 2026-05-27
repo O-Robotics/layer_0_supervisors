@@ -31,7 +31,7 @@ def generate_launch_description():
         DeclareLaunchArgument("fsm_status_topic", default_value="fsm_status"),
         DeclareLaunchArgument("fsm_request_service", default_value="request_state"),
         DeclareLaunchArgument("rosout_topic", default_value="/rosout"),
-        DeclareLaunchArgument("site_title", default_value="AMR Sweeper Mission Control"),
+        DeclareLaunchArgument("site_title", default_value="AMR-Sweeper"),
         DeclareLaunchArgument("public_base_url", default_value="http://192.168.2.1:8080"),
         Node(
             package="amr_sweeper_web_server",

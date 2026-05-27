@@ -2061,7 +2061,11 @@ std::optional<ManualMissionInfo> MissionExecutorNode::classifyMissionFile(
   } else {
     mission.running_profile_id = scheduled_running_profile_id_;
   }
-  mission.is_manual = lowered_mission_type != kScheduledMissionType;
+  mission.is_manual =
+    mission.execution_mode == kManualMappingExecutionMode ||
+    mission.execution_mode == kTeleoperationExecutionMode ||
+    lowered_mission_type == kBuiltinManualMappingMissionType ||
+    lowered_mission_type == kBuiltinTeleopMissionType;
   mission.artifacts_ready = missionArtifactsReady(mission);
   return mission;
 }
