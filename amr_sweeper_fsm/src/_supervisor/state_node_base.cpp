@@ -1416,7 +1416,22 @@ bool StateNodeBase::wait_for_readiness(std::string & why_not)
 
       if (pp.importance == ProcessImportance::CRITICAL) {
         if (pp.window_ms > 0 && now >= proc_deadline) {
-          why_not = "timed out after " + std::to_string(pp.window_ms) + " ms waiting for " + why_not;
+          const auto failures = collect_profile_process_readiness_failures_(pp);
+          if (!failures.empty()) {
+            const std::string pname = pp.name.empty() ? pp.command : pp.name;
+            std::string failure_list;
+            for (size_t fi = 0; fi < failures.size(); ++fi) {
+              if (fi > 0) {
+                failure_list += "; ";
+              }
+              failure_list += failures[fi];
+            }
+            why_not =
+              "timed out after " + std::to_string(pp.window_ms) + " ms waiting for profile process '" +
+              pname + "' not ready: " + failure_list;
+          } else {
+            why_not = "timed out after " + std::to_string(pp.window_ms) + " ms waiting for " + why_not;
+          }
           return false;
         }
         waiting = true;
@@ -1886,6 +1901,35 @@ bool StateNodeBase::profile_process_readiness_satisfied_(
   return true;
 }
 
+std::vector<std::string> StateNodeBase::collect_profile_process_readiness_failures_(
+  const ProfileProcess & pp)
+{
+  std::vector<std::string> failures;
+  failures.reserve(
+    pp.ready_topics.size() + pp.ready_services.size() + pp.ready_active_controllers.size());
+
+  for (const auto & t : pp.ready_topics) {
+    if (!graph_has_topic(t)) {
+      failures.push_back("missing topic '" + t + "'");
+    }
+  }
+
+  for (const auto & s : pp.ready_services) {
+    if (!graph_has_service(s)) {
+      failures.push_back("missing service '" + s + "'");
+    }
+  }
+
+  for (const auto & c : pp.ready_active_controllers) {
+    std::string cwhy;
+    if (!controller_is_active(c, cwhy)) {
+      failures.push_back(cwhy);
+    }
+  }
+
+  return failures;
+}
+
 bool StateNodeBase::wait_for_profile_process_readiness_(
   const ProfileProcess & pp,
   std::string & why_not)
@@ -1909,7 +1953,19 @@ bool StateNodeBase::wait_for_profile_process_readiness_(
     }
     if (std::chrono::steady_clock::now() >= deadline) {
       const std::string pname = pp.name.empty() ? pp.command : pp.name;
-      if (why_not.empty()) {
+      const auto failures = collect_profile_process_readiness_failures_(pp);
+      if (!failures.empty()) {
+        std::string failure_list;
+        for (size_t i = 0; i < failures.size(); ++i) {
+          if (i > 0) {
+            failure_list += "; ";
+          }
+          failure_list += failures[i];
+        }
+        why_not =
+          "timed out after " + std::to_string(pp.window_ms) + " ms waiting for profile process '" +
+          pname + "' not ready: " + failure_list;
+      } else if (why_not.empty()) {
         why_not =
           "profile process '" + pname + "' not ready: timed out after " +
           std::to_string(pp.window_ms) + " ms";

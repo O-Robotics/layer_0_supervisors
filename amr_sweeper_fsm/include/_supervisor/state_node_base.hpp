@@ -286,6 +286,9 @@ private:
   bool profile_process_readiness_satisfied_(
     const ProfileProcess & pp,
     std::string & why_not);
+
+  std::vector<std::string> collect_profile_process_readiness_failures_(
+    const ProfileProcess & pp);
   bool wait_for_profile_process_readiness_(
     const ProfileProcess & pp,
     std::string & why_not);
