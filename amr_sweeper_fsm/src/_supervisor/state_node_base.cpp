@@ -183,6 +183,8 @@ namespace {
             pp.ready_services.push_back(target);
           } else if (type == "controller") {
             pp.ready_active_controllers.push_back(target);
+          } else if (type == "lifecycle") {
+            pp.ready_lifecycle_nodes.push_back(parse_lifecycle_requirement_line(target));
           }
         }
       }
@@ -447,10 +449,10 @@ uint8_t StateNodeBase::parse_lifecycle_level(const std::string & s)
   return lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE;
 }
 
-StateNodeBase::ReadySpec::LifecycleNodeRequirement
+LifecycleNodeRequirement
 StateNodeBase::parse_lifecycle_requirement_line(const std::string & line)
 {
-  ReadySpec::LifecycleNodeRequirement r;
+  LifecycleNodeRequirement r;
   r.raw = line;
 
   // Backwards compatible: a plain node name implies ACTIVE.
@@ -1216,7 +1218,7 @@ bool StateNodeBase::controller_is_active(const std::string & controller_name, st
 
 
 bool StateNodeBase::lifecycle_node_meets_requirement(
-  const ReadySpec::LifecycleNodeRequirement & req,
+  const LifecycleNodeRequirement & req,
   std::string & why_not)
 {
   const std::string node_fq = qualify_to_ns(req.node);
@@ -1288,7 +1290,10 @@ bool StateNodeBase::wait_for_readiness(std::string & why_not)
   for (const auto & pp : profile_processes_) {
     if (pp.importance == ProcessImportance::CRITICAL &&
         pp.window_ms > 0 &&
-        (!pp.ready_topics.empty() || !pp.ready_services.empty() || !pp.ready_active_controllers.empty())) {
+        (!pp.ready_topics.empty() ||
+        !pp.ready_services.empty() ||
+        !pp.ready_active_controllers.empty() ||
+        !pp.ready_lifecycle_nodes.empty())) {
       has_profile_critical_reqs = true;
       break;
     }
@@ -1393,6 +1398,18 @@ bool StateNodeBase::wait_for_readiness(std::string & why_not)
           if (!graph_has_service(s)) {
             proc_waiting = true;
             why_not = missing_reason_for("service", s);
+            break;
+          }
+        }
+      }
+
+      if (!proc_waiting) {
+        for (const auto & lreq : pp.ready_lifecycle_nodes) {
+          std::string lwhy;
+          if (!lifecycle_node_meets_requirement(lreq, lwhy)) {
+            proc_waiting = true;
+            const std::string pname = pp.name.empty() ? pp.command : pp.name;
+            why_not = "profile process '" + pname + "' not ready: " + lwhy;
             break;
           }
         }
@@ -1889,6 +1906,14 @@ bool StateNodeBase::profile_process_readiness_satisfied_(
     }
   }
 
+  for (const auto & lreq : pp.ready_lifecycle_nodes) {
+    if (!lifecycle_node_meets_requirement(lreq, why_not)) {
+      const std::string pname = pp.name.empty() ? pp.command : pp.name;
+      why_not = "profile process '" + pname + "' not ready: " + why_not;
+      return false;
+    }
+  }
+
   for (const auto & c : pp.ready_active_controllers) {
     if (!controller_is_active(c, why_not)) {
       const std::string pname = pp.name.empty() ? pp.command : pp.name;
@@ -1906,7 +1931,10 @@ std::vector<std::string> StateNodeBase::collect_profile_process_readiness_failur
 {
   std::vector<std::string> failures;
   failures.reserve(
-    pp.ready_topics.size() + pp.ready_services.size() + pp.ready_active_controllers.size());
+    pp.ready_topics.size() +
+    pp.ready_services.size() +
+    pp.ready_lifecycle_nodes.size() +
+    pp.ready_active_controllers.size());
 
   for (const auto & t : pp.ready_topics) {
     if (!graph_has_topic(t)) {
@@ -1917,6 +1945,13 @@ std::vector<std::string> StateNodeBase::collect_profile_process_readiness_failur
   for (const auto & s : pp.ready_services) {
     if (!graph_has_service(s)) {
       failures.push_back("missing service '" + s + "'");
+    }
+  }
+
+  for (const auto & lreq : pp.ready_lifecycle_nodes) {
+    std::string lwhy;
+    if (!lifecycle_node_meets_requirement(lreq, lwhy)) {
+      failures.push_back(lwhy);
     }
   }
 
@@ -1934,7 +1969,12 @@ bool StateNodeBase::wait_for_profile_process_readiness_(
   const ProfileProcess & pp,
   std::string & why_not)
 {
-  if (pp.ready_topics.empty() && pp.ready_services.empty() && pp.ready_active_controllers.empty()) {
+  if (
+    pp.ready_topics.empty() &&
+    pp.ready_services.empty() &&
+    pp.ready_lifecycle_nodes.empty() &&
+    pp.ready_active_controllers.empty())
+  {
     why_not.clear();
     return true;
   }
@@ -1994,6 +2034,7 @@ bool StateNodeBase::start_state_processes(std::string & why_not)
       const bool has_process_readiness =
         !pp.ready_topics.empty() ||
         !pp.ready_services.empty() ||
+        !pp.ready_lifecycle_nodes.empty() ||
         !pp.ready_active_controllers.empty();
       std::string err;
 

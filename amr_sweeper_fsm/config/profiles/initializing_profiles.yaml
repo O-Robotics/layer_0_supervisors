@@ -254,20 +254,20 @@ profiles:
               - type: "service"
                 target: "visual_odometry_node/get_parameters"
                 required: true
-              - type: "service"
-                target: "fusioncore/get_state"
+              - type: "lifecycle"
+                target: "fusioncore"
                 required: true
-              - type: "service"
-                target: "controller_server/get_state"
+              - type: "lifecycle"
+                target: "controller_server"
                 required: true
-              - type: "service"
-                target: "planner_server/get_state"
+              - type: "lifecycle"
+                target: "planner_server"
                 required: true
-              - type: "service"
-                target: "bt_navigator/get_state"
+              - type: "lifecycle"
+                target: "bt_navigator"
                 required: true
-              - type: "service"
-                target: "waypoint_follower/get_state"
+              - type: "lifecycle"
+                target: "waypoint_follower"
                 required: true
               - type: "service"
                 target: "amr_sweeper_slam_node/get_parameters"

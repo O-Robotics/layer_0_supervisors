@@ -24,6 +24,20 @@ namespace fsm_layer_0
 // Importance level for an external process defined by a profile.
 enum class ProcessImportance { CRITICAL, DEGRADED, OPTIONAL };
 
+struct LifecycleNodeRequirement
+{
+  // Node name (absolute or relative; relative names are qualified into the FSM node namespace).
+  std::string node;
+
+  // Minimum acceptable lifecycle primary state id.
+  // Examples:
+  //   1 = UNCONFIGURED, 2 = INACTIVE, 3 = ACTIVE
+  uint8_t min_state_id{lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE};
+
+  // Raw rule string (useful for logs/debug).
+  std::string raw;
+};
+
 struct ProfileProcess
 {
   std::string name;
@@ -38,6 +52,7 @@ struct ProfileProcess
   std::vector<std::string> ready_topics;
   std::vector<std::string> ready_services;
   std::vector<std::string> ready_active_controllers;
+  std::vector<LifecycleNodeRequirement> ready_lifecycle_nodes;
 
 
   // Optional per-process error policy (declared under `errors:` in the profile YAML).
@@ -146,27 +161,13 @@ protected:
   struct ReadySpec
   {
     std::vector<std::string> nodes;
-    struct LifecycleNodeRequirement
-    {
-      // Node name (absolute or relative; relative names are qualified into this node's namespace).
-      std::string node;
-
-      // Minimum acceptable lifecycle primary state id.
-      // Examples:
-      //   1 = UNCONFIGURED, 2 = INACTIVE, 3 = ACTIVE
-      uint8_t min_state_id{lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE};
-
-      // Raw rule string (useful for logs/debug).
-      std::string raw;
-    };
-
     // Lifecycle readiness requirements parsed from the string array parameter `ready.lifecycle_nodes`.
     // Backwards compatible:
     //   - "/amr_sweeper/amr_sweeper_battery"  -> requires ACTIVE
     // New syntax:
     //   - "node=amr_sweeper_battery_node;level>=UNCONFIGURED"
     //   - "node=/amr_sweeper/amr_sweeper_battery;level>=INACTIVE"
-    std::vector<LifecycleNodeRequirement> lifecycle_nodes;
+    std::vector<::fsm_layer_0::LifecycleNodeRequirement> lifecycle_nodes;
 
     // Graph-discovered topics (names must match exactly; absolute or relative).
     std::vector<std::string> topics;
@@ -197,11 +198,11 @@ protected:
 
   // Helper: true if lifecycle node state is >= required minimum.
   bool lifecycle_node_meets_requirement(
-    const ReadySpec::LifecycleNodeRequirement & req,
+    const LifecycleNodeRequirement & req,
     std::string & why_not);
 
   // Parse a lifecycle readiness rule line.
-  static ReadySpec::LifecycleNodeRequirement parse_lifecycle_requirement_line(const std::string & line);
+  static LifecycleNodeRequirement parse_lifecycle_requirement_line(const std::string & line);
 
   // Map lifecycle level strings to primary state ids.
   static uint8_t parse_lifecycle_level(const std::string & s);
