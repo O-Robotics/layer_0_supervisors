@@ -165,7 +165,7 @@ def generate_launch_description():
             condition=IfCondition(launch_vda5050_parser),
         ),
         IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(_launch_file("amr_sweeper_web_server", "amr_sweeper_web_server.launch.py")),
+            PythonLaunchDescriptionSource(_launch_file("amr_sweeper_interface_server", "amr_sweeper_interface_server.launch.py")),
             launch_arguments={
                 "namespace": namespace,
                 "missions_from_db_directory": missions_from_db_directory,

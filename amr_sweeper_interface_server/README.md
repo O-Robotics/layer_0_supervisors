@@ -1,6 +1,10 @@
-# amr_sweeper_web_server
+# amr_sweeper_interface_server
 
-Provides the AMR Sweeper HTTP operator UI as a standalone layer 0 package.
+Provides the AMR Sweeper operator backend/frontend web stack as a standalone layer 0 package.
+
+Structure:
+- `scripts/backend_node.py` contains the ROS/backend state, schedule, mission-control, and data API logic.
+- `scripts/frontend_http_node.py` contains the HTTP server, route handling, and rendered frontend pages on top of the backend node.
 
 Responsibilities:
 - expose a local dashboard over HTTP
@@ -14,11 +18,11 @@ Default operator URL:
 - `http://192.168.2.1:8080`
 
 Launch:
-- `ros2 launch amr_sweeper_web_server amr_sweeper_web_server.launch.py`
+- `ros2 launch amr_sweeper_interface_server amr_sweeper_interface_server.launch.py`
 
 Network setup:
 - Target static robot Ethernet address: `192.168.2.1/24`
-- Copy [amr_sweeper_web_server.yaml](/mnt/c/home/dev/rob_ws/src/layer_0_supervisors/amr_sweeper_web_server/config/amr_sweeper_web_server.yaml) into `/etc/netplan/`
+- Copy [amr_sweeper_interface_server.yaml](/mnt/c/home/dev/rob_ws/src/layer_0_supervisors/amr_sweeper_interface_server/config/amr_sweeper_interface_server.yaml) into `/etc/netplan/`
 - Confirm the robot Ethernet interface name is `eth0`
 - Apply with `sudo netplan apply`
 

@@ -12,7 +12,7 @@ Services:
 - `end_mission`
 
 HTTP operator UI:
-- the HTTP operator UI now lives in `amr_sweeper_web_server`
+- the HTTP operator UI now lives in `amr_sweeper_interface_server`
 - it still uses the mission executor services to list missions, execute them, stop the active mission, and upload VDA5050 mission JSON payloads
 
 Profile routing:
