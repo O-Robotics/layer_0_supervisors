@@ -28,11 +28,11 @@ FSM-state name set:
 
 Profile ID bands (100-wide band of profiles per FSM-state)
 ---------------------------------------------
-  INITIALIZING : 000 - 099   (FSM tester 000, default 001)
+  INITIALIZING : 000 - 099   (bridge 000, default 001, alternate 002)
   IDLING       : 100 - 199   (bridge 100, default 101, testing 110)
-  RUNNING      : 200 - 299   (FSM tester 200, default 201)
-  CHARGING     : 300 - 399   (FSM tester 300, default 301)
-  FAULT        : 400 - 499   (FSM tester 400, default 401)
+  RUNNING      : 200 - 299   (bridge 200, default 201, mapping 202, routed 203, teleop 204)
+  CHARGING     : 300 - 399   (bridge 300, default 301)
+  FAULT        : 400 - 499   (default 400, empty 401)
 
 
 FSM workflow
@@ -54,6 +54,7 @@ Transition:
   - If desired_state changes, the supervisor deactivates the current state and activates the target state.
   - If desired_state is the same but desired_profile_id changes, the supervisor re-enters the same state
     (deactivate → cleanup/configure → activate) so the new profile is applied cleanly.
+  - Requests are accepted only when the target profile both matches the state's numeric band and exists in that state's profile YAML.
 
 
 State behaviour (design intent)
@@ -63,28 +64,35 @@ INITIALIZING
   - Perform a full startup systems check.
   - The default startup profile validates layer 1 hardware, layer 2 controllers, layer 3 localization/navigation/mapping,
     plus mission-parser and scheduler readiness.
-  - Only requests the next FSM-state (typically IDLING) when those required checks pass; otherwise requests FAULT.
+  - Profiles 000 and 001 auto-request IDLING profile 101 after activation and readiness succeed.
+  - Readiness failures or process failures escalate according to per-process error policy, typically into FAULT profile 400.
 
 IDLING
   - Robot is safe and ready.
-  - Runs mission preparation in the background.
-  - `amr_sweeper_vda5050_parser` watches `/missions` for new or changed VDA5050 missions and keeps artifacts updated.
-  - `amr_sweeper_scheduler` watches the `/missions` schedule and asks the supervisor to enter RUNNING when a valid
+  - Default profile 101 launches reduced layer 1 hardware bringup, `amr_sweeper_vda5050_parser`, and `amr_sweeper_scheduler`.
+  - `amr_sweeper_vda5050_parser` watches the missions directory and keeps parsed mission artifacts updated.
+  - `amr_sweeper_scheduler` watches the schedule and asks the supervisor to enter RUNNING when a valid
     WORK window becomes active.
-  - `amr_sweeper_mission_executor` owns build-on-demand, execution-folder preparation, active-alias refresh, and
-    RUNNING-profile routing for both scheduled and manual missions.
+  - `amr_sweeper_mission_executor` is not launched by the FSM profile itself, but it remains the component that owns
+    mission preparation, execution-folder creation, and RUNNING-profile routing for scheduler/manual flows.
 
 RUNNING
-  - Autonomous mission execution / sweeping behavior.
-  - Teleop operation 
+  - RUNNING is profile-driven rather than a single mode.
+  - Profile 201 is the default mission execution stack.
+  - Profile 202 is manual mapping.
+  - Profile 203 is manual routed missions.
+  - Profile 204 is manual teleoperation.
+  - Profiles that use mission execution directories pass them into layer 3 bringup through the
+    `runtime.mission_execution_directory` parameter placeholder.
 
 CHARGING
-  - Charge supervision.
-  - Transitions to IDLING when charge complete.
+  - Charge supervision with layer 1 hardware bringup in profile 301.
+  - No automatic charge-complete transition is currently defined in the shipped charging profiles.
 
 FAULT
-  - Safe stop / inhibit motion.
-  - Only transitions out when faults can be cleared (or re-initialize via INITIALIZING).
+  - Safe/reduced bringup profile intended for fault containment.
+  - Profile 400 keeps a reduced layer 1 hardware subset alive; profile 401 is empty.
+  - No automatic transition out of FAULT is configured in shipped profiles.
 
 
 How configuration tunes behaviour

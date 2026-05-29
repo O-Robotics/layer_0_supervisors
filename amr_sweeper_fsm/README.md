@@ -121,15 +121,25 @@ Each state has its own profile file with a list of profiles:
   - restart and shutdown policy
   - optional `rosout_triggers`
 
-The default profile wiring is now:
+The shipped profile catalog is currently:
 
-- `001`: full-stack startup validation across layer 1 hardware, layer 2 controllers, layer 3 localization/navigation/mapping, plus `amr_sweeper_vda5050_parser` and `amr_sweeper_scheduler`
-- `101`: layer 1 hardware bringup plus `amr_sweeper_vda5050_parser` and `amr_sweeper_scheduler`
-- `201`: layer 1 hardware bringup, layer 2 controller bringup, layer 3 localization/navigation/mapping bringup, and optional joystick
-- `301`: layer 1 hardware bringup
-- `400`: reduced layer 1 hardware bringup for fault handling
+- `000`: INITIALIZING bridge profile with no processes; auto-requests `101`
+- `001`: default INITIALIZING full-stack startup validation
+- `002`: alternate INITIALIZING validation profile
+- `100`: IDLING bridge profile with no processes; auto-requests `101`
+- `101`: default IDLING profile with layer 1 hardware bringup, `amr_sweeper_vda5050_parser`, and `amr_sweeper_scheduler`
+- `110`: IDLING test profile for `fsm_tester_node`
+- `200`: RUNNING bridge profile with no processes; auto-requests `201`
+- `201`: default RUNNING mission execution profile
+- `202`: RUNNING manual mapping profile
+- `203`: RUNNING manual routed-mission profile
+- `204`: RUNNING manual teleoperation profile
+- `300`: CHARGING bridge profile with no processes
+- `301`: default CHARGING profile
+- `400`: default FAULT profile with reduced layer 1 hardware bringup
+- `401`: FAULT empty profile
 
-`001` should only transition to `101` after the startup profile's required readiness checks have passed.
+`001` and `000` both auto-request `101` only after their own activation and readiness checks succeed.
 
 
 ---
@@ -182,14 +192,14 @@ ros2 service call /amr_sweeper/request_state amr_sweeper_fsm/srv/RequestState "{
 
 ## Profile id “bands”
 
-`RequestState.srv` documents the intended convention that each FSM state has a default “*00” profile id:
+`RequestState.srv` documents the intended convention that each FSM state has a “*00” bridge/base profile id:
 - `000` for INITIALIZING
 - `100` for IDLING
 - `200` for RUNNING
 - `300` for CHARGING
 - `400` for FAULT
 
-This convention is used by the configuration and transition logic (e.g., auto-transition targets in the profile YAML).
+In the current configuration, the configured default profiles are `001`, `101`, `201`, `301`, and `400`. The `*00` profiles are used as bridge/base profiles where defined.
 
 ---
 
@@ -226,3 +236,4 @@ source install/setup.bash
 
 - The supervisor tick period is configurable via `tick_period_ms` in the launch file (default: 100 ms).
 - Publish periods are configured via `publish.rules` in `config/state_parameters.yaml` and are decoupled from the supervisor tick.
+- RUNNING profiles `201`, `202`, and `203` pass `runtime.mission_execution_directory` into layer 3 bringup via the `{mission_execution_directory}` placeholder when a request provides it.

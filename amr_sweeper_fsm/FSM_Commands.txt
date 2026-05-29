@@ -25,7 +25,7 @@ Arguments (pass arguments as '<name>:=<value>'):
     'start_profile': Startup FSM profile id. (default: '001')
     'tick_period_ms': Supervisor tick period in milliseconds. (default: '100')
     'state_params_file': FSM state parameters YAML. Defines per-state profiles.
-      (default: '<package_share>/share/amr_sweeper_fsm/config/state_parameters.yaml')
+      (default: '<package_share>/config/state_parameters.yaml')
 
 "TEST"
 ros2 launch amr_sweeper_fsm amr_sweeper_fsm.launch.py start_profile:=000
@@ -67,6 +67,10 @@ Request fields (srv/RequestState.srv):
 
 Example: request RUNNING default (profile 200)
 
+Bridge note:
+  Profile 200 is a bridge profile that auto-requests profile 201 after activation.
+  If you want the normal RUNNING stack directly, request profile 201 instead.
+
   ros2 service call /amr_sweeper/request_state \
     amr_sweeper_fsm/srv/RequestState \
     "{target_state: 'RUNNING',
@@ -97,6 +101,12 @@ Profile 201 runtime wiring:
   - layer 2 controllers bringup without joystick (critical)
   - layer 3 localization/navigation/mapping bringup (critical)
   - joystick launch as a separate optional process
+  - passes mission_execution_directory into layer 3 bringup
+
+Other shipped RUNNING profiles:
+  - 202: manual mapping
+  - 203: manual routed missions
+  - 204: manual teleoperation
 
 
 Example: request CHARGING default but keep lifecycle node Inactive (staging)
@@ -115,7 +125,13 @@ Example: request CHARGING default but keep lifecycle node Inactive (staging)
 Notes on priority / force
 -------------------------
 - priority (uint8): higher value wins when multiple requests arrive.
+- the supervisor applies a 1-point-per-second decay to the last accepted priority gate.
 - force (bool): bypasses supervisor guard checks and forces the desired target.
+
+Validation rules
+----------------
+- target_profile_id must belong to the requested state's profile band.
+- target_profile_id must also exist in that state's profile YAML file or the request is rejected.
 
 
 4) FSM observation (Supervisor publishers)
@@ -165,5 +181,5 @@ If status topics are not present:
   ros2 topic list | grep fsm_state
 
 If transitions fail:
-  Monitor fsm_status for transitioning_to_profile=FAILED
+  Monitor fsm_status for transition_status=FAILED
   Inspect last_message for root cause.
