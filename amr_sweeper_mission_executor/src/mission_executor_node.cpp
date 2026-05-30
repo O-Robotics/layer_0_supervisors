@@ -821,11 +821,19 @@ std::vector<std::vector<GeoPoint>> convertZonesToGeo(
 
 nlohmann::json buildNavSatGeoJson(
   const std::vector<geometry_msgs::msg::Point> & points,
-  const std::string & name)
+  const std::string & name,
+  const std::string & local_companion_file = std::string{})
 {
   nlohmann::json coordinates = nlohmann::json::array();
   for (const auto & point : points) {
     coordinates.push_back({point.x, point.y});
+  }
+
+  nlohmann::json properties{
+    {"name", name},
+    {"coordinate_frame", "wgs84"}};
+  if (!local_companion_file.empty()) {
+    properties["local_companion_file"] = local_companion_file;
   }
 
   return {
@@ -833,15 +841,128 @@ nlohmann::json buildNavSatGeoJson(
     {"features", nlohmann::json::array({
       {
         {"type", "Feature"},
-        {"properties", {
-           {"name", name},
-           {"coordinate_frame", "wgs84"}}},
+        {"properties", properties},
         {"geometry", {
            {"type", "LineString"},
            {"coordinates", coordinates}}}
       }
     })}
   };
+}
+
+nlohmann::json buildLocalPathGeoJson(
+  const nlohmann::json & coordinates,
+  const std::string & name,
+  const std::string & geographic_companion_file = std::string{},
+  const std::optional<nlohmann::json> & georeference = std::nullopt)
+{
+  nlohmann::json properties{
+    {"name", name},
+    {"coordinate_frame", "odom"}};
+  if (!geographic_companion_file.empty()) {
+    properties["geographic_companion_file"] = geographic_companion_file;
+  }
+  if (georeference.has_value()) {
+    properties["georeference"] = *georeference;
+  }
+
+  return {
+    {"type", "FeatureCollection"},
+    {"features", nlohmann::json::array({
+      {
+        {"type", "Feature"},
+        {"properties", properties},
+        {"geometry", {{"type", "LineString"}, {"coordinates", coordinates}}}
+      }
+    })}
+  };
+}
+
+std::optional<nlohmann::json> buildGeoReferenceMetadata(
+  const std::vector<MapPoint> & local_trace,
+  const std::vector<GeoPoint> & geo_trace,
+  const std::string & companion_file = std::string{})
+{
+  const GeoTransform transform = buildGeoTransform(local_trace, geo_trace);
+  if (!transform.valid) {
+    return std::nullopt;
+  }
+
+  nlohmann::json georeference{
+    {"type", "affine_xy_to_wgs84"},
+    {"sample_count", std::min(local_trace.size(), geo_trace.size())},
+    {"longitude_coefficients", {
+       transform.longitude_coefficients[0],
+       transform.longitude_coefficients[1],
+       transform.longitude_coefficients[2]}},
+    {"latitude_coefficients", {
+       transform.latitude_coefficients[0],
+       transform.latitude_coefficients[1],
+       transform.latitude_coefficients[2]}}};
+  if (!companion_file.empty()) {
+    georeference["companion_file"] = companion_file;
+  }
+  return georeference;
+}
+
+void refreshLocalPathGeoReference(
+  const std::filesystem::path & local_path_file,
+  const std::filesystem::path & geographic_companion_path,
+  const std::vector<GeoPoint> & geo_trace)
+{
+  if (local_path_file.empty() || geographic_companion_path.empty() || geo_trace.size() < 3U) {
+    return;
+  }
+  if (!std::filesystem::exists(local_path_file)) {
+    return;
+  }
+
+  const std::vector<MapPoint> local_trace = extractLineStringCoordinates(loadJsonDocument(local_path_file));
+  if (local_trace.size() < 3U) {
+    return;
+  }
+
+  nlohmann::json coordinates = nlohmann::json::array();
+  for (const auto & point : local_trace) {
+    coordinates.push_back({point.x, point.y});
+  }
+
+  const auto georeference = buildGeoReferenceMetadata(
+    local_trace,
+    geo_trace,
+    geographic_companion_path.filename().string());
+  if (!georeference.has_value()) {
+    return;
+  }
+
+  const nlohmann::json document = buildLocalPathGeoJson(
+    coordinates,
+    "actual_path",
+    geographic_companion_path.filename().string(),
+    georeference);
+
+  std::ofstream output_stream(local_path_file, std::ios::trunc);
+  if (!output_stream.is_open()) {
+    return;
+  }
+  output_stream << std::setw(2) << document << '\n';
+}
+
+void refreshLocalPathGeoReferenceFromArtifacts(const nlohmann::json & context_document)
+{
+  const std::filesystem::path local_path_file(
+    context_document.value("actual_path_file", std::string{}));
+  const std::filesystem::path geographic_companion_path(
+    context_document.value("actual_path_navsat_file", std::string{}));
+  if (local_path_file.empty() || geographic_companion_path.empty() ||
+    !std::filesystem::exists(local_path_file) || !std::filesystem::exists(geographic_companion_path))
+  {
+    return;
+  }
+
+  const std::vector<GeoPoint> geo_trace =
+    extractGeoLineStringCoordinates(loadJsonDocument(geographic_companion_path));
+  refreshLocalPathGeoReference(local_path_file, geographic_companion_path, geo_trace);
 }
 
 nlohmann::json buildGeoReferencedVda5050MissionDocument(
@@ -1733,25 +1854,31 @@ void MissionExecutorNode::handleManualMissionOdometry(const nav_msgs::msg::Odome
   }
 
   if (should_write_path && !actual_path_file.empty()) {
-    nlohmann::json actual_path_document{
-      {"type", "FeatureCollection"},
-      {"features", nlohmann::json::array({
-        {
-          {"type", "Feature"},
-          {"properties", {{"name", "actual_path"}, {"coordinate_frame", "odom"}}},
-          {"geometry", {{"type", "LineString"}, {"coordinates", nlohmann::json::array()}}}
-        }
-      })}
-    };
-
     nlohmann::json coordinates = nlohmann::json::array();
+    std::string navsat_companion_file;
+    std::vector<MapPoint> local_trace;
+    std::vector<GeoPoint> geo_trace;
     {
       std::lock_guard<std::mutex> lock(active_mission_mutex_);
       for (const auto & point : teleop_traveled_path_points_) {
         coordinates.push_back({point.x, point.y});
+        local_trace.push_back({point.x, point.y});
+      }
+      if (!active_actual_navsat_path_file_.empty()) {
+        navsat_companion_file =
+          std::filesystem::path(active_actual_navsat_path_file_).filename().string();
+      }
+      geo_trace.reserve(manual_mapping_navsat_points_.size());
+      for (const auto & point : manual_mapping_navsat_points_) {
+        geo_trace.push_back({point.y, point.x});
       }
     }
-    actual_path_document["features"][0]["geometry"]["coordinates"] = coordinates;
+    const auto georeference = buildGeoReferenceMetadata(local_trace, geo_trace, navsat_companion_file);
+    nlohmann::json actual_path_document = buildLocalPathGeoJson(
+      coordinates,
+      "actual_path",
+      navsat_companion_file,
+      georeference);
 
     std::ofstream output_stream(actual_path_file, std::ios::trunc);
     if (output_stream.is_open()) {
@@ -1767,14 +1894,19 @@ void MissionExecutorNode::handleManualMissionNavSat(const sensor_msgs::msg::NavS
   }
 
   std::string actual_navsat_path_file;
+  std::string local_companion_file;
+  std::string actual_path_file;
   {
     std::lock_guard<std::mutex> lock(active_mission_mutex_);
-    if (!active_mission_running_ || !active_mission_is_manual_mapping_ ||
-      active_mission_id_ != "RecordMap" || active_actual_navsat_path_file_.empty())
+    if (!active_mission_running_ || active_actual_navsat_path_file_.empty())
     {
       return;
     }
     actual_navsat_path_file = active_actual_navsat_path_file_;
+    if (!active_actual_path_file_.empty()) {
+      actual_path_file = active_actual_path_file_;
+      local_companion_file = std::filesystem::path(active_actual_path_file_).filename().string();
+    }
   }
 
   geometry_msgs::msg::Point point;
@@ -1784,7 +1916,7 @@ void MissionExecutorNode::handleManualMissionNavSat(const sensor_msgs::msg::NavS
 
   {
     std::lock_guard<std::mutex> lock(active_mission_mutex_);
-    if (!active_mission_running_ || !active_mission_is_manual_mapping_) {
+    if (!active_mission_running_) {
       return;
     }
     if (!manual_mapping_navsat_points_.empty()) {
@@ -1798,14 +1930,25 @@ void MissionExecutorNode::handleManualMissionNavSat(const sensor_msgs::msg::NavS
   }
 
   nlohmann::json navsat_path_document;
+  std::vector<GeoPoint> geo_trace;
   {
     std::lock_guard<std::mutex> lock(active_mission_mutex_);
-    navsat_path_document = buildNavSatGeoJson(manual_mapping_navsat_points_, "actual_path_navsat");
+    geo_trace.reserve(manual_mapping_navsat_points_.size());
+    for (const auto & sampled_point : manual_mapping_navsat_points_) {
+      geo_trace.push_back({sampled_point.y, sampled_point.x});
+    }
+    navsat_path_document = buildNavSatGeoJson(
+      manual_mapping_navsat_points_,
+      "actual_path_navsat",
+      local_companion_file);
   }
 
   std::ofstream output_stream(actual_navsat_path_file, std::ios::trunc);
   if (output_stream.is_open()) {
     output_stream << std::setw(2) << navsat_path_document << '\n';
+  }
+  if (!actual_path_file.empty()) {
+    refreshLocalPathGeoReference(actual_path_file, actual_navsat_path_file, geo_trace);
   }
 }
 
@@ -2139,16 +2282,11 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
   fs::create_directories(collected_artifacts_directory);
 
   {
-    nlohmann::json actual_path_document{
-      {"type", "FeatureCollection"},
-      {"features", nlohmann::json::array({
-        {
-          {"type", "Feature"},
-          {"properties", {{"name", "actual_path"}, {"coordinate_frame", "odom"}}},
-          {"geometry", {{"type", "LineString"}, {"coordinates", nlohmann::json::array()}}}
-        }
-      })}
-    };
+    const std::string navsat_companion_file = actual_path_navsat_file.filename().string();
+    nlohmann::json actual_path_document = buildLocalPathGeoJson(
+      nlohmann::json::array(),
+      "actual_path",
+      navsat_companion_file);
     std::ofstream actual_path_stream(actual_path_file);
     if (!actual_path_stream.is_open()) {
       throw std::runtime_error("Failed to create actual path artifact for mission_id=" + mission.mission_id);
@@ -2156,7 +2294,11 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
     actual_path_stream << std::setw(2) << actual_path_document << '\n';
   }
   {
-    nlohmann::json actual_path_navsat_document = buildNavSatGeoJson({}, "actual_path_navsat");
+    const std::string local_companion_file = actual_path_file.filename().string();
+    nlohmann::json actual_path_navsat_document = buildNavSatGeoJson(
+      {},
+      "actual_path_navsat",
+      local_companion_file);
     std::ofstream actual_path_navsat_stream(actual_path_navsat_file);
     if (!actual_path_navsat_stream.is_open()) {
       throw std::runtime_error("Failed to create actual navsat path artifact for mission_id=" + mission.mission_id);
@@ -2317,6 +2459,7 @@ bool MissionExecutorNode::finalizeMissionExecution(
   }
 
   updateRecordMapArtifacts(*context_document);
+  refreshLocalPathGeoReferenceFromArtifacts(*context_document);
   writeLatestRecordedMapSnapshot(*context_document);
   recordMissionExecutionEnd(*context_document, request);
   clearActiveMissionState();
