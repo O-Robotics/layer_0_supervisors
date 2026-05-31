@@ -1,0 +1,202 @@
+{
+  "headerId": 1,
+  "timestamp": "2026-00-00T00:00:00Z",
+  "version": "2.0.0",
+  "manufacturer": "O-Robotics",
+  "serialNumber": "amr_sweeper",
+  "orderId": "vda5050",
+  "orderUpdateId": 0,
+  "missionReference": {
+    "coordinateReferenceSystem": "EPSG:4326",
+    "xIsLongitude": true,
+    "yIsLatitude": true
+  },
+  "missionGeometries": {
+    "workingZones": [
+      {
+        "zoneId": "working_zone_main",
+        "zoneType": "working_zone",
+        "edgeIds": [
+          "boundary_edge_0",
+          "boundary_edge_1",
+          "boundary_edge_2",
+          "boundary_edge_3"
+        ]
+      }
+    ],
+    "noGoZones": [],
+    "coveragePathEdgeIds": [
+      "coverage_edge_0",
+      "coverage_edge_1",
+      "coverage_edge_2",
+      "coverage_edge_3"
+    ]
+  },
+  "nodes": [
+    {
+      "nodeId": "boundary_node_0",
+      "sequenceId": 0,
+      "released": true,
+      "nodePosition": {
+        "x": 10.102367,
+        "y": 56.178639,
+        "theta": 0.0,
+        "mapId": "mission_wgs84"
+      }
+    },
+    {
+      "nodeId": "boundary_node_1",
+      "sequenceId": 2,
+      "released": true,
+      "nodePosition": {
+        "x": 10.102716,
+        "y": 56.178638,
+        "theta": 0.0,
+        "mapId": "mission_wgs84"
+      }
+    },
+    {
+      "nodeId": "boundary_node_2",
+      "sequenceId": 4,
+      "released": true,
+      "nodePosition": {
+        "x": 10.102715,
+        "y": 56.178675,
+        "theta": 0.0,
+        "mapId": "mission_wgs84"
+      }
+    },
+    {
+      "nodeId": "boundary_node_3",
+      "sequenceId": 6,
+      "released": true,
+      "nodePosition": {
+        "x": 10.102359,
+        "y": 56.178674,
+        "theta": 0.0,
+        "mapId": "mission_wgs84"
+      }
+    },
+    {
+      "nodeId": "coverage_node_0",
+      "sequenceId": 8,
+      "released": true,
+      "nodePosition": {
+        "x": 10.102385,
+        "y": 56.178642,
+        "theta": 0.0,
+        "mapId": "mission_wgs84"
+      }
+    },
+    {
+      "nodeId": "coverage_node_1",
+      "sequenceId": 10,
+      "released": true,
+      "nodePosition": {
+        "x": 10.102690,
+        "y": 56.178643,
+        "theta": 0.0,
+        "mapId": "mission_wgs84"
+      }
+    },
+    {
+      "nodeId": "coverage_node_2",
+      "sequenceId": 12,
+      "released": true,
+      "nodePosition": {
+        "x": 10.102688,
+        "y": 56.178655,
+        "theta": 3.14159,
+        "mapId": "mission_wgs84"
+      }
+    },
+    {
+      "nodeId": "coverage_node_3",
+      "sequenceId": 14,
+      "released": true,
+      "nodePosition": {
+        "x": 10.102384,
+        "y": 56.178656,
+        "theta": 3.14159,
+        "mapId": "mission_wgs84"
+      }
+    },
+    {
+      "nodeId": "coverage_node_4",
+      "sequenceId": 16,
+      "released": true,
+      "nodePosition": {
+        "x": 10.102382,
+        "y": 56.178668,
+        "theta": 0.0,
+        "mapId": "mission_wgs84"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "edgeId": "boundary_edge_0",
+      "sequenceId": 1,
+      "released": true,
+      "startNodeId": "boundary_node_0",
+      "endNodeId": "boundary_node_1",
+      "edgeType": "boundary"
+    },
+    {
+      "edgeId": "boundary_edge_1",
+      "sequenceId": 3,
+      "released": true,
+      "startNodeId": "boundary_node_1",
+      "endNodeId": "boundary_node_2",
+      "edgeType": "boundary"
+    },
+    {
+      "edgeId": "boundary_edge_2",
+      "sequenceId": 5,
+      "released": true,
+      "startNodeId": "boundary_node_2",
+      "endNodeId": "boundary_node_3",
+      "edgeType": "boundary"
+    },
+    {
+      "edgeId": "boundary_edge_3",
+      "sequenceId": 7,
+      "released": true,
+      "startNodeId": "boundary_node_3",
+      "endNodeId": "boundary_node_0",
+      "edgeType": "boundary"
+    },
+    {
+      "edgeId": "coverage_edge_0",
+      "sequenceId": 9,
+      "released": true,
+      "startNodeId": "coverage_node_0",
+      "endNodeId": "coverage_node_1",
+      "edgeType": "coverage_path"
+    },
+    {
+      "edgeId": "coverage_edge_1",
+      "sequenceId": 11,
+      "released": true,
+      "startNodeId": "coverage_node_1",
+      "endNodeId": "coverage_node_2",
+      "edgeType": "coverage_path"
+    },
+    {
+      "edgeId": "coverage_edge_2",
+      "sequenceId": 13,
+      "released": true,
+      "startNodeId": "coverage_node_2",
+      "endNodeId": "coverage_node_3",
+      "edgeType": "coverage_path"
+    },
+    {
+      "edgeId": "coverage_edge_3",
+      "sequenceId": 15,
+      "released": true,
+      "startNodeId": "coverage_node_3",
+      "endNodeId": "coverage_node_4",
+      "edgeType": "coverage_path"
+    }
+  ]
+}

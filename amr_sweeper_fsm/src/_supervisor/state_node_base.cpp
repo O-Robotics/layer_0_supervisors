@@ -555,6 +555,8 @@ StateNodeBase::StateNodeBase(const std::string & node_name, const rclcpp::NodeOp
   // Declare it up-front so external set_parameters calls succeed.
   this->declare_parameter<int>("profiles.active_profile_id", static_cast<int>(active_profile_id_));
   this->declare_parameter<std::string>("runtime.mission_execution_directory", "");
+  this->declare_parameter<bool>("runtime.use_test", false);
+  this->declare_parameter<std::string>("runtime.test_output_directory", "");
 }
 
 
@@ -591,6 +593,8 @@ StateNodeBase::on_configure(const rclcpp_lifecycle::State &)
   declare_if_needed("profiles.active_profile_id", static_cast<int>(active_profile_id_));
   declare_if_needed("profiles.file", profiles_file_);
   declare_if_needed("runtime.mission_execution_directory", std::string(""));
+  declare_if_needed("runtime.use_test", false);
+  declare_if_needed("runtime.test_output_directory", std::string(""));
 
   // Read (safe on every configure)
   this->get_parameter("faults.request_state_service", request_state_service_);
@@ -1895,6 +1899,25 @@ std::string StateNodeBase::resolve_placeholders(std::string cmd) const
   while ((pos = cmd.find(mission_key, pos)) != std::string::npos) {
     cmd.replace(pos, mission_key.size(), mission_execution_directory);
     pos += mission_execution_directory.size();
+  }
+
+  bool use_test = false;
+  this->get_parameter("runtime.use_test", use_test);
+  const std::string use_test_value = use_test ? "true" : "false";
+  const std::string use_test_key = "{use_test}";
+  pos = 0;
+  while ((pos = cmd.find(use_test_key, pos)) != std::string::npos) {
+    cmd.replace(pos, use_test_key.size(), use_test_value);
+    pos += use_test_value.size();
+  }
+
+  std::string test_output_directory;
+  this->get_parameter("runtime.test_output_directory", test_output_directory);
+  const std::string test_output_directory_key = "{test_output_directory}";
+  pos = 0;
+  while ((pos = cmd.find(test_output_directory_key, pos)) != std::string::npos) {
+    cmd.replace(pos, test_output_directory_key.size(), test_output_directory);
+    pos += test_output_directory.size();
   }
 
   return cmd;

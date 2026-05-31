@@ -38,6 +38,8 @@ def generate_launch_description():
     state_params_file = LaunchConfiguration("state_params_file")
     start_profile = LaunchConfiguration("start_profile")
     tick_period_ms = LaunchConfiguration("tick_period_ms")
+    use_test = LaunchConfiguration("use_test")
+    test_output_directory = LaunchConfiguration("test_output_directory")
 
     declare_namespace = DeclareLaunchArgument(
         "namespace",
@@ -78,6 +80,18 @@ def generate_launch_description():
         ),
     )
 
+    declare_use_test = DeclareLaunchArgument(
+        "use_test",
+        default_value="false",
+        description="Enable workspace test-mode launch behavior for FSM-managed processes.",
+    )
+
+    declare_test_output_directory = DeclareLaunchArgument(
+        "test_output_directory",
+        default_value="src/layer_3_navigation/tests",
+        description="Shared generic artifact directory used by test-mode FSM-managed processes.",
+    )
+
     # -------------------------------------------------------------------------
     # Nodes
     # -------------------------------------------------------------------------
@@ -94,6 +108,8 @@ def generate_launch_description():
             {"use_sim_time": use_sim_time},
             {"desired_profile": ParameterValue(start_profile, value_type=int)},
             {"tick_period_ms": ParameterValue(tick_period_ms, value_type=int)},
+            {"runtime.use_test": use_test},
+            {"runtime.test_output_directory": test_output_directory},
         ],
     )
 
@@ -107,6 +123,8 @@ def generate_launch_description():
         parameters=[
             state_params_file,
             {"use_sim_time": use_sim_time},
+            {"runtime.use_test": use_test},
+            {"runtime.test_output_directory": test_output_directory},
         ],
     )
 
@@ -119,6 +137,8 @@ def generate_launch_description():
         parameters=[
             state_params_file,
             {"use_sim_time": use_sim_time},
+            {"runtime.use_test": use_test},
+            {"runtime.test_output_directory": test_output_directory},
         ],
     )
 
@@ -131,6 +151,8 @@ def generate_launch_description():
         parameters=[
             state_params_file,
             {"use_sim_time": use_sim_time},
+            {"runtime.use_test": use_test},
+            {"runtime.test_output_directory": test_output_directory},
         ],
     )
 
@@ -143,6 +165,8 @@ def generate_launch_description():
         parameters=[
             state_params_file,
             {"use_sim_time": use_sim_time},
+            {"runtime.use_test": use_test},
+            {"runtime.test_output_directory": test_output_directory},
         ],
     )
 
@@ -155,6 +179,8 @@ def generate_launch_description():
         parameters=[
             state_params_file,
             {"use_sim_time": use_sim_time},
+            {"runtime.use_test": use_test},
+            {"runtime.test_output_directory": test_output_directory},
         ],
     )
 
@@ -171,6 +197,8 @@ def generate_launch_description():
             declare_start_profile,
             declare_tick_period_ms,
             declare_state_params,
+            declare_use_test,
+            declare_test_output_directory,
             supervisor,
             initializing,
             idling,

@@ -241,6 +241,8 @@ profiles:
               - "use_amr_sweeper_localization:=true"
               - "use_amr_sweeper_mapping:=true"
               - "use_amr_sweeper_waypoint_follower:=true"
+              - "use_test:={use_test}"
+              - "test_output_directory:={test_output_directory}"
             ready:
               - type: "topic"
                 target: "visual_odometry/odom"

@@ -4,7 +4,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch_ros.substitutions import FindPackageShare
 
 
@@ -20,6 +20,7 @@ def generate_launch_description():
     namespace = LaunchConfiguration("namespace")
     use_sim_time = LaunchConfiguration("use_sim_time")
     state_params_file = LaunchConfiguration("state_params_file")
+    test_output_directory = LaunchConfiguration("test_output_directory")
     start_profile = LaunchConfiguration("start_profile")
     tick_period_ms = LaunchConfiguration("tick_period_ms")
     missions_from_db_directory = LaunchConfiguration("missions_from_db_directory")
@@ -36,6 +37,8 @@ def generate_launch_description():
     mission_parser_node_name = LaunchConfiguration("mission_parser_node_name")
     mission_parser_build_service = LaunchConfiguration("mission_parser_build_service")
     default_schedule_filename = LaunchConfiguration("default_schedule_filename")
+    use_test = LaunchConfiguration("use_test")
+    test_schedule_ics_path = LaunchConfiguration("test_schedule_ics_path")
     mission_file_extension = LaunchConfiguration("mission_file_extension")
     mission_executor_execute_service = LaunchConfiguration("mission_executor_execute_service")
     mission_executor_prepare_service = LaunchConfiguration("mission_executor_prepare_service")
@@ -64,11 +67,16 @@ def generate_launch_description():
         FindPackageShare("amr_sweeper_default_missions"),
         "missions",
     ])
+    effective_schedule_ics_path = PythonExpression([
+        '"', test_schedule_ics_path, '" if ("', use_test, '" == "true" and "', schedule_ics_path,
+        '" == "") else "', schedule_ics_path, '"',
+    ])
 
     return LaunchDescription([
         DeclareLaunchArgument("namespace", default_value="amr_sweeper"),
         DeclareLaunchArgument("use_sim_time", default_value="false"),
         DeclareLaunchArgument("state_params_file", default_value=default_state_params_file),
+        DeclareLaunchArgument("test_output_directory", default_value="src/layer_3_navigation/tests"),
         DeclareLaunchArgument("start_profile", default_value="001"),
         DeclareLaunchArgument("tick_period_ms", default_value="100"),
         DeclareLaunchArgument("missions_from_db_directory", default_value="src/missions_from_db"),
@@ -85,6 +93,11 @@ def generate_launch_description():
         DeclareLaunchArgument("mission_parser_node_name", default_value="vda5050_parser_node"),
         DeclareLaunchArgument("mission_parser_build_service", default_value="build_current_mission"),
         DeclareLaunchArgument("default_schedule_filename", default_value=""),
+        DeclareLaunchArgument("use_test", default_value="false"),
+        DeclareLaunchArgument(
+            "test_schedule_ics_path",
+            default_value="src/layer_0_supervisors/tests/schedule_20260000T000000Z.ics",
+        ),
         DeclareLaunchArgument("mission_file_extension", default_value=".json"),
         DeclareLaunchArgument("mission_executor_execute_service", default_value="execute_mission"),
         DeclareLaunchArgument("mission_executor_prepare_service", default_value="prepare_manual_mission"),
@@ -112,6 +125,8 @@ def generate_launch_description():
                 "start_profile": start_profile,
                 "tick_period_ms": tick_period_ms,
                 "state_params_file": state_params_file,
+                "use_test": use_test,
+                "test_output_directory": test_output_directory,
             }.items(),
         ),
         IncludeLaunchDescription(
@@ -122,7 +137,7 @@ def generate_launch_description():
                 "missions_log_directory": missions_log_directory,
                 "manual_missions_directory": manual_missions_directory,
                 "fsm_request_service": fsm_request_service,
-                "schedule_ics_path": schedule_ics_path,
+                "schedule_ics_path": effective_schedule_ics_path,
                 "robot_id": robot_id,
                 "safety_stop_topic": safety_stop_topic,
                 "teleop_odometry_topic": teleop_odometry_topic,
@@ -138,7 +153,7 @@ def generate_launch_description():
             launch_arguments={
                 "namespace": namespace,
                 "use_sim_time": use_sim_time,
-                "schedule_ics_path": schedule_ics_path,
+                "schedule_ics_path": effective_schedule_ics_path,
                 "missions_directory": missions_from_db_directory,
                 "default_schedule_filename": default_schedule_filename,
                 "mission_file_extension": mission_file_extension,
