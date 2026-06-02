@@ -26,6 +26,7 @@ Network setup:
   Run `ufw status` as root.
 - If port is not opened, open it by executing following command as root:  
   `ufw allow from 192.168.2.0/28 to 192.168.2.1 port 8080 proto tcp`.
+- No changes should be done on the RUTX11 router.
 
 Notes:
 - the node binds to `0.0.0.0:8080` by default so operators on the router LAN can reach it
