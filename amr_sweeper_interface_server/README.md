@@ -29,6 +29,6 @@ Network setup:
 
 Notes:
 - the node binds to `0.0.0.0:8080` by default so operators on the router LAN can reach it
-- the default public URL assumes the Jetson uses the Ethernet address `192.168.2.1/24`
+- the default public URL assumes the Jetson uses the Ethernet address `192.168.2.1`
 - operators connect through the router's Wi-Fi network; the Jetson itself is expected to be wired to the router over Ethernet
 - this assumes the robot uplink and router LAN use the `192.168.2.0/24` subnet
