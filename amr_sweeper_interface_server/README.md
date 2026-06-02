@@ -21,14 +21,12 @@ Launch:
 - `ros2 launch amr_sweeper_interface_server amr_sweeper_interface_server.launch.py`
 
 Network setup:
-- Target static robot Ethernet address: `192.168.2.1/24`
-- Copy [amr_sweeper_interface_server.yaml](/mnt/c/home/dev/rob_ws/src/layer_0_supervisors/amr_sweeper_interface_server/config/amr_sweeper_interface_server.yaml) into `/etc/netplan/`
-- Confirm the robot Ethernet interface name is `eth0`
-- Apply with `sudo netplan apply`
+- Target robot Ethernet address: `192.168.2.1`
+- Make sure that port 8080/tcp is opened on the Jetson for access from Wi-Fi clients connected to robots Wi-Fi access points. Run `ufw status` as root.
+- If port is not opened, open it by executing following command as root: `ufw allow from 192.168.2.0/27 to 192.168.2.1 port 8080 proto tcp`.
 
 Notes:
 - the node binds to `0.0.0.0:8080` by default so operators on the router LAN can reach it
-- the default public URL assumes the Jetson uses the static Ethernet address `192.168.2.1/24`
+- the default public URL assumes the Jetson uses the Ethernet address `192.168.2.1/24`
 - operators connect through the router's Wi-Fi network; the Jetson itself is expected to be wired to the router over Ethernet
 - this assumes the robot uplink and router LAN use the `192.168.2.0/24` subnet
-- if the Ethernet interface is not `eth0`, update the netplan file before applying it
