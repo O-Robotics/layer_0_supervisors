@@ -22,9 +22,9 @@ Launch:
 
 Network setup:
 - Target robot Ethernet address: `192.168.2.1`
-- Make sure that port 8080/tcp is opened on the Jetson for access from Wi-Fi clients connected to robots Wi-Fi access points.
+- Make sure that port 8080/tcp is opened on the Jetson for access from Wi-Fi clients connected to robots Wi-Fi access points.  
   Run `ufw status` as root.
-- If port is not opened, open it by executing following command as root:
+- If port is not opened, open it by executing following command as root:  
   `ufw allow from 192.168.2.0/28 to 192.168.2.1 port 8080 proto tcp`.
 
 Notes:
