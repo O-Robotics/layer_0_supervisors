@@ -87,6 +87,4 @@ The scheduler is intended to run as a lightweight ROS 2 node launched by FSM sta
 - The maintained parameter defaults live in `config/amr_sweeper_scheduler.yaml`.
 - Package config files should follow the workspace YAML style guide and stay under `config/`.
 
-## License
 
-Apache-2.0 (see `LICENSE`).
