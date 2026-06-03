@@ -918,14 +918,16 @@ void SchedulerNode::poll_schedule()
     load_schedule();
     reset_supervision_issue_count();
     last_mtime_ = mtime;
-    trigger_info("SCHED_ICS_LOADED", "events=" + std::to_string(schedule_.events.size()));
+    trigger_info(
+      "SCHED_ICS_LOADED",
+      "events=" + std::to_string(schedule_.events.size()) +
+      "; schedule=" + std::filesystem::path(schedule_path).filename().string() +
+      "; robot_id=" + robot_id_);
     if (schedule_has_no_events_) {
       trigger_warn("SCHED_ICS_LOAD_FAILED", "reason=ICS contains no VEVENTs");
     }
     if (!ready_message_emitted_) {
-      publish_info_message(
-        "Scheduler Running Robot=" + robot_id_ +
-        " Schedule=" + std::filesystem::path(schedule_path).filename().string());
+      publish_info_message("Scheduler is now running");
       ready_message_emitted_ = true;
     }
   } catch (const std::exception & exception) {

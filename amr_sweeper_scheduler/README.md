@@ -58,7 +58,7 @@ The scheduler is intended to run as a lightweight ROS 2 node launched by FSM sta
 - Scheduler status messages are emitted through rosout and, optionally, on `<trigger_topic_name>` as `std_msgs/String`.
 - The scheduler exposes `reload_schedule` as a `std_srvs/Trigger` service.
 - The node retries schedule setup automatically on each poll cycle and escalates repeated failures from warning to error to fatal.
-- The node emits a one-time `Scheduler Running Robot=<...> Schedule=<...>` message after the first healthy schedule load.
+- The node emits a one-time `Scheduler is now running` message after the first healthy schedule load.
 
 ## Notes
 
@@ -81,7 +81,8 @@ The scheduler is intended to run as a lightweight ROS 2 node launched by FSM sta
 - Built-in manual missions such as `3x3Sweep`, `SpotSweep`, `RecordMap`, and `Teleop` come from `amr_sweeper_default_missions`.
 - Status examples include `SCHED_ICS_NOT_FOUND path=/...`, `SCHED_ICS_LOAD_FAILED reason=...`, and `SCHED_ICS_LOADED events=4`.
 - `SCHED_ICS_LOAD_FAILED reason=ICS contains no VEVENTs` is emitted as a warning.
-- `Scheduler Running Robot=<...> Schedule=<...>` is emitted once after the node comes up cleanly.
+- `SCHED_ICS_LOADED events=<...>; schedule=<...>; robot_id=<...>` is emitted after a successful schedule load.
+- `Scheduler is now running` is emitted once after the node comes up cleanly.
 - `SCHED_SELF_RECOVERY ...` reports escalating recovery attempts before the node goes fatal.
 - The maintained parameter defaults live in `config/amr_sweeper_scheduler.yaml`.
 - Package config files should follow the workspace YAML style guide and stay under `config/`.
