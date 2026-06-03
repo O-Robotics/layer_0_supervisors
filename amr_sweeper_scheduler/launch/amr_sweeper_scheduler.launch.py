@@ -18,7 +18,7 @@ def generate_launch_description():
     mission_executor_prepare_service = LaunchConfiguration("mission_executor_prepare_service")
     trigger_running_on_work_window = LaunchConfiguration("trigger_running_on_work_window")
     config_file = PathJoinSubstitution(
-        [FindPackageShare("amr_sweeper_scheduler"), "config", "scheduler.yaml"]
+        [FindPackageShare("amr_sweeper_scheduler"), "config", "amr_sweeper_scheduler.yaml"]
     )
 
     return LaunchDescription([
@@ -28,7 +28,7 @@ def generate_launch_description():
         DeclareLaunchArgument("missions_directory", default_value="src/missions_from_db"),
         DeclareLaunchArgument("default_schedule_filename", default_value=""),
         DeclareLaunchArgument("mission_file_extension", default_value=".json"),
-        DeclareLaunchArgument("robot_id", default_value="RBT-01"),
+        DeclareLaunchArgument("robot_id", default_value=""),
         DeclareLaunchArgument("mission_executor_execute_service", default_value="execute_mission"),
         DeclareLaunchArgument("mission_executor_prepare_service", default_value="prepare_manual_mission"),
         DeclareLaunchArgument("trigger_running_on_work_window", default_value="true"),

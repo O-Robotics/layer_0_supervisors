@@ -27,6 +27,8 @@ namespace
 
 constexpr char kLowerPriorityRejectedPrefix[] = "Rejected: lower priority than last request";
 constexpr auto kLowerPriorityRetryCooldown = std::chrono::seconds(30);
+constexpr char kLegacyRobotId[] = "RBT-01";
+constexpr char kDefaultRobotConfigEnvPath[] = "/opt/robot_config/robot_config.global.env";
 
 std::optional<std::time_t> file_mtime(const std::string & path)
 {
@@ -94,9 +96,56 @@ std::string trim_cr(std::string value)
   return value;
 }
 
+std::string trim(const std::string & value)
+{
+  const auto start = value.find_first_not_of(" \t\r\n");
+  if (start == std::string::npos) {
+    return "";
+  }
+  const auto end = value.find_last_not_of(" \t\r\n");
+  return value.substr(start, end - start + 1);
+}
+
 bool starts_with(const std::string & value, const std::string & prefix)
 {
   return value.rfind(prefix, 0) == 0;
+}
+
+std::optional<std::string> derived_robot_id_from_env_file(const std::string & env_path)
+{
+  std::ifstream input_stream(env_path);
+  if (!input_stream.is_open()) {
+    return std::nullopt;
+  }
+
+  std::string line;
+  while (std::getline(input_stream, line)) {
+    line = trim(trim_cr(line));
+    if (line.empty() || line.front() == '#') {
+      continue;
+    }
+
+    const auto delimiter_pos = line.find('=');
+    if (delimiter_pos == std::string::npos) {
+      continue;
+    }
+
+    const std::string key = trim(line.substr(0, delimiter_pos));
+    if (key != "ROBOT_NUMBER") {
+      continue;
+    }
+
+    const int robot_number = std::stoi(trim(line.substr(delimiter_pos + 1)));
+    if (robot_number < 0) {
+      throw std::runtime_error("ROBOT_NUMBER must be non-negative");
+    }
+
+    std::ostringstream stream;
+    stream << "AMR-Sweeper_" << std::setw(5) << std::setfill('0') << robot_number;
+    return stream.str();
+  }
+
+  return std::nullopt;
 }
 
 std::pair<std::string, std::string> split_kv(const std::string & line)
@@ -418,10 +467,6 @@ ScheduleModel IcalParserMinimal::parse_file(const std::string & ics_path, const 
   if (in_vevent) {
     throw std::runtime_error("ICS parse error: unterminated VEVENT");
   }
-  if (model.events.empty()) {
-    throw std::runtime_error("ICS contains no VEVENTs");
-  }
-
   return model;
 }
 
@@ -552,6 +597,28 @@ SchedulerNode::SchedulerNode(const rclcpp::NodeOptions & options)
     "");
   mission_file_extension_ = declare_parameter<std::string>("mission_file_extension", ".json");
   robot_id_ = declare_parameter<std::string>("robot_id", "");
+  robot_config_env_path_ = declare_parameter<std::string>(
+    "robot_config_env_path",
+    kDefaultRobotConfigEnvPath);
+  if (robot_id_.empty() || robot_id_ == kLegacyRobotId) {
+    try {
+      const auto derived_robot_id = derived_robot_id_from_env_file(robot_config_env_path_);
+      if (derived_robot_id) {
+        robot_id_ = *derived_robot_id;
+        RCLCPP_INFO(
+          get_logger(),
+          "Derived robot_id '%s' from %s",
+          robot_id_.c_str(),
+          robot_config_env_path_.c_str());
+      }
+    } catch (const std::exception & exception) {
+      RCLCPP_WARN(
+        get_logger(),
+        "Failed to derive robot_id from %s: %s",
+        robot_config_env_path_.c_str(),
+        exception.what());
+    }
+  }
   mission_executor_execute_service_ = declare_parameter<std::string>(
     "mission_executor_execute_service",
     "execute_mission");
@@ -564,6 +631,8 @@ SchedulerNode::SchedulerNode(const rclcpp::NodeOptions & options)
     "trigger_running_on_work_window",
     true);
   schedule_poll_interval_sec_ = declare_parameter<double>("schedule_poll_interval_sec", 60.0);
+  retry_attempts_before_error_ = declare_parameter<int>("retry_attempts_before_error", 3);
+  fatal_after_consecutive_errors_ = declare_parameter<int>("fatal_after_consecutive_errors", 10);
   reload_on_mtime_change_ = declare_parameter<bool>("reload_on_mtime_change", true);
   reload_on_every_poll_ = declare_parameter<bool>("reload_on_every_poll", false);
   declare_parameter<bool>("strict_validation", true);
@@ -579,6 +648,15 @@ SchedulerNode::SchedulerNode(const rclcpp::NodeOptions & options)
   trigger_topic_name_ = declare_parameter<std::string>(
     "trigger_topic_name",
     "scheduler_triggers");
+  if (retry_attempts_before_error_ < 1) {
+    retry_attempts_before_error_ = 1;
+  }
+  if (fatal_after_consecutive_errors_ < 1) {
+    fatal_after_consecutive_errors_ = 1;
+  }
+  if (fatal_after_consecutive_errors_ < retry_attempts_before_error_) {
+    fatal_after_consecutive_errors_ = retry_attempts_before_error_;
+  }
 
   planned_pub_ = create_publisher<std_msgs::msg::String>("planned_windows", 10);
   if (emit_trigger_topic_) {
@@ -684,6 +762,55 @@ SchedulerNode::SchedulerNode(const rclcpp::NodeOptions & options)
   poll_schedule();
 }
 
+void SchedulerNode::enter_fatal_state(const std::string & message)
+{
+  fatal_error_ = true;
+  RCLCPP_FATAL(get_logger(), "%s", message.c_str());
+  if (tick_timer_) {
+    tick_timer_->cancel();
+  }
+  if (poll_timer_) {
+    poll_timer_->cancel();
+  }
+  rclcpp::shutdown();
+}
+
+void SchedulerNode::report_supervision_issue(const std::string & message)
+{
+  ++supervision_issue_count_;
+  log_escalating_issue(supervision_issue_count_, message);
+}
+
+void SchedulerNode::log_escalating_issue(int count, const std::string & message)
+{
+  if (count < retry_attempts_before_error_) {
+    trigger_warn("SCHED_SELF_RECOVERY", message);
+    return;
+  }
+
+  if (count < fatal_after_consecutive_errors_) {
+    if (count == retry_attempts_before_error_) {
+      trigger_error(
+        "SCHED_SELF_RECOVERY",
+        message + "; escalating_after_failures=" + std::to_string(count));
+      return;
+    }
+
+    trigger_error("SCHED_SELF_RECOVERY", message + "; consecutive_failures=" + std::to_string(count));
+    return;
+  }
+
+  enter_fatal_state(
+    message + ". Reached fatal threshold after " + std::to_string(count) +
+    " consecutive scheduler supervision failures");
+}
+
+void SchedulerNode::reset_supervision_issue_count()
+{
+  supervision_issue_count_ = 0;
+  fatal_error_ = false;
+}
+
 void SchedulerNode::trigger_info(const std::string & code, const std::string & kv)
 {
   const std::string message =
@@ -740,8 +867,27 @@ void SchedulerNode::trigger_error(const std::string & code, const std::string & 
 
 void SchedulerNode::poll_schedule()
 {
-  if (robot_id_.empty()) {
-    trigger_warn("SCHED_PARAMS_MISSING", "set robot_id");
+  if (fatal_error_) {
+    return;
+  }
+
+  if (robot_id_.empty() || robot_id_ == kLegacyRobotId) {
+    try {
+      const auto derived_robot_id = derived_robot_id_from_env_file(robot_config_env_path_);
+      if (derived_robot_id) {
+        robot_id_ = *derived_robot_id;
+      }
+    } catch (const std::exception & exception) {
+      RCLCPP_WARN(
+        get_logger(),
+        "Failed to derive robot_id from %s: %s",
+        robot_config_env_path_.c_str(),
+        exception.what());
+    }
+  }
+  if (robot_id_.empty() || robot_id_ == kLegacyRobotId) {
+    trigger_warn("SCHED_PARAMS_MISSING", "set robot_id or ROBOT_NUMBER");
+    report_supervision_issue("robot_id unavailable; set robot_id or ROBOT_NUMBER");
     return;
   }
 
@@ -751,6 +897,7 @@ void SchedulerNode::poll_schedule()
   const auto mtime = file_mtime(schedule_path);
   if (!mtime) {
     trigger_error("SCHED_ICS_NOT_FOUND", "path=" + schedule_path);
+    report_supervision_issue("schedule not found; path=" + schedule_path);
     schedule_loaded_ = false;
     return;
   }
@@ -764,10 +911,16 @@ void SchedulerNode::poll_schedule()
 
   try {
     load_schedule();
+    reset_supervision_issue_count();
     last_mtime_ = mtime;
     trigger_info("SCHED_ICS_LOADED", "events=" + std::to_string(schedule_.events.size()));
+    if (!ready_message_emitted_) {
+      trigger_info("SCHED_READY", "robot_id=" + robot_id_ + "; path=" + schedule_path);
+      ready_message_emitted_ = true;
+    }
   } catch (const std::exception & exception) {
     trigger_error("SCHED_ICS_LOAD_FAILED", std::string("reason=") + exception.what());
+    report_supervision_issue(std::string("schedule load failed; reason=") + exception.what());
     schedule_loaded_ = false;
   }
 }
@@ -784,6 +937,9 @@ void SchedulerNode::load_schedule()
 
   schedule_ = parser_->parse_file(resolved_schedule_path(), config);
   schedule_loaded_ = true;
+  if (schedule_.events.empty()) {
+    trigger_warn("SCHED_ICS_LOAD_FAILED", "reason=ICS contains no VEVENTs");
+  }
   if (schedule_.calendar_tzid.empty()) {
     trigger_warn("SCHED_ICS_NO_CAL_TZ", "using DTSTART TZID only");
   }

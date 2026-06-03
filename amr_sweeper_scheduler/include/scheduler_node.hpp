@@ -113,6 +113,10 @@ public:
   explicit SchedulerNode(const rclcpp::NodeOptions & options = rclcpp::NodeOptions());
 
 private:
+  void enter_fatal_state(const std::string & message);
+  void report_supervision_issue(const std::string & message);
+  void log_escalating_issue(int count, const std::string & message);
+  void reset_supervision_issue_count();
   void tick();
   void poll_schedule();
   void load_schedule();
@@ -150,12 +154,15 @@ private:
   std::string default_schedule_filename_;
   std::string mission_file_extension_;
   std::string robot_id_;
+  std::string robot_config_env_path_;
   std::string mission_executor_execute_service_;
   std::string mission_executor_prepare_service_;
   int horizon_hours_{72};
   double tick_seconds_{1.0};
   bool trigger_running_on_work_window_{true};
   double schedule_poll_interval_sec_{60.0};
+  int retry_attempts_before_error_{3};
+  int fatal_after_consecutive_errors_{10};
   bool reload_on_mtime_change_{true};
   bool reload_on_every_poll_{false};
   bool emit_rosout_triggers_{true};
@@ -171,6 +178,9 @@ private:
   std::optional<std::time_t> last_mtime_;
   std::unordered_map<std::string, std::string> mission_catalog_;
   std::set<std::string> warned_missing_mission_ids_;
+  int supervision_issue_count_{0};
+  bool ready_message_emitted_{false};
+  bool fatal_error_{false};
 };
 
 }  // namespace amr_sweeper_scheduler

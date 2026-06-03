@@ -1,21 +1,26 @@
 /**/amr_sweeper_scheduler:
   ros__parameters:
     # -- Mission sources and outputs ------------------------------------------
-    schedule_ics_path:                  ""                  # Explicit schedule file path. Leave empty to auto-discover the newest schedule_<timestamp>.ics file in missions_directory.
-    missions_directory:                 src/missions_from_db # Folder containing schedule_<timestamp>.ics and synced VDA5050 mission files/subfolders.
-    default_schedule_filename:          ""                  # Legacy fallback schedule filename if auto-discovery finds no schedule_<timestamp>.ics files.
-    mission_file_extension:             .json               # File suffix used when cataloging VDA5050 mission files.
-    robot_id:                           RBT-01              # Robot identifier used to filter schedule entries.
-    mission_executor_execute_service:   execute_mission     # Mission executor service used to build, prepare, and activate scheduled missions.
-    mission_executor_prepare_service:   prepare_manual_mission  # Compatibility prepare_mission_execution service for manual missions.
+    schedule_ics_path:                  src/missions_from_db          # Explicit schedule file path. Leave empty to auto-discover the newest schedule_<timestamp>.ics file in missions_directory.
+    missions_directory:                 src/missions_from_db          # Folder containing schedule_<timestamp>.ics and synced VDA5050 mission files/subfolders.
+    default_schedule_filename:          ""                            # Legacy fallback schedule filename if auto-discovery finds no schedule_<timestamp>.ics files.
+    mission_file_extension:             .json                         # File suffix used when cataloging VDA5050 mission files.
+    robot_id:                           ""                            # Leave empty to derive AMR-Sweeper_000xx from ROBOT_NUMBER in robot_config_env_path.
+    robot_config_env_path:              /opt/robot_config/robot_config.global.env # Environment file used to derive ROBOT_NUMBER for the default robot_id.
+    mission_executor_execute_service:   execute_mission               # Mission executor service used to build, prepare, and activate scheduled missions.
+    mission_executor_prepare_service:   prepare_manual_mission        # Compatibility prepare_mission_execution service for manual missions.
 
     # -- Runtime cadence and FSM handoff --------------------------------------
     horizon_hours:                      72                  # Recurrence expansion horizon measured forward from now.
     tick_seconds:                       2.0                 # Scheduler publish and decision tick in seconds.
     trigger_running_on_work_window:     true                # Request RUNNING automatically when a valid WORK window is active.
 
-    # -- Schedule reload policy -----------------------------------------------
+    # -- Schedule supervision -------------------------------------------------
     schedule_poll_interval_sec:         60.0                # Filesystem poll period used to detect schedule changes.
+    retry_attempts_before_error:        3                   # Consecutive scheduler failures allowed before WARN escalates to ERROR.
+    fatal_after_consecutive_errors:     10                  # Consecutive scheduler failures allowed before the node escalates to FATAL and stops retrying.
+
+    # -- Schedule reload policy -----------------------------------------------
     reload_on_mtime_change:             true                # Reload the schedule when the file modification time changes.
     reload_on_every_poll:               false               # Force a full reload on every poll cycle for diagnostics only.
 

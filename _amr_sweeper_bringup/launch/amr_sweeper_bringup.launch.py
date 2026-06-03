@@ -149,7 +149,7 @@ def generate_launch_description():
             }.items(),
         ),
         IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(_launch_file("amr_sweeper_scheduler", "scheduler.launch.py")),
+            PythonLaunchDescriptionSource(_launch_file("amr_sweeper_scheduler", "amr_sweeper_scheduler.launch.py")),
             launch_arguments={
                 "namespace": namespace,
                 "use_sim_time": use_sim_time,
@@ -157,7 +157,6 @@ def generate_launch_description():
                 "missions_directory": missions_from_db_directory,
                 "default_schedule_filename": default_schedule_filename,
                 "mission_file_extension": mission_file_extension,
-                "robot_id": robot_id,
                 "mission_executor_execute_service": mission_executor_execute_service,
                 "mission_executor_prepare_service": mission_executor_prepare_service,
                 "trigger_running_on_work_window": trigger_running_on_work_window,
