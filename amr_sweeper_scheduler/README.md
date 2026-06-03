@@ -55,10 +55,10 @@ The scheduler is intended to run as a lightweight ROS 2 node launched by FSM sta
 - Scheduled execution requests are forwarded to `amr_sweeper_mission_executor/execute_mission`.
 - Manual preparation remains available through `prepare_mission_execution`, which forwards to `amr_sweeper_mission_executor/prepare_manual_mission`.
 - Planned windows are published on `planned_windows` as JSON in `std_msgs/String`.
-- FSM monitoring events are emitted through rosout and, optionally, on `<trigger_topic_name>` as `std_msgs/String`.
+- Scheduler status messages are emitted through rosout and, optionally, on `<trigger_topic_name>` as `std_msgs/String`.
 - The scheduler exposes `reload_schedule` as a `std_srvs/Trigger` service.
 - The node retries schedule setup automatically on each poll cycle and escalates repeated failures from warning to error to fatal.
-- The node emits a one-time `SCHED_READY` message after the first healthy schedule load.
+- The node emits a one-time `Scheduler Running Robot=<...> Schedule=<...>` message after the first healthy schedule load.
 
 ## Notes
 
@@ -79,10 +79,10 @@ The scheduler is intended to run as a lightweight ROS 2 node launched by FSM sta
 - If exactly one mission JSON exists, the scheduler can use it as a fallback during initial testing.
 - The recommended convention is for `X-MISSION-ID` to match the mission folder and mission filename stem.
 - Built-in manual missions such as `3x3Sweep`, `SpotSweep`, `RecordMap`, and `Teleop` come from `amr_sweeper_default_missions`.
-- Trigger examples include `FSM_TRIGGER SCHED_ICS_NOT_FOUND path=/...`, `FSM_TRIGGER SCHED_ICS_LOAD_FAILED reason=...`, and `FSM_TRIGGER SCHED_ICS_LOADED events=4`.
-- `FSM_TRIGGER SCHED_ICS_LOAD_FAILED reason=ICS contains no VEVENTs` is emitted as a warning.
-- `FSM_TRIGGER SCHED_READY robot_id=<...>; path=<...>` is emitted once after the node comes up cleanly.
-- `FSM_TRIGGER SCHED_SELF_RECOVERY ...` reports escalating recovery attempts before the node goes fatal.
+- Status examples include `SCHED_ICS_NOT_FOUND path=/...`, `SCHED_ICS_LOAD_FAILED reason=...`, and `SCHED_ICS_LOADED events=4`.
+- `SCHED_ICS_LOAD_FAILED reason=ICS contains no VEVENTs` is emitted as a warning.
+- `Scheduler Running Robot=<...> Schedule=<...>` is emitted once after the node comes up cleanly.
+- `SCHED_SELF_RECOVERY ...` reports escalating recovery attempts before the node goes fatal.
 - The maintained parameter defaults live in `config/amr_sweeper_scheduler.yaml`.
 - Package config files should follow the workspace YAML style guide and stay under `config/`.
 

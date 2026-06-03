@@ -605,11 +605,6 @@ SchedulerNode::SchedulerNode(const rclcpp::NodeOptions & options)
       const auto derived_robot_id = derived_robot_id_from_env_file(robot_config_env_path_);
       if (derived_robot_id) {
         robot_id_ = *derived_robot_id;
-        RCLCPP_INFO(
-          get_logger(),
-          "Derived robot_id '%s' from %s",
-          robot_id_.c_str(),
-          robot_config_env_path_.c_str());
       }
     } catch (const std::exception & exception) {
       RCLCPP_WARN(
@@ -641,9 +636,6 @@ SchedulerNode::SchedulerNode(const rclcpp::NodeOptions & options)
   declare_parameter<bool>("require_x_schedule_type", true);
   declare_parameter<bool>("require_x_mission_id_for_work", true);
   emit_rosout_triggers_ = declare_parameter<bool>("emit_rosout_triggers", true);
-  rosout_trigger_prefix_ = declare_parameter<std::string>(
-    "rosout_trigger_prefix",
-    "FSM_TRIGGER");
   emit_trigger_topic_ = declare_parameter<bool>("emit_trigger_topic", true);
   trigger_topic_name_ = declare_parameter<std::string>(
     "trigger_topic_name",
@@ -811,56 +803,69 @@ void SchedulerNode::reset_supervision_issue_count()
   fatal_error_ = false;
 }
 
-void SchedulerNode::trigger_info(const std::string & code, const std::string & kv)
+void SchedulerNode::publish_info_message(const std::string & message)
 {
-  const std::string message =
-    rosout_trigger_prefix_ + std::string(" INFO ") + code + (kv.empty() ? "" : " " + kv);
   if (last_trigger_message_ == message) {
     return;
   }
   last_trigger_message_ = message;
   if (emit_rosout_triggers_) {
-    RCLCPP_INFO(get_logger(), "%s %s %s", rosout_trigger_prefix_.c_str(), code.c_str(), kv.c_str());
+    RCLCPP_INFO(get_logger(), "%s", message.c_str());
   }
   if (emit_trigger_topic_ && trigger_pub_) {
     std_msgs::msg::String msg;
-    msg.data = rosout_trigger_prefix_ + std::string(" ") + code + (kv.empty() ? "" : " " + kv);
+    msg.data = message;
+    trigger_pub_->publish(msg);
+  }
+}
+
+void SchedulerNode::trigger_info(const std::string & code, const std::string & kv)
+{
+  const std::string message = code + (kv.empty() ? "" : " " + kv);
+  if (last_trigger_message_ == message) {
+    return;
+  }
+  last_trigger_message_ = message;
+  if (emit_rosout_triggers_) {
+    RCLCPP_INFO(get_logger(), "%s", message.c_str());
+  }
+  if (emit_trigger_topic_ && trigger_pub_) {
+    std_msgs::msg::String msg;
+    msg.data = message;
     trigger_pub_->publish(msg);
   }
 }
 
 void SchedulerNode::trigger_warn(const std::string & code, const std::string & kv)
 {
-  const std::string message =
-    rosout_trigger_prefix_ + std::string(" WARN ") + code + (kv.empty() ? "" : " " + kv);
+  const std::string message = code + (kv.empty() ? "" : " " + kv);
   if (last_trigger_message_ == message) {
     return;
   }
   last_trigger_message_ = message;
   if (emit_rosout_triggers_) {
-    RCLCPP_WARN(get_logger(), "%s %s %s", rosout_trigger_prefix_.c_str(), code.c_str(), kv.c_str());
+    RCLCPP_WARN(get_logger(), "%s", message.c_str());
   }
   if (emit_trigger_topic_ && trigger_pub_) {
     std_msgs::msg::String msg;
-    msg.data = rosout_trigger_prefix_ + std::string(" ") + code + (kv.empty() ? "" : " " + kv);
+    msg.data = message;
     trigger_pub_->publish(msg);
   }
 }
 
 void SchedulerNode::trigger_error(const std::string & code, const std::string & kv)
 {
-  const std::string message =
-    rosout_trigger_prefix_ + std::string(" ERROR ") + code + (kv.empty() ? "" : " " + kv);
+  const std::string message = code + (kv.empty() ? "" : " " + kv);
   if (last_trigger_message_ == message) {
     return;
   }
   last_trigger_message_ = message;
   if (emit_rosout_triggers_) {
-    RCLCPP_ERROR(get_logger(), "%s %s %s", rosout_trigger_prefix_.c_str(), code.c_str(), kv.c_str());
+    RCLCPP_ERROR(get_logger(), "%s", message.c_str());
   }
   if (emit_trigger_topic_ && trigger_pub_) {
     std_msgs::msg::String msg;
-    msg.data = rosout_trigger_prefix_ + std::string(" ") + code + (kv.empty() ? "" : " " + kv);
+    msg.data = message;
     trigger_pub_->publish(msg);
   }
 }
@@ -914,8 +919,13 @@ void SchedulerNode::poll_schedule()
     reset_supervision_issue_count();
     last_mtime_ = mtime;
     trigger_info("SCHED_ICS_LOADED", "events=" + std::to_string(schedule_.events.size()));
+    if (schedule_has_no_events_) {
+      trigger_warn("SCHED_ICS_LOAD_FAILED", "reason=ICS contains no VEVENTs");
+    }
     if (!ready_message_emitted_) {
-      trigger_info("SCHED_READY", "robot_id=" + robot_id_ + "; path=" + schedule_path);
+      publish_info_message(
+        "Scheduler Running Robot=" + robot_id_ +
+        " Schedule=" + std::filesystem::path(schedule_path).filename().string());
       ready_message_emitted_ = true;
     }
   } catch (const std::exception & exception) {
@@ -937,9 +947,7 @@ void SchedulerNode::load_schedule()
 
   schedule_ = parser_->parse_file(resolved_schedule_path(), config);
   schedule_loaded_ = true;
-  if (schedule_.events.empty()) {
-    trigger_warn("SCHED_ICS_LOAD_FAILED", "reason=ICS contains no VEVENTs");
-  }
+  schedule_has_no_events_ = schedule_.events.empty();
   if (schedule_.calendar_tzid.empty()) {
     trigger_warn("SCHED_ICS_NO_CAL_TZ", "using DTSTART TZID only");
   }

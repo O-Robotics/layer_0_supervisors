@@ -117,6 +117,7 @@ private:
   void report_supervision_issue(const std::string & message);
   void log_escalating_issue(int count, const std::string & message);
   void reset_supervision_issue_count();
+  void publish_info_message(const std::string & message);
   void tick();
   void poll_schedule();
   void load_schedule();
@@ -166,7 +167,6 @@ private:
   bool reload_on_mtime_change_{true};
   bool reload_on_every_poll_{false};
   bool emit_rosout_triggers_{true};
-  std::string rosout_trigger_prefix_{"FSM_TRIGGER"};
   bool emit_trigger_topic_{true};
   std::string trigger_topic_name_{"scheduler_triggers"};
   std::string last_trigger_message_;
@@ -181,6 +181,7 @@ private:
   int supervision_issue_count_{0};
   bool ready_message_emitted_{false};
   bool fatal_error_{false};
+  bool schedule_has_no_events_{false};
 };
 
 }  // namespace amr_sweeper_scheduler

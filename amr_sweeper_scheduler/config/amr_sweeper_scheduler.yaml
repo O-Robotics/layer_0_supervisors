@@ -32,7 +32,6 @@
     require_x_mission_id_for_work:      true                # Require X-MISSION-ID on WORK entries.
 
     # -- FSM monitoring output ------------------------------------------------
-    emit_rosout_triggers:               true                # Emit machine-parsable rosout triggers for FSM monitoring.
-    rosout_trigger_prefix:              FSM_TRIGGER         # Prefix attached to rosout and trigger-topic events.
-    emit_trigger_topic:                 true                # Publish scheduler trigger events on a topic in addition to rosout.
-    trigger_topic_name:                 scheduler_triggers  # Topic name for scheduler trigger events.
+    emit_rosout_triggers:               true                # Emit scheduler status logs on rosout.
+    emit_trigger_topic:                 true                # Publish scheduler status messages on a topic in addition to rosout.
+    trigger_topic_name:                 scheduler_triggers  # Topic name for scheduler status messages.
