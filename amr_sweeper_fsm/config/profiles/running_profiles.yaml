@@ -235,7 +235,7 @@ profiles:
             args:
               - "namespace:={ns}"
               - "use_sim_time:=false"
-              - "use_amr_sweeper_visual_odometry:=true"
+              - "use_amr_sweeper_visual_odometry:=false"
               - "use_amr_sweeper_localization:=true"
               - "use_amr_sweeper_mapping:=true"
               - "use_amr_sweeper_waypoint_follower:=true"
@@ -540,7 +540,7 @@ profiles:
             args:
               - "namespace:={ns}"
               - "use_sim_time:=false"
-              - "use_amr_sweeper_visual_odometry:=true"
+              - "use_amr_sweeper_visual_odometry:=false"
               - "use_amr_sweeper_localization:=true"
               - "use_amr_sweeper_mapping:=true"
               - "use_amr_sweeper_waypoint_follower:=false"
@@ -804,7 +804,7 @@ profiles:
             args:
               - "namespace:={ns}"
               - "use_sim_time:=false"
-              - "use_amr_sweeper_visual_odometry:=true"
+              - "use_amr_sweeper_visual_odometry:=false"
               - "use_amr_sweeper_localization:=true"
               - "use_amr_sweeper_mapping:=true"
               - "use_amr_sweeper_waypoint_follower:=true"
