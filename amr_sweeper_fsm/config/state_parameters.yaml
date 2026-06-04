@@ -20,6 +20,7 @@
   ros__parameters:
     ready:
       controller_query_timeout_ms: 1000   # Timeout for each controller_manager list_controllers probe.
+      lifecycle_query_timeout_ms: 1000    # Timeout for each lifecycle get_state probe.
 
     # FSM-state faults evaluated continuously while the FSM-state is active.
     faults:
@@ -40,6 +41,7 @@
   ros__parameters:
     ready:
       controller_query_timeout_ms: 1000   # Timeout for each controller_manager list_controllers probe.
+      lifecycle_query_timeout_ms: 1000    # Timeout for each lifecycle get_state probe.
 
     # FSM-state faults evaluated continuously while the FSM-state is active.
     faults:
@@ -60,6 +62,7 @@
   ros__parameters:
     ready:
       controller_query_timeout_ms: 1000   # Timeout for each controller_manager list_controllers probe.
+      lifecycle_query_timeout_ms: 1000    # Timeout for each lifecycle get_state probe.
 
     # FSM-state faults evaluated continuously while the FSM-state is active.
     faults:
@@ -80,6 +83,7 @@
   ros__parameters:
     ready:
       controller_query_timeout_ms: 1000   # Timeout for each controller_manager list_controllers probe.
+      lifecycle_query_timeout_ms: 1000    # Timeout for each lifecycle get_state probe.
 
     # FSM-state faults evaluated continuously while the FSM-state is active.
     faults:
@@ -100,6 +104,7 @@
   ros__parameters:
     ready:
       controller_query_timeout_ms: 1000   # Timeout for each controller_manager list_controllers probe.
+      lifecycle_query_timeout_ms: 1000    # Timeout for each lifecycle get_state probe.
 
     # FSM-state faults evaluated continuously while the FSM-state is active.
     faults:

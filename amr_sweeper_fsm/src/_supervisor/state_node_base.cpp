@@ -1121,6 +1121,7 @@ auto read_int = [this](const std::string & name, int default_value) -> int {
 
   readiness_.timeout_ms = read_int("ready.timeout_ms", 0);
   readiness_.controller_query_timeout_ms = read_int("ready.controller_query_timeout_ms", 500);
+  readiness_.lifecycle_query_timeout_ms = read_int("ready.lifecycle_query_timeout_ms", 200);
 }
 
 bool StateNodeBase::graph_has_node(const std::string & node_name)
@@ -1261,7 +1262,9 @@ bool StateNodeBase::lifecycle_node_meets_requirement(
   rclcpp::executors::SingleThreadedExecutor exec;
   exec.add_node(probe);
 
-  const auto rc = exec.spin_until_future_complete(future, std::chrono::milliseconds(200));
+  const auto rc = exec.spin_until_future_complete(
+    future,
+    std::chrono::milliseconds(readiness_.lifecycle_query_timeout_ms));
   exec.remove_node(probe);
 
   if (rc != rclcpp::FutureReturnCode::SUCCESS) {
