@@ -14,7 +14,7 @@ install(PROGRAMS
 )
 
 install(
-  DIRECTORY assets config launch
+  DIRECTORY assets launch
   DESTINATION share/${PROJECT_NAME}
 )
 
