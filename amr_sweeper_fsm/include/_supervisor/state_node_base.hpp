@@ -177,6 +177,7 @@ protected:
     std::vector<std::string> services;
 
     int timeout_ms{0};
+    int controller_query_timeout_ms{500};
   };
 
   /// Load (or declare) readiness parameters into readiness_.

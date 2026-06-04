@@ -18,6 +18,8 @@
 #################################### INITIALIZING ####################################
 /**/initializing_state:
   ros__parameters:
+    ready:
+      controller_query_timeout_ms: 1000   # Timeout for each controller_manager list_controllers probe.
 
     # FSM-state faults evaluated continuously while the FSM-state is active.
     faults:
@@ -36,6 +38,8 @@
 ###################################### IDLING ########################################
 /**/idling_state:
   ros__parameters:
+    ready:
+      controller_query_timeout_ms: 1000   # Timeout for each controller_manager list_controllers probe.
 
     # FSM-state faults evaluated continuously while the FSM-state is active.
     faults:
@@ -54,6 +58,8 @@
 ##################################### RUNNING ########################################
 /**/running_state:
   ros__parameters:
+    ready:
+      controller_query_timeout_ms: 1000   # Timeout for each controller_manager list_controllers probe.
 
     # FSM-state faults evaluated continuously while the FSM-state is active.
     faults:
@@ -72,6 +78,8 @@
 ##################################### CHARGING #######################################
 /**/charging_state:
   ros__parameters:
+    ready:
+      controller_query_timeout_ms: 1000   # Timeout for each controller_manager list_controllers probe.
 
     # FSM-state faults evaluated continuously while the FSM-state is active.
     faults:
@@ -90,6 +98,8 @@
 ###################################### FAULT #########################################
 /**/fault_state:
   ros__parameters:
+    ready:
+      controller_query_timeout_ms: 1000   # Timeout for each controller_manager list_controllers probe.
 
     # FSM-state faults evaluated continuously while the FSM-state is active.
     faults:
