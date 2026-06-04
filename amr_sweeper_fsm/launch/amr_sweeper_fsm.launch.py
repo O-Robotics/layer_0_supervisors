@@ -23,7 +23,7 @@ def generate_launch_description():
       The per-state profile YAML files are referenced (by path) from state_parameters.yaml.
 
     Startup selection:
-      - start_profile (launch argument) sets the supervisor's desired_profile parameter.
+      - use_profile (launch argument) sets the supervisor's desired_profile parameter.
       - The supervisor derives the initial FSM-state from the profile band and enters that
         state node using the requested profile.
     """
@@ -36,7 +36,7 @@ def generate_launch_description():
     namespace = LaunchConfiguration("namespace")
     use_sim_time = LaunchConfiguration("use_sim_time")
     state_params_file = LaunchConfiguration("state_params_file")
-    start_profile = LaunchConfiguration("start_profile")
+    use_profile = LaunchConfiguration("use_profile")
     tick_period_ms = LaunchConfiguration("tick_period_ms")
     use_test = LaunchConfiguration("use_test")
     test_output_directory = LaunchConfiguration("test_output_directory")
@@ -53,8 +53,8 @@ def generate_launch_description():
         description="Use ROS time from /clock when true.",
     )
 
-    declare_start_profile = DeclareLaunchArgument(
-        "start_profile",
+    declare_use_profile = DeclareLaunchArgument(
+        "use_profile",
         default_value="001",
         description="Startup FSM profile id (default: 001).",
     )
@@ -106,7 +106,7 @@ def generate_launch_description():
         parameters=[
             state_params_file,
             {"use_sim_time": use_sim_time},
-            {"desired_profile": ParameterValue(start_profile, value_type=int)},
+            {"desired_profile": ParameterValue(use_profile, value_type=int)},
             {"tick_period_ms": ParameterValue(tick_period_ms, value_type=int)},
             {"runtime.use_test": use_test},
             {"runtime.test_output_directory": test_output_directory},
@@ -194,7 +194,7 @@ def generate_launch_description():
             SetEnvironmentVariable("RCUTILS_COLORIZED_OUTPUT", "1"),
             declare_namespace,
             declare_use_sim_time,
-            declare_start_profile,
+            declare_use_profile,
             declare_tick_period_ms,
             declare_state_params,
             declare_use_test,

@@ -65,7 +65,7 @@ ros2 launch amr_sweeper_fsm amr_sweeper_fsm.launch.py
 - `use_sim_time` (default: `false`)  
   Passed to all nodes. When `true`, the FSM follows ROS time from `/clock`.
 
-- `start_profile` (default: `001`)  
+- `use_profile` (default: `001`)  
   Passed to the supervisor as `desired_profile` (integer). This selects the startup profile id.
 
 - `tick_period_ms` (default: `100`)  
@@ -80,7 +80,7 @@ Example (5 second tick, start profile 201, custom namespace):
 ```bash
 ros2 launch amr_sweeper_fsm amr_sweeper_fsm.launch.py \
   namespace:=robot1 \
-  start_profile:=201 \
+  use_profile:=201 \
   tick_period_ms:=5000
 ```
 
@@ -126,6 +126,7 @@ The shipped profile catalog is currently:
 - `000`: INITIALIZING bridge profile with no processes; auto-requests `101`
 - `001`: default INITIALIZING full-stack startup validation
 - `002`: alternate INITIALIZING validation profile
+- `003`: INITIALIZING debug bringup profile that starts the full stack and stays idle without auto-jumping to `101` or `400`
 - `100`: IDLING bridge profile with no processes; auto-requests `101`
 - `101`: default IDLING profile with layer 1 hardware bringup, `amr_sweeper_vda5050_parser`, and `amr_sweeper_scheduler`
 - `110`: IDLING test profile for `fsm_tester_node`
@@ -140,6 +141,7 @@ The shipped profile catalog is currently:
 - `401`: FAULT empty profile
 
 `001` and `000` both auto-request `101` only after their own activation and readiness checks succeed.
+`003` starts the same full-stack bringup path as `001`, but it keeps those processes non-blocking for debugging and remains in `INITIALIZING`.
 
 
 ---

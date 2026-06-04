@@ -21,7 +21,7 @@ This repository is the supervision and orchestration layer for the AMR Sweeper. 
 ## Launch Arguments
 - `namespace`: default `amr_sweeper`
 - `use_sim_time`: default `false`
-- `start_profile`: default `001`
+- `use_profile`: default `001`
 - `tick_period_ms`: default `100`
 - `state_params_file`: default `amr_sweeper_fsm/config/state_parameters.yaml`
 

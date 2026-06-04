@@ -28,7 +28,7 @@ FSM-state name set:
 
 Profile ID bands (100-wide band of profiles per FSM-state)
 ---------------------------------------------
-  INITIALIZING : 000 - 099   (bridge 000, default 001, alternate 002)
+  INITIALIZING : 000 - 099   (bridge 000, default 001, alternate 002, debug 003)
   IDLING       : 100 - 199   (bridge 100, default 101, testing 110)
   RUNNING      : 200 - 299   (bridge 200, default 201, mapping 202, routed 203, teleop 204)
   CHARGING     : 300 - 399   (bridge 300, default 301)
@@ -65,6 +65,7 @@ INITIALIZING
   - The default startup profile validates layer 1 hardware, layer 2 controllers, layer 3 localization/navigation/mapping,
     plus mission-parser and scheduler readiness.
   - Profiles 000 and 001 auto-request IDLING profile 101 after activation and readiness succeed.
+  - Profile 003 starts the same layer bringup commands as 001 but keeps them non-blocking and does not auto-transition to IDLING or FAULT.
   - Readiness failures or process failures escalate according to per-process error policy, typically into FAULT profile 400.
 
 IDLING

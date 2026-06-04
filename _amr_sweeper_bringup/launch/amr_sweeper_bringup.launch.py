@@ -21,7 +21,7 @@ def generate_launch_description():
     use_sim_time = LaunchConfiguration("use_sim_time")
     state_params_file = LaunchConfiguration("state_params_file")
     test_output_directory = LaunchConfiguration("test_output_directory")
-    start_profile = LaunchConfiguration("start_profile")
+    use_profile = LaunchConfiguration("use_profile")
     tick_period_ms = LaunchConfiguration("tick_period_ms")
     missions_from_db_directory = LaunchConfiguration("missions_from_db_directory")
     missions_log_directory = LaunchConfiguration("missions_log_directory")
@@ -77,7 +77,7 @@ def generate_launch_description():
         DeclareLaunchArgument("use_sim_time", default_value="false"),
         DeclareLaunchArgument("state_params_file", default_value=default_state_params_file),
         DeclareLaunchArgument("test_output_directory", default_value="src/layer_3_navigation/tests"),
-        DeclareLaunchArgument("start_profile", default_value="001"),
+        DeclareLaunchArgument("use_profile", default_value="001"),
         DeclareLaunchArgument("tick_period_ms", default_value="100"),
         DeclareLaunchArgument("missions_from_db_directory", default_value="src/missions_from_db"),
         DeclareLaunchArgument("missions_log_directory", default_value="src/missions_log"),
@@ -122,7 +122,7 @@ def generate_launch_description():
             launch_arguments={
                 "namespace": namespace,
                 "use_sim_time": use_sim_time,
-                "start_profile": start_profile,
+                "use_profile": use_profile,
                 "tick_period_ms": tick_period_ms,
                 "state_params_file": state_params_file,
                 "use_test": use_test,

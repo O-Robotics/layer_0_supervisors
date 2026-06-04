@@ -22,13 +22,13 @@ Terminal A:
 Arguments (pass arguments as '<name>:=<value>'):
     'namespace': Top-level namespace for all FSM nodes. (default: 'amr_sweeper')
     'use_sim_time': Use ROS time from /clock when true. (default: 'false')
-    'start_profile': Startup FSM profile id. (default: '001')
+    'use_profile': Startup FSM profile id. (default: '001')
     'tick_period_ms': Supervisor tick period in milliseconds. (default: '100')
     'state_params_file': FSM state parameters YAML. Defines per-state profiles.
       (default: '<package_share>/config/state_parameters.yaml')
 
 "TEST"
-ros2 launch amr_sweeper_fsm amr_sweeper_fsm.launch.py start_profile:=000
+ros2 launch amr_sweeper_fsm amr_sweeper_fsm.launch.py use_profile:=000
 
 2) Discover ROS graph
 ---------------------

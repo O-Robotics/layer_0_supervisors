@@ -451,3 +451,300 @@ profiles:
             sigint_timeout_ms: 1000
             sigterm_timeout_ms: 1000
             sigkill_timeout_ms: 1000
+
+
+  # ---------------------------------------------------------------------------
+  # Profile 003 (debug bringup)
+  # ---------------------------------------------------------------------------
+  - profile:
+      id: 003
+      transitions:
+        auto_transition_on: false
+        auto_transition_profile:
+        fault_transition_on: false
+        fault_transition_profile: 400
+
+      processes:
+        # Layer 1 hardware bringup for debug sessions. Startup failures are tolerated.
+        - name: "amr_sweeper_layer_1_hardware_bringup"
+          importance: "optional"
+          startup:
+            exec: "ros2 launch amr_sweeper_layer_1_hardware_bringup amr_sweeper_layer_1_hardware_bringup.launch.py"
+            args:
+              - "namespace:={ns}"
+              - "use_amr_sweeper_battery:=true"
+              - "use_amr_sweeper_system_info:=true"
+              - "use_amr_sweeper_usb_cameras:=true"
+              - "use_amr_sweeper_depth_camera:=true"
+              - "use_amr_sweeper_imu:=true"
+              - "use_amr_sweeper_gnss:=true"
+              - "use_ntrip_client:=true"
+            ready:
+              - type: "topic"
+                target: "system_info"
+                required: true
+              - type: "topic"
+                target: "imu/data_raw"
+                required: true
+              - type: "topic"
+                target: "imu/data_acc_gyro"
+                required: true
+              - type: "topic"
+                target: "imu/data_heading"
+                required: true
+              - type: "topic"
+                target: "gnss/navsat"
+                required: true
+              - type: "topic"
+                target: "battery_state"
+                required: true
+              - type: "topic"
+                target: "robot_description"
+                required: true
+              - type: "topic"
+                target: "joint_states"
+                required: true
+              - type: "topic"
+                target: "diff_cont/odom"
+                required: true
+              - type: "topic"
+                target: "usb_cameras/rear_left_camera/image_raw"
+                required: true
+              - type: "topic"
+                target: "usb_cameras/rear_right_camera/image_raw"
+                required: true
+              - type: "topic"
+                target: "usb_cameras/tools_camera/image_raw"
+                required: true
+              - type: "topic"
+                target: "depth_camera/depth/camera_info"
+                required: false
+              - type: "topic"
+                target: "depth_camera/scan"
+                required: false
+              - type: "topic"
+                target: "depth_camera/depth/color/points"
+                required: false
+              - type: "service"
+                target: "robot_state_publisher/get_parameters"
+                required: true
+              - type: "service"
+                target: "amr_sweeper_battery_node/get_parameters"
+                required: true
+              - type: "service"
+                target: "amr_sweeper_system_info_node/get_parameters"
+                required: true
+              - type: "service"
+                target: "imu/imu_node/get_parameters"
+                required: true
+              - type: "service"
+                target: "gnss/amr_sweeper_gnss_ublox_node/get_parameters"
+                required: true
+              - type: "service"
+                target: "gnss/ntrip_client/get_parameters"
+                required: true
+              - type: "service"
+                target: "controller_manager/list_controllers"
+                required: true
+              - type: "service"
+                target: "controller_manager/list_hardware_components"
+                required: true
+              - type: "controller"
+                target: "joint_broad"
+                required: true
+              - type: "controller"
+                target: "diff_cont"
+                required: true
+              - type: "controller"
+                target: "controller_steadydrive"
+                required: true
+            window_ms: 45000
+          restart:
+            max_restarts: 5
+            restart_delay_ms: 1000
+          shutdown:
+            sigint_timeout_ms: 1000
+            sigterm_timeout_ms: 1000
+            sigkill_timeout_ms: 1000
+
+        # Layer 2 controllers bringup for debug sessions. Startup failures are tolerated.
+        - name: "amr_sweeper_layer_2_controllers_bringup"
+          importance: "optional"
+          startup:
+            exec: "ros2 launch amr_sweeper_layer_2_controllers_bringup amr_sweeper_layer_2_controllers_bringup.launch.py"
+            args:
+              - "namespace:={ns}"
+              - "use_amr_sweeper_joystick:=false"
+              - "use_amr_sweeper_sweeping_controller:=true"
+              - "use_amr_sweeper_wheel_controller:=true"
+              - "use_amr_sweeper_tool_controller:=true"
+              - "use_amr_sweeper_attitude_controller:=true"
+              - "use_amr_sweeper_collision_detector:=true"
+              - "use_amr_sweeper_safety_controller:=true"
+            ready:
+              - type: "topic"
+                target: "cmd_vel_sweep_wheels"
+                required: true
+              - type: "topic"
+                target: "cmd_vel_sweep_tools"
+                required: true
+              - type: "topic"
+                target: "attitude/roll_pitch"
+                required: true
+              - type: "topic"
+                target: "joint_states"
+                required: true
+              - type: "topic"
+                target: "safety_controller/status"
+                required: true
+              - type: "topic"
+                target: "controller_steadydrive/commands"
+                required: true
+              - type: "topic"
+                target: "diff_cont/cmd_vel"
+                required: true
+              - type: "topic"
+                target: "collision_detector/impact_detected"
+                required: true
+              - type: "service"
+                target: "amr_sweeper_attitude_controller/enable_attitude_estimation"
+                required: true
+              - type: "service"
+                target: "amr_sweeper_safety_controller/enable_controller"
+                required: true
+              - type: "service"
+                target: "wheel_command_stamper/get_parameters"
+                required: true
+              - type: "service"
+                target: "tool_controller_node/get_parameters"
+                required: true
+              - type: "service"
+                target: "sweeping_controller_node/get_parameters"
+                required: true
+              - type: "service"
+                target: "collision_detector/get_parameters"
+                required: true
+              - type: "service"
+                target: "safety_controller/get_parameters"
+                required: true
+              - type: "service"
+                target: "amr_sweeper_collision_detector/enable_detector"
+                required: true
+            window_ms: 15000
+          restart:
+            max_restarts: 0
+            restart_delay_ms: 1000
+          shutdown:
+            sigint_timeout_ms: 1500
+            sigterm_timeout_ms: 1500
+            sigkill_timeout_ms: 1500
+
+        # Layer 3 navigation bringup for debug sessions. Startup failures are tolerated.
+        - name: "amr_sweeper_layer_3_navigation_bringup"
+          importance: "optional"
+          startup:
+            exec: "ros2 launch amr_sweeper_layer_3_navigation_bringup amr_sweeper_layer_3_navigation_bringup.launch.py"
+            args:
+              - "namespace:={ns}"
+              - "use_sim_time:=false"
+              - "use_amr_sweeper_visual_odometry:=true"
+              - "use_amr_sweeper_localization:=true"
+              - "use_amr_sweeper_mapping:=true"
+              - "use_amr_sweeper_waypoint_follower:=true"
+              - "use_test:={use_test}"
+              - "test_output_directory:={test_output_directory}"
+            ready:
+              - type: "topic"
+                target: "visual_odometry/odom"
+                required: true
+              - type: "topic"
+                target: "odometry/fused"
+                required: true
+              - type: "topic"
+                target: "pose"
+                required: true
+              - type: "service"
+                target: "visual_odometry_node/get_parameters"
+                required: true
+              - type: "lifecycle"
+                target: "fusioncore"
+                required: true
+              - type: "lifecycle"
+                target: "controller_server"
+                required: true
+              - type: "lifecycle"
+                target: "planner_server"
+                required: true
+              - type: "lifecycle"
+                target: "bt_navigator"
+                required: true
+              - type: "lifecycle"
+                target: "waypoint_follower"
+                required: true
+              - type: "service"
+                target: "amr_sweeper_slam_node/get_parameters"
+                required: true
+              - type: "service"
+                target: "amr_sweeper_gaussian_node/get_parameters"
+                required: true
+              - type: "service"
+                target: "amr_sweeper_mapping_node/get_parameters"
+                required: true
+            window_ms: 45000
+          restart:
+            max_restarts: 5
+            restart_delay_ms: 1000
+          shutdown:
+            sigint_timeout_ms: 2000
+            sigterm_timeout_ms: 2000
+            sigkill_timeout_ms: 2000
+
+        # Mission builder for debug sessions. Startup failures are tolerated.
+        - name: "amr_sweeper_vda5050_parser"
+          importance: "optional"
+          startup:
+            exec: "ros2 launch amr_sweeper_vda5050_parser amr_sweeper_vda5050_parser.launch.py"
+            args:
+              - "namespace:={ns}"
+              - "use_sim_time:=false"
+              - "missions_directory:=src/missions_from_db"
+              - "auto_build_on_start:=true"
+              - "watch_for_updates:=true"
+            ready:
+              - type: "service"
+                target: "vda5050_parser_node/get_parameters"
+                required: true
+              - type: "service"
+                target: "build_current_mission"
+                required: true
+            window_ms: 8000
+          restart:
+            max_restarts: 5
+            restart_delay_ms: 1000
+          shutdown:
+            sigint_timeout_ms: 1000
+            sigterm_timeout_ms: 1000
+            sigkill_timeout_ms: 1000
+
+        # Scheduler for debug sessions. Startup failures are tolerated.
+        - name: "amr_sweeper_scheduler"
+          importance: "optional"
+          startup:
+            exec: "ros2 launch amr_sweeper_scheduler amr_sweeper_scheduler.launch.py"
+            args:
+              - "namespace:={ns}"
+              - "use_sim_time:=false"
+              - "missions_directory:=src/missions_from_db"
+              - "trigger_running_on_work_window:=false"
+            ready:
+              - type: "service"
+                target: "reload_schedule"
+                required: true
+            window_ms: 8000
+          restart:
+            max_restarts: 5
+            restart_delay_ms: 1000
+          shutdown:
+            sigint_timeout_ms: 1000
+            sigterm_timeout_ms: 1000
+            sigkill_timeout_ms: 1000
