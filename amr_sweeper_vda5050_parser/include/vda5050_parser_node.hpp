@@ -159,9 +159,7 @@ private:
   [[nodiscard]] std::optional<std::filesystem::path> selectActiveMissionPath();
   [[nodiscard]] std::filesystem::path stageMissionFile(
     const std::filesystem::path & mission_path);
-  bool buildArtifactsForMission(
-    const std::filesystem::path & mission_path,
-    bool write_active_aliases);
+  bool buildArtifactsForMission(const std::filesystem::path & mission_path);
   void handleBuildCurrentMission(
     const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
     std::shared_ptr<std_srvs::srv::Trigger::Response> response);
@@ -183,14 +181,11 @@ private:
   std::string missions_directory_;
   std::string missions_log_directory_;
   std::string mission_file_extension_;
-  std::string costmap_output_basename_;
-  std::string coverage_path_basename_;
   double mission_build_resolution_{0.1};
   double mission_build_padding_meters_{2.0};
   bool auto_build_on_start_{true};
   bool watch_for_updates_{true};
   bool waiting_for_active_mission_logged_{false};
-  std::filesystem::path last_active_alias_mission_;
   std::string last_build_error_key_;
   std::map<std::string, std::filesystem::file_time_type> mission_build_stamps_;
   std::unique_ptr<Vda5050MissionParser> mission_parser_;

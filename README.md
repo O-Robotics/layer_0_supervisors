@@ -38,7 +38,7 @@ The main packages in this layer are:
 
 ## Notes
 - The default command launches the full layer 0 supervisor stack, including the always-on web server.
-- Profile `001` is the full startup validation path, profile `101` is the normal `IDLING` stack, profile `201` and related `2xx` profiles are mission-time `RUNNING` stacks, and profile `400` is the reduced `FAULT` stack.
+- Profile `001` is the full startup validation path and must not execute missions, profile `101` is the normal `IDLING` stack, profile `201` and related `2xx` profiles are mission-time `RUNNING` stacks, and profile `400` is the reduced `FAULT` stack.
 - Layer 0 is responsible for coordinating the lower layers, not for driving hardware directly.
 - `FAULT` now uses a reduced layer 1 bringup and should not start the layer 2 controller bringup, layer 3 navigation bringup, or `ros2_control` controller stack.
-- Runtime mission history, active aliases, and generated artifacts are maintained under `/missions`.
+- Runtime mission history and generated artifacts are maintained under `/missions`.

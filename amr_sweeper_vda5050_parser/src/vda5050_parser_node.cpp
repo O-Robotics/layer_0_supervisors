@@ -733,10 +733,6 @@ MissionParserNode::MissionParserNode(const rclcpp::NodeOptions & options)
   missions_directory_ = declare_parameter<std::string>("missions_directory", "src/missions_from_db");
   missions_log_directory_ = declare_parameter<std::string>("missions_log_directory", "src/missions_log");
   mission_file_extension_ = declare_parameter<std::string>("mission_file_extension", ".json");
-  costmap_output_basename_ = declare_parameter<std::string>("costmap_output_basename", "global_costmap");
-  coverage_path_basename_ = declare_parameter<std::string>(
-    "coverage_path_basename",
-    "active_mission_path");
   mission_build_resolution_ = declare_parameter<double>("mission_build_resolution", 0.1);
   mission_build_padding_meters_ = declare_parameter<double>("mission_build_padding_meters", 2.0);
   auto_build_on_start_ = declare_parameter<bool>("auto_build_on_start", true);
@@ -799,7 +795,7 @@ bool MissionParserNode::buildCurrentMissionArtifacts()
     return true;
   }
 
-  return buildArtifactsForMission(*mission_path, true);
+  return buildArtifactsForMission(*mission_path);
 }
 
 void MissionParserNode::buildDiscoveredMissionArtifacts()
@@ -817,7 +813,7 @@ void MissionParserNode::buildDiscoveredMissionArtifacts()
     if (stamp_it != mission_build_stamps_.end() && stamp_it->second == current_stamp) {
       continue;
     }
-    (void)buildArtifactsForMission(mission_path, false);
+    (void)buildArtifactsForMission(mission_path);
   }
 }
 
@@ -929,9 +925,7 @@ std::filesystem::path MissionParserNode::stageMissionFile(const std::filesystem:
   return staged_path;
 }
 
-bool MissionParserNode::buildArtifactsForMission(
-  const std::filesystem::path & mission_path,
-  const bool write_active_aliases)
+bool MissionParserNode::buildArtifactsForMission(const std::filesystem::path & mission_path)
 {
   try {
     const std::filesystem::path staged_mission_path = stageMissionFile(mission_path);
@@ -970,8 +964,6 @@ bool MissionParserNode::buildArtifactsForMission(
     if (legacy_coverage_path != mission_coverage_path) {
       std::filesystem::remove(legacy_coverage_path);
     }
-
-    (void)write_active_aliases;
 
     mission_build_stamps_[staged_mission_path.string()] = currentMissionStamp(staged_mission_path);
     last_build_error_key_.clear();

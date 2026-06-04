@@ -12,8 +12,6 @@ def generate_launch_description():
     mission_path = LaunchConfiguration("mission_path")
     missions_directory = LaunchConfiguration("missions_directory")
     missions_log_directory = LaunchConfiguration("missions_log_directory")
-    costmap_output_basename = LaunchConfiguration("costmap_output_basename")
-    coverage_path_basename = LaunchConfiguration("coverage_path_basename")
     auto_build_on_start = LaunchConfiguration("auto_build_on_start")
     watch_for_updates = LaunchConfiguration("watch_for_updates")
     config_file = PathJoinSubstitution(
@@ -26,8 +24,6 @@ def generate_launch_description():
         DeclareLaunchArgument("mission_path", default_value=""),
         DeclareLaunchArgument("missions_directory", default_value="src/missions_from_db"),
         DeclareLaunchArgument("missions_log_directory", default_value="src/missions_log"),
-        DeclareLaunchArgument("costmap_output_basename", default_value="global_costmap"),
-        DeclareLaunchArgument("coverage_path_basename", default_value="active_mission_path"),
         DeclareLaunchArgument("auto_build_on_start", default_value="true"),
         DeclareLaunchArgument("watch_for_updates", default_value="true"),
         Node(
@@ -43,8 +39,6 @@ def generate_launch_description():
                     "mission_path": mission_path,
                     "missions_directory": missions_directory,
                     "missions_log_directory": missions_log_directory,
-                    "costmap_output_basename": costmap_output_basename,
-                    "coverage_path_basename": coverage_path_basename,
                     "auto_build_on_start": auto_build_on_start,
                     "watch_for_updates": watch_for_updates,
                 },

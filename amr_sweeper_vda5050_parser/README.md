@@ -43,7 +43,5 @@ YAML style guide for package config:
 - `mission_path`: optional active mission file used for an on-demand rebuild; leave empty for auto-discovery
 - `missions_directory`: folder containing incoming VDA5050 mission files and per-mission subfolders
 - `mission_file_extension`: mission file suffix to scan for
-- `costmap_output_basename`: legacy compatibility parameter, no longer used for runtime aliases
-- `coverage_path_basename`: legacy compatibility parameter, no longer used for runtime aliases
 - `auto_build_on_start`: build the active mission immediately on startup
 - `watch_for_updates`: keep scanning for new or changed mission files

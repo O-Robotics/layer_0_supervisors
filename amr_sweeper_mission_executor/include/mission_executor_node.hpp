@@ -89,6 +89,7 @@ private:
   [[nodiscard]] std::filesystem::path resolveMissionsFromDbDirectory() const;
   [[nodiscard]] std::filesystem::path resolveMissionsLogDirectory() const;
   [[nodiscard]] std::filesystem::path resolveManualMissionsDirectory() const;
+  [[nodiscard]] std::vector<std::filesystem::path> executionContextFiles() const;
   [[nodiscard]] std::filesystem::path missionFolderPath(const std::filesystem::path & mission_path) const;
   [[nodiscard]] std::filesystem::path artifactsDirectoryForMission(const ManualMissionInfo & mission) const;
   [[nodiscard]] std::string missionStemForPath(const std::filesystem::path & mission_path) const;
@@ -101,8 +102,6 @@ private:
     const ManualMissionInfo & mission,
     const std::string & mission_window_start,
     const std::string & mission_window_end) const;
-  [[nodiscard]] std::filesystem::path activeExecutionPointerPath() const;
-  [[nodiscard]] std::optional<nlohmann::json> loadActiveExecutionPointer() const;
   [[nodiscard]] std::optional<nlohmann::json> resolveExecutionContext(
     const std::string & mission_id) const;
   [[nodiscard]] bool requestIdlingState(
@@ -146,9 +145,6 @@ private:
   std::string missions_log_directory_;
   std::string manual_missions_directory_;
   std::string mission_file_extension_;
-  std::string active_costmap_output_basename_;
-  std::string active_route_output_basename_;
-  std::string active_execution_pointer_filename_;
   std::string schedule_ics_path_;
   std::string robot_id_;
   std::string safety_stop_topic_;
@@ -191,6 +187,7 @@ private:
   bool active_mission_uses_inactivity_watchdog_{false};
   std::string active_mission_id_;
   std::string active_execution_mode_;
+  std::string active_execution_context_file_;
   std::string active_actual_path_file_;
   std::string active_actual_navsat_path_file_;
   rclcpp::Time last_manual_mission_motion_time_;

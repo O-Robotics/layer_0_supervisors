@@ -1292,15 +1292,6 @@ MissionExecutorNode::MissionExecutorNode(const rclcpp::NodeOptions & options)
     "src/missions_log");
   manual_missions_directory_ = declare_parameter<std::string>("manual_missions_directory", "");
   mission_file_extension_ = declare_parameter<std::string>("mission_file_extension", ".json");
-  active_costmap_output_basename_ = declare_parameter<std::string>(
-    "active_costmap_output_basename",
-    "global_costmap");
-  active_route_output_basename_ = declare_parameter<std::string>(
-    "active_route_output_basename",
-    "active_mission_path");
-  active_execution_pointer_filename_ = declare_parameter<std::string>(
-    "active_execution_pointer_filename",
-    "active_execution.json");
   schedule_ics_path_ = declare_parameter<std::string>("schedule_ics_path", "");
   robot_id_ = declare_parameter<std::string>("robot_id", "RBT-01");
   safety_stop_topic_ = declare_parameter<std::string>("safety_stop_topic", "safety_msgs/stop");
@@ -1741,6 +1732,7 @@ void MissionExecutorNode::handleExecuteMission(
     }
     recordMissionExecutionStart(resolved_mission, context, *request);
     auto context_document = loadJsonDocument(context.execution_context_file);
+    context_document["execution_context_file"] = context.execution_context_file;
     refreshActiveMissionState(context_document);
 
     response->success = true;
@@ -2130,6 +2122,37 @@ std::filesystem::path MissionExecutorNode::resolveManualMissionsDirectory() cons
     ament_index_cpp::get_package_share_directory(kDefaultMissionsPackageName)) / "missions";
 }
 
+std::vector<std::filesystem::path> MissionExecutorNode::executionContextFiles() const
+{
+  std::vector<std::filesystem::path> results;
+  const auto missions_log_directory = resolveMissionsLogDirectory();
+  std::error_code error;
+  if (!std::filesystem::exists(missions_log_directory, error)) {
+    return results;
+  }
+
+  for (std::filesystem::recursive_directory_iterator iterator(
+         missions_log_directory,
+         std::filesystem::directory_options::skip_permission_denied,
+         error);
+       iterator != std::filesystem::recursive_directory_iterator();
+       iterator.increment(error))
+  {
+    if (error) {
+      error.clear();
+      continue;
+    }
+    if (!iterator->is_regular_file(error)) {
+      error.clear();
+      continue;
+    }
+    if (iterator->path().filename() == "execution_context.json") {
+      results.push_back(iterator->path());
+    }
+  }
+  return results;
+}
+
 std::filesystem::path MissionExecutorNode::missionFolderPath(
   const std::filesystem::path & mission_path) const
 {
@@ -2334,24 +2357,6 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
   }
   context_stream << std::setw(2) << context << '\n';
 
-  const nlohmann::json execution_pointer{
-    {"mission_id", mission.mission_id},
-    {"mission_folder", mission_history_directory.string()},
-    {"mission_run_directory", mission_run_directory.string()},
-    {"execution_context_file", execution_context_file.string()},
-    {"schedule_log_path", context.value("schedule_log_path", std::string{})},
-    {"actual_schedule_log_path", context.value("actual_schedule_log_path", std::string{})},
-    {"mission_window_start", mission_window_start},
-    {"mission_window_end", mission_window_end}};
-  const fs::path missions_log_directory = resolveMissionsLogDirectory();
-  std::ofstream pointer_stream(
-    missions_log_directory / active_execution_pointer_filename_,
-    std::ios::trunc);
-  if (!pointer_stream.is_open()) {
-    throw std::runtime_error("Failed to write active manual mission execution pointer");
-  }
-  pointer_stream << std::setw(2) << execution_pointer << '\n';
-
   PreparedMissionContext prepared;
   prepared.mission_execution_directory = mission_run_directory.string();
   prepared.execution_context_file = execution_context_file.string();
@@ -2359,55 +2364,62 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
   return prepared;
 }
 
-std::filesystem::path MissionExecutorNode::activeExecutionPointerPath() const
-{
-  return resolveMissionsLogDirectory() / active_execution_pointer_filename_;
-}
-
-std::optional<nlohmann::json> MissionExecutorNode::loadActiveExecutionPointer() const
-{
-  const auto pointer_path = activeExecutionPointerPath();
-  if (!std::filesystem::exists(pointer_path)) {
-    return std::nullopt;
-  }
-  return loadJsonDocument(pointer_path);
-}
-
 std::optional<nlohmann::json> MissionExecutorNode::resolveExecutionContext(
   const std::string & mission_id) const
 {
-  const auto pointer_document = loadActiveExecutionPointer();
-  if (!pointer_document) {
-    return std::nullopt;
-  }
-
-  if (!mission_id.empty() &&
-    pointer_document->contains("mission_id") &&
-    pointer_document->at("mission_id").is_string() &&
-    pointer_document->at("mission_id").get<std::string>() != mission_id)
   {
-    return std::nullopt;
+    std::lock_guard<std::mutex> lock(active_mission_mutex_);
+    if (
+      active_mission_running_ &&
+      !active_execution_context_file_.empty() &&
+      (mission_id.empty() || active_mission_id_ == mission_id) &&
+      std::filesystem::exists(active_execution_context_file_))
+    {
+      auto context_document = loadJsonDocument(active_execution_context_file_);
+      context_document["execution_context_file"] = active_execution_context_file_;
+      return context_document;
+    }
   }
 
-  std::filesystem::path context_path;
-  if (pointer_document->contains("execution_context_file") &&
-    pointer_document->at("execution_context_file").is_string())
-  {
-    context_path = pointer_document->at("execution_context_file").get<std::string>();
-  } else if (pointer_document->contains("mission_run_directory") &&
-    pointer_document->at("mission_run_directory").is_string())
-  {
-    context_path = std::filesystem::path(
-      pointer_document->at("mission_run_directory").get<std::string>()) / "execution_context.json";
+  std::optional<nlohmann::json> selected_context;
+  std::string selected_run_started_at;
+  std::filesystem::path selected_path;
+  for (const auto & context_path : executionContextFiles()) {
+    nlohmann::json context_document;
+    try {
+      context_document = loadJsonDocument(context_path);
+    } catch (const std::exception &) {
+      continue;
+    }
+    const std::string context_mission_id = context_document.value("mission_id", std::string{});
+    if (!mission_id.empty() && context_mission_id != mission_id) {
+      continue;
+    }
+
+    const std::string runtime_status = toLower(context_document.value("runtime_status", std::string{}));
+    const bool finished = context_document.contains("actual_end_utc") &&
+      !context_document.value("actual_end_utc", std::string{}).empty();
+    if (
+      finished ||
+      runtime_status == toLower(std::string{kRuntimeStatusCompleted}) ||
+      runtime_status == toLower(std::string{kRuntimeStatusAborted}))
+    {
+      continue;
+    }
+
+    const std::string run_started_at = context_document.value("run_started_at", std::string{});
+    if (!selected_context || run_started_at > selected_run_started_at) {
+      context_document["execution_context_file"] = context_path.string();
+      selected_run_started_at = run_started_at;
+      selected_path = context_path;
+      selected_context = std::move(context_document);
+    }
   }
 
-  if (context_path.empty() || !std::filesystem::exists(context_path)) {
-    return std::nullopt;
+  if (selected_context) {
+    (*selected_context)["execution_context_file"] = selected_path.string();
   }
-
-  auto context_document = loadJsonDocument(context_path);
-  context_document["execution_context_file"] = context_path.string();
-  return context_document;
+  return selected_context;
 }
 
 bool MissionExecutorNode::requestIdlingState(
@@ -2679,6 +2691,7 @@ void MissionExecutorNode::refreshActiveMissionState(const nlohmann::json & conte
   active_mission_running_ = true;
   active_mission_id_ = context_document.value("mission_id", std::string{});
   active_execution_mode_ = context_document.value("execution_mode", std::string{});
+  active_execution_context_file_ = context_document.value("execution_context_file", std::string{});
   active_mission_is_teleop_ = toLower(active_execution_mode_) == kTeleoperationExecutionMode;
   active_mission_is_manual_mapping_ = toLower(active_execution_mode_) == kManualMappingExecutionMode;
   active_mission_uses_inactivity_watchdog_ = active_mission_is_teleop_ || active_mission_is_manual_mapping_;
@@ -2698,6 +2711,7 @@ void MissionExecutorNode::clearActiveMissionState()
   active_mission_uses_inactivity_watchdog_ = false;
   active_mission_id_.clear();
   active_execution_mode_.clear();
+  active_execution_context_file_.clear();
   active_actual_path_file_.clear();
   active_actual_navsat_path_file_.clear();
   teleop_traveled_path_points_.clear();
@@ -2887,19 +2901,6 @@ void MissionExecutorNode::recordMissionExecutionEnd(
       throw std::runtime_error("Failed to update execution context during end_mission");
     }
     context_stream << std::setw(2) << context_document << '\n';
-  }
-
-  auto pointer_document = loadActiveExecutionPointer();
-  if (pointer_document) {
-    (*pointer_document)["actual_end_utc"] = actual_end_utc;
-    (*pointer_document)["runtime_status"] = runtime_status;
-    (*pointer_document)["mission_outcome"] = normalized_outcome;
-    (*pointer_document)["end_reason"] = request.reason;
-    (*pointer_document)["active"] = false;
-    std::ofstream pointer_stream(activeExecutionPointerPath(), std::ios::trunc);
-    if (pointer_stream.is_open()) {
-      pointer_stream << std::setw(2) << *pointer_document << '\n';
-    }
   }
 
   std::string schedule_path_string =

@@ -61,10 +61,6 @@ class MissionBackendNode(Node):
             "missions_from_db_directory",
             "src/missions_from_db",
         ).value
-        self._active_execution_pointer_filename = self.declare_parameter(
-            "active_execution_pointer_filename",
-            "active_execution.json",
-        ).value
         self._list_missions_service = self.declare_parameter(
             "list_missions_service",
             "list_executable_missions",
@@ -416,7 +412,7 @@ class MissionBackendNode(Node):
             safety_status = dict(self._latest_safety_status) if self._latest_safety_status is not None else None
             recent_logs = list(self._recent_logs)
 
-        active_execution = self._load_active_execution()
+        active_execution = self._discover_active_execution()
         return {
             "success": True,
             "site_title": self._site_title,
@@ -430,14 +426,34 @@ class MissionBackendNode(Node):
             "recent_logs": recent_logs,
         }
 
-    def _load_active_execution(self) -> dict[str, Any] | None:
-        pointer_path = _resolve_path(self._missions_log_directory) / self._active_execution_pointer_filename
-        if not pointer_path.exists():
-            return None
+    def _discover_active_execution(self) -> dict[str, Any] | None:
+        missions_log_directory = _resolve_path(self._missions_log_directory)
+        selected: dict[str, Any] | None = None
+        selected_run_started_at = ""
         try:
-            return json.loads(pointer_path.read_text(encoding="utf-8"))
+            candidates = missions_log_directory.rglob("execution_context.json")
         except Exception as exc:  # noqa: BLE001
-            return {"error": f"Failed to read active execution pointer: {exc}", "path": str(pointer_path)}
+            return {"error": f"Failed to scan execution contexts: {exc}", "path": str(missions_log_directory)}
+
+        for context_path in candidates:
+            try:
+                context = json.loads(context_path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if not isinstance(context, dict):
+                continue
+            if context.get("actual_end_utc"):
+                continue
+            runtime_status = str(context.get("runtime_status", "")).strip().lower()
+            if runtime_status in {"completed", "aborted"}:
+                continue
+            run_started_at = str(context.get("run_started_at", ""))
+            if selected is None or run_started_at > selected_run_started_at:
+                selected = dict(context)
+                selected["execution_context_file"] = str(context_path)
+                selected_run_started_at = run_started_at
+
+        return selected
 
     def _discover_planned_schedule_path(self) -> Path | None:
         missions_from_db_directory = _resolve_path(self._missions_from_db_directory)
@@ -449,7 +465,7 @@ class MissionBackendNode(Node):
         return candidates[0] if candidates else None
 
     def _discover_actual_schedule_path(self) -> Path | None:
-        active_execution = self._load_active_execution() or {}
+        active_execution = self._discover_active_execution() or {}
         actual_schedule_log_path = active_execution.get("actual_schedule_log_path", "")
         if actual_schedule_log_path:
             path = Path(actual_schedule_log_path)
@@ -707,7 +723,7 @@ class MissionBackendNode(Node):
         with self._state_lock:
             navsat = dict(self._latest_navsat) if self._latest_navsat is not None else None
 
-        active_execution = self._load_active_execution() or {}
+        active_execution = self._discover_active_execution() or {}
         active_recording = (
             active_execution.get("mission_id") == "RecordMap" and
             active_execution.get("active", True) is not False
@@ -830,7 +846,7 @@ class MissionBackendNode(Node):
                 }
             )
 
-        active_execution = self._load_active_execution() or {}
+        active_execution = self._discover_active_execution() or {}
         active_route = None
         active_route_path = active_execution.get("mission_route_file", "")
         if active_route_path:

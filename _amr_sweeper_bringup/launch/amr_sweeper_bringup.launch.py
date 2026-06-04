@@ -46,8 +46,6 @@ def generate_launch_description():
     launch_scheduler = LaunchConfiguration("launch_scheduler")
     launch_vda5050_parser = LaunchConfiguration("launch_vda5050_parser")
     mission_path = LaunchConfiguration("mission_path")
-    costmap_output_basename = LaunchConfiguration("costmap_output_basename")
-    coverage_path_basename = LaunchConfiguration("coverage_path_basename")
     auto_build_on_start = LaunchConfiguration("auto_build_on_start")
     watch_for_updates = LaunchConfiguration("watch_for_updates")
     http_host = LaunchConfiguration("http_host")
@@ -105,8 +103,6 @@ def generate_launch_description():
         DeclareLaunchArgument("launch_scheduler", default_value="false"),
         DeclareLaunchArgument("launch_vda5050_parser", default_value="false"),
         DeclareLaunchArgument("mission_path", default_value=""),
-        DeclareLaunchArgument("costmap_output_basename", default_value="global_costmap"),
-        DeclareLaunchArgument("coverage_path_basename", default_value="active_mission_path"),
         DeclareLaunchArgument("auto_build_on_start", default_value="true"),
         DeclareLaunchArgument("watch_for_updates", default_value="true"),
         DeclareLaunchArgument("http_host", default_value="0.0.0.0"),
@@ -171,8 +167,6 @@ def generate_launch_description():
                 "mission_path": mission_path,
                 "missions_directory": missions_from_db_directory,
                 "missions_log_directory": missions_log_directory,
-                "costmap_output_basename": costmap_output_basename,
-                "coverage_path_basename": coverage_path_basename,
                 "auto_build_on_start": auto_build_on_start,
                 "watch_for_updates": watch_for_updates,
             }.items(),
