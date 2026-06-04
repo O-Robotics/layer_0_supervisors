@@ -335,12 +335,11 @@ profiles:
         - name: "amr_sweeper_scheduler"
           importance: "critical"
           startup:
-            exec: "ros2 launch amr_sweeper_scheduler scheduler.launch.py"
+            exec: "ros2 launch amr_sweeper_scheduler amr_sweeper_scheduler.launch.py"
             args:
               - "namespace:={ns}"
               - "use_sim_time:=false"
               - "missions_directory:=src/missions_from_db"
-              - "robot_id:=RBT-01"
               - "trigger_running_on_work_window:=false"
             ready:
               - type: "service"
