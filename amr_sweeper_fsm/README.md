@@ -123,24 +123,24 @@ Each state has its own profile file with a list of profiles:
 
 The shipped profile catalog is currently:
 
-- `000`: INITIALIZING bridge profile with no processes; auto-requests `101`
+- `000`: INITIALIZING bridge profile with no processes; auto-requests `100`
 - `001`: default INITIALIZING full-stack startup validation
 - `002`: alternate INITIALIZING validation profile
 - `003`: INITIALIZING debug bringup profile that starts the full stack and stays idle without auto-jumping to `101` or `400`
-- `100`: IDLING bridge profile with no processes; auto-requests `101`
+- `100`: IDLING bridge profile with no processes; auto-requests `200`
 - `101`: default IDLING profile with layer 1 hardware bringup, `amr_sweeper_vda5050_parser`, and `amr_sweeper_scheduler`
 - `110`: IDLING test profile for `fsm_tester_node`
-- `200`: RUNNING bridge profile with no processes; auto-requests `201`
+- `200`: RUNNING bridge profile with no processes; auto-requests `300`
 - `201`: default RUNNING mission execution profile
 - `202`: RUNNING manual mapping profile
 - `203`: RUNNING manual routed-mission profile
 - `204`: RUNNING manual teleoperation profile
-- `300`: CHARGING bridge profile with no processes
+- `300`: CHARGING bridge profile with no processes; auto-requests `400`
 - `301`: default CHARGING profile
-- `400`: default FAULT profile with reduced layer 1 hardware bringup
+- `400`: default FAULT profile with no processes and no further transition
 - `401`: FAULT empty profile
 
-`001` and `000` both auto-request `101` only after their own activation and readiness checks succeed.
+`000`, `100`, `200`, and `300` are empty bridge profiles that auto-request `100`, `200`, `300`, and `400` respectively.
 `003` starts the same full-stack bringup path as `001`, but it keeps those processes non-blocking for debugging and remains in `INITIALIZING`.
 
 
@@ -201,7 +201,7 @@ ros2 service call /amr_sweeper/request_state amr_sweeper_fsm/srv/RequestState "{
 - `300` for CHARGING
 - `400` for FAULT
 
-In the current configuration, the configured default profiles are `001`, `101`, `201`, `301`, and `400`. The `*00` profiles are used as bridge/base profiles where defined.
+In the current configuration, the configured default profiles are `001`, `101`, `201`, `301`, and `400`. The `*00` profiles are empty bridge/base profiles chained as `000 -> 100 -> 200 -> 300 -> 400`.
 
 ---
 

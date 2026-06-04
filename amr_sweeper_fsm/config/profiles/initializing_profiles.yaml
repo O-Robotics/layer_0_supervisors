@@ -14,7 +14,7 @@ profiles:
       id: 000
       transitions:
         auto_transition_on: true
-        auto_transition_profile: 101
+        auto_transition_profile: 100
         fault_transition_on: true
         fault_transition_profile: 400
 
@@ -33,6 +33,70 @@ profiles:
         fault_transition_profile: 400
 
       processes:
+        # Logic block: mission builder (critical)
+        - name: "amr_sweeper_vda5050_parser"
+          importance: "critical"
+          startup:
+            exec: "ros2 launch amr_sweeper_vda5050_parser amr_sweeper_vda5050_parser.launch.py"
+            args:
+              - "namespace:={ns}"
+              - "use_sim_time:=false"
+              - "missions_directory:=src/missions_from_db"
+              - "auto_build_on_start:=true"
+              - "watch_for_updates:=true"
+            ready:
+              - type: "service"
+                target: "vda5050_parser_node/get_parameters"
+                required: true
+              - type: "service"
+                target: "build_current_mission"
+                required: true
+            window_ms: 8000
+          rosout_triggers:
+            - "node=vda5050_parser_node;level>=ERROR;action=FAULT"
+          errors:
+            on_readiness_fail: "FAULT"
+            on_unexpected_exit: "FAULT"
+            priority: 250
+            force: true
+          restart:
+            max_restarts: 5
+            restart_delay_ms: 1000
+          shutdown:
+            sigint_timeout_ms: 1000
+            sigterm_timeout_ms: 1000
+            sigkill_timeout_ms: 1000
+
+        # Logic block: scheduler (critical)
+        - name: "amr_sweeper_scheduler"
+          importance: "critical"
+          startup:
+            exec: "ros2 launch amr_sweeper_scheduler amr_sweeper_scheduler.launch.py"
+            args:
+              - "namespace:={ns}"
+              - "use_sim_time:=false"
+              - "missions_directory:=src/missions_from_db"
+              - "trigger_running_on_work_window:=false"
+            ready:
+              - type: "service"
+                target: "reload_schedule"
+                required: true
+            window_ms: 8000
+          rosout_triggers:
+            - "node=amr_sweeper_scheduler;level>=ERROR;action=FAULT"
+          errors:
+            on_readiness_fail: "FAULT"
+            on_unexpected_exit: "FAULT"
+            priority: 250
+            force: true
+          restart:
+            max_restarts: 5
+            restart_delay_ms: 1000
+          shutdown:
+            sigint_timeout_ms: 1000
+            sigterm_timeout_ms: 1000
+            sigkill_timeout_ms: 1000
+
         # Logic block: layer_1_hardware bringup (critical)
         - name: "amr_sweeper_layer_1_hardware_bringup"
           importance: "critical"
@@ -297,72 +361,6 @@ profiles:
             sigterm_timeout_ms: 2000
             sigkill_timeout_ms: 2000
 
-        # Logic block: mission builder (critical)
-        - name: "amr_sweeper_vda5050_parser"
-          importance: "critical"
-          startup:
-            exec: "ros2 launch amr_sweeper_vda5050_parser amr_sweeper_vda5050_parser.launch.py"
-            args:
-              - "namespace:={ns}"
-              - "use_sim_time:=false"
-              - "missions_directory:=src/missions_from_db"
-              - "auto_build_on_start:=true"
-              - "watch_for_updates:=true"
-            ready:
-              - type: "service"
-                target: "vda5050_parser_node/get_parameters"
-                required: true
-              - type: "service"
-                target: "build_current_mission"
-                required: true
-            window_ms: 8000
-          rosout_triggers:
-            - "node=vda5050_parser_node;level>=ERROR;action=FAULT"
-          errors:
-            on_readiness_fail: "FAULT"
-            on_unexpected_exit: "FAULT"
-            priority: 250
-            force: true
-          restart:
-            max_restarts: 5
-            restart_delay_ms: 1000
-          shutdown:
-            sigint_timeout_ms: 1000
-            sigterm_timeout_ms: 1000
-            sigkill_timeout_ms: 1000
-
-        # Logic block: scheduler (critical)
-        - name: "amr_sweeper_scheduler"
-          importance: "critical"
-          startup:
-            exec: "ros2 launch amr_sweeper_scheduler amr_sweeper_scheduler.launch.py"
-            args:
-              - "namespace:={ns}"
-              - "use_sim_time:=false"
-              - "missions_directory:=src/missions_from_db"
-              - "trigger_running_on_work_window:=false"
-            ready:
-              - type: "service"
-                target: "reload_schedule"
-                required: true
-            window_ms: 8000
-          rosout_triggers:
-            - "node=amr_sweeper_scheduler;level>=ERROR;action=FAULT"
-          errors:
-            on_readiness_fail: "FAULT"
-            on_unexpected_exit: "FAULT"
-            priority: 250
-            force: true
-          restart:
-            max_restarts: 5
-            restart_delay_ms: 1000
-          shutdown:
-            sigint_timeout_ms: 1000
-            sigterm_timeout_ms: 1000
-            sigkill_timeout_ms: 1000
-      
-
-
   # ---------------------------------------------------------------------------
   # Profile 002
   # ---------------------------------------------------------------------------
@@ -465,6 +463,56 @@ profiles:
         fault_transition_profile: 400
 
       processes:
+        # Mission builder for debug sessions. Startup failures are tolerated.
+        - name: "amr_sweeper_vda5050_parser"
+          importance: "optional"
+          startup:
+            exec: "ros2 launch amr_sweeper_vda5050_parser amr_sweeper_vda5050_parser.launch.py"
+            args:
+              - "namespace:={ns}"
+              - "use_sim_time:=false"
+              - "missions_directory:=src/missions_from_db"
+              - "auto_build_on_start:=true"
+              - "watch_for_updates:=true"
+            ready:
+              - type: "service"
+                target: "vda5050_parser_node/get_parameters"
+                required: true
+              - type: "service"
+                target: "build_current_mission"
+                required: true
+            window_ms: 8000
+          restart:
+            max_restarts: 5
+            restart_delay_ms: 1000
+          shutdown:
+            sigint_timeout_ms: 1000
+            sigterm_timeout_ms: 1000
+            sigkill_timeout_ms: 1000
+
+        # Scheduler for debug sessions. Startup failures are tolerated.
+        - name: "amr_sweeper_scheduler"
+          importance: "optional"
+          startup:
+            exec: "ros2 launch amr_sweeper_scheduler amr_sweeper_scheduler.launch.py"
+            args:
+              - "namespace:={ns}"
+              - "use_sim_time:=false"
+              - "missions_directory:=src/missions_from_db"
+              - "trigger_running_on_work_window:=false"
+            ready:
+              - type: "service"
+                target: "reload_schedule"
+                required: true
+            window_ms: 8000
+          restart:
+            max_restarts: 5
+            restart_delay_ms: 1000
+          shutdown:
+            sigint_timeout_ms: 1000
+            sigterm_timeout_ms: 1000
+            sigkill_timeout_ms: 1000
+
         # Layer 1 hardware bringup for debug sessions. Startup failures are tolerated.
         - name: "amr_sweeper_layer_1_hardware_bringup"
           importance: "optional"
@@ -699,53 +747,3 @@ profiles:
             sigint_timeout_ms: 2000
             sigterm_timeout_ms: 2000
             sigkill_timeout_ms: 2000
-
-        # Mission builder for debug sessions. Startup failures are tolerated.
-        - name: "amr_sweeper_vda5050_parser"
-          importance: "optional"
-          startup:
-            exec: "ros2 launch amr_sweeper_vda5050_parser amr_sweeper_vda5050_parser.launch.py"
-            args:
-              - "namespace:={ns}"
-              - "use_sim_time:=false"
-              - "missions_directory:=src/missions_from_db"
-              - "auto_build_on_start:=true"
-              - "watch_for_updates:=true"
-            ready:
-              - type: "service"
-                target: "vda5050_parser_node/get_parameters"
-                required: true
-              - type: "service"
-                target: "build_current_mission"
-                required: true
-            window_ms: 8000
-          restart:
-            max_restarts: 5
-            restart_delay_ms: 1000
-          shutdown:
-            sigint_timeout_ms: 1000
-            sigterm_timeout_ms: 1000
-            sigkill_timeout_ms: 1000
-
-        # Scheduler for debug sessions. Startup failures are tolerated.
-        - name: "amr_sweeper_scheduler"
-          importance: "optional"
-          startup:
-            exec: "ros2 launch amr_sweeper_scheduler amr_sweeper_scheduler.launch.py"
-            args:
-              - "namespace:={ns}"
-              - "use_sim_time:=false"
-              - "missions_directory:=src/missions_from_db"
-              - "trigger_running_on_work_window:=false"
-            ready:
-              - type: "service"
-                target: "reload_schedule"
-                required: true
-            window_ms: 8000
-          restart:
-            max_restarts: 5
-            restart_delay_ms: 1000
-          shutdown:
-            sigint_timeout_ms: 1000
-            sigterm_timeout_ms: 1000
-            sigkill_timeout_ms: 1000

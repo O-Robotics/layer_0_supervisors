@@ -64,7 +64,8 @@ INITIALIZING
   - Perform a full startup systems check.
   - The default startup profile validates layer 1 hardware, layer 2 controllers, layer 3 localization/navigation/mapping,
     plus mission-parser and scheduler readiness.
-  - Profiles 000 and 001 auto-request IDLING profile 101 after activation and readiness succeed.
+  - Profile 001 is the normal startup validation path.
+  - Profiles 000, 100, 200, and 300 are empty bridge profiles chained as 000 -> 100 -> 200 -> 300 -> 400.
   - Profile 003 starts the same layer bringup commands as 001 but keeps them non-blocking and does not auto-transition to IDLING or FAULT.
   - Readiness failures or process failures escalate according to per-process error policy, typically into FAULT profile 400.
 
@@ -91,8 +92,8 @@ CHARGING
   - No automatic charge-complete transition is currently defined in the shipped charging profiles.
 
 FAULT
-  - Safe/reduced bringup profile intended for fault containment.
-  - Profile 400 keeps a reduced layer 1 hardware subset alive; profile 401 is empty.
+  - Terminal fault profile intended for containment.
+  - Profile 400 is empty and does not auto-transition further; profile 401 is also empty.
   - No automatic transition out of FAULT is configured in shipped profiles.
 
 

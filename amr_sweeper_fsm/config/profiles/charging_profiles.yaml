@@ -7,6 +7,12 @@
 profiles:
   - profile:
       id: 300
+      transitions:
+        auto_transition_on: true
+        auto_transition_profile: 400
+        fault_transition_on: true
+        fault_transition_profile: 400
+
       processes: []
 
   - profile:

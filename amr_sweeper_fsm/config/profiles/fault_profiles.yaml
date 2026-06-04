@@ -13,59 +13,7 @@ profiles:
         fault_transition_on: false
         fault_transition_profile: 400
 
-      processes:
-        # Logic block: layer_1_hardware bringup (critical)
-        - name: "amr_sweeper_layer_1_hardware_bringup"
-          importance: "critical"
-          startup:
-            exec: "ros2 launch amr_sweeper_layer_1_hardware_bringup amr_sweeper_layer_1_hardware_bringup.launch.py"
-            args:
-              - "namespace:={ns}"
-              - "use_amr_sweeper_description:=false"
-              - "use_ros2_control:=false"
-              - "use_amr_sweeper_battery:=true"
-              - "use_amr_sweeper_system_info:=true"
-              - "use_amr_sweeper_usb_cameras:=false"
-              - "use_amr_sweeper_depth_camera:=false"
-              - "use_amr_sweeper_imu:=false"
-              - "use_amr_sweeper_gnss:=true"
-              - "use_ntrip_client:=false"
-            ready:
-              - type: "topic"
-                target: "system_info"
-                required: true
-              - type: "topic"
-                target: "gnss/navsat"
-                required: true
-              - type: "topic"
-                target: "battery_state"
-                required: true
-              - type: "service"
-                target: "amr_sweeper_battery_node/get_parameters"
-                required: true
-              - type: "service"
-                target: "amr_sweeper_system_info_node/get_parameters"
-                required: true
-              - type: "service"
-                target: "gnss/amr_sweeper_gnss_ublox_node/get_parameters"
-                required: true
-            window_ms: 45000
-          rosout_triggers:
-            - "node=amr_sweeper_system_info_node;level>=ERROR;action=FAULT"
-            - "node=amr_sweeper_system_info_node;level>=WARN;action=DEGRADED"
-            - "node=amr_sweeper_system_info_node;match=Could not open file;action=FAULT"
-          errors:
-            on_readiness_fail: "FAULT"
-            on_unexpected_exit: "FAULT"
-            priority: 250
-            force: true
-          restart:
-            max_restarts: 5
-            restart_delay_ms: 1000
-          shutdown:
-            sigint_timeout_ms: 1000
-            sigterm_timeout_ms: 1000
-            sigkill_timeout_ms: 1000
+      processes: []
 
   - profile:
       id: 401
