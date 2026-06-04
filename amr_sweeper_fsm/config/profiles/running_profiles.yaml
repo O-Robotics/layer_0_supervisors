@@ -245,16 +245,10 @@ profiles:
               - "test_output_directory:={test_output_directory}"
             ready:
               - type: "topic"
-                target: "visual_odometry/odom"
-                required: true
-              - type: "topic"
                 target: "odometry/fused"
                 required: true
               - type: "topic"
                 target: "pose"
-                required: true
-              - type: "service"
-                target: "visual_odometry_node/get_parameters"
                 required: true
               - type: "lifecycle"
                 target: "fusioncore"
@@ -550,16 +544,10 @@ profiles:
               - "test_output_directory:={test_output_directory}"
             ready:
               - type: "topic"
-                target: "visual_odometry/odom"
-                required: true
-              - type: "topic"
                 target: "odometry/fused"
                 required: true
               - type: "topic"
                 target: "pose"
-                required: true
-              - type: "service"
-                target: "visual_odometry_node/get_parameters"
                 required: true
               - type: "lifecycle"
                 target: "fusioncore"
@@ -814,16 +802,10 @@ profiles:
               - "test_output_directory:={test_output_directory}"
             ready:
               - type: "topic"
-                target: "visual_odometry/odom"
-                required: true
-              - type: "topic"
                 target: "odometry/fused"
                 required: true
               - type: "topic"
                 target: "pose"
-                required: true
-              - type: "service"
-                target: "visual_odometry_node/get_parameters"
                 required: true
               - type: "lifecycle"
                 target: "fusioncore"
