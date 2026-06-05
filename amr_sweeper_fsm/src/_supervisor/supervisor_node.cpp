@@ -392,7 +392,7 @@ void SupervisorNode::request_change_state(
 
 void SupervisorNode::start_enter_state(FSMState target)
 {
-  // Enter = CONFIGURE + ACTIVATE target
+  // Enter = inspect target lifecycle state, then configure + activate target as needed.
   op_target_ = target;
   op_target_profile_ = desired_profile_;
   op_target_activate_ = true;
@@ -424,7 +424,7 @@ void SupervisorNode::start_enter_state(FSMState target)
   // tick does not reapply an out-of-band profile onto the newly entered state.
   desired_profile_ = op_target_profile_;
 
-  op_phase_ = OpPhase::TGT_CONFIGURE;
+  op_phase_ = OpPhase::TGT_GET;
   op_inflight_ = false;
 }
 
@@ -526,6 +526,15 @@ void SupervisorNode::drive()
       case OpPhase::CUR_CLEANUP:
         action = ActionType::CHANGE;
         break;
+      case OpPhase::TGT_GET:
+        action = ActionType::GET;
+        break;
+      case OpPhase::TGT_DEACTIVATE:
+        action = ActionType::CHANGE;
+        break;
+      case OpPhase::TGT_CLEANUP:
+        action = ActionType::CHANGE;
+        break;
       case OpPhase::TGT_CONFIGURE:
         action = ActionType::CHANGE;
         break;
@@ -558,7 +567,7 @@ void SupervisorNode::drive()
           if (!ok) {
             // Can't query; proceed to target enter anyway.
             last_message_ = "Exit current: " + err;
-            op_phase_ = OpPhase::TGT_CONFIGURE;
+            op_phase_ = OpPhase::TGT_GET;
             return;
           }
 
@@ -571,7 +580,7 @@ void SupervisorNode::drive()
             op_phase_ = OpPhase::CUR_CLEANUP;
           } else {
             // Unconfigured/Unknown/etc: nothing meaningful to do here.
-            op_phase_ = OpPhase::TGT_CONFIGURE;
+            op_phase_ = OpPhase::TGT_GET;
           }
         });
       return;
@@ -588,7 +597,7 @@ void SupervisorNode::drive()
           if (!ok) {
             last_message_ = "DEACTIVATE failed: " + err;
             // Best-effort: continue to target.
-            op_phase_ = OpPhase::TGT_CONFIGURE;
+            op_phase_ = OpPhase::TGT_GET;
             return;
           }
           op_phase_ = OpPhase::CUR_CLEANUP;
@@ -607,6 +616,72 @@ void SupervisorNode::drive()
           if (!ok) {
             last_message_ = "CLEANUP failed: " + err;
             // Best-effort: continue to target.
+          }
+          op_phase_ = OpPhase::TGT_GET;
+        });
+      return;
+    }
+
+    case OpPhase::TGT_GET: {
+      request_get_state(
+        tgt_ep,
+        [this](bool ok, uint8_t id, const std::string & err) {
+          std::lock_guard<std::mutex> lk(mtx_);
+          op_inflight_ = false;
+
+          if (!ok) {
+            last_message_ = "Target get_state failed: " + err;
+            op_phase_ = OpPhase::TGT_CONFIGURE;
+            return;
+          }
+
+          last_lifecycle_id_ = id;
+          active_lifecycle_label_ = lifecycle_id_to_label(id);
+
+          if (id == State::PRIMARY_STATE_ACTIVE) {
+            op_phase_ = OpPhase::TGT_DEACTIVATE;
+          } else if (id == State::PRIMARY_STATE_INACTIVE) {
+            op_phase_ = OpPhase::TGT_CLEANUP;
+          } else if (id == State::PRIMARY_STATE_UNCONFIGURED) {
+            op_phase_ = OpPhase::TGT_CONFIGURE;
+          } else {
+            last_message_ = "Target lifecycle not ready for configure: " + lifecycle_id_to_label(id);
+            op_phase_ = OpPhase::TGT_GET;
+          }
+        });
+      return;
+    }
+
+    case OpPhase::TGT_DEACTIVATE: {
+      request_change_state(
+        tgt_ep,
+        Transition::TRANSITION_DEACTIVATE,
+        [this](bool ok, const std::string & err) {
+          std::lock_guard<std::mutex> lk(mtx_);
+          op_inflight_ = false;
+
+          if (!ok) {
+            last_message_ = "Target DEACTIVATE failed: " + err;
+            op_phase_ = OpPhase::TGT_GET;
+            return;
+          }
+          op_phase_ = OpPhase::TGT_CLEANUP;
+        });
+      return;
+    }
+
+    case OpPhase::TGT_CLEANUP: {
+      request_change_state(
+        tgt_ep,
+        Transition::TRANSITION_CLEANUP,
+        [this](bool ok, const std::string & err) {
+          std::lock_guard<std::mutex> lk(mtx_);
+          op_inflight_ = false;
+
+          if (!ok) {
+            last_message_ = "Target CLEANUP failed: " + err;
+            op_phase_ = OpPhase::TGT_GET;
+            return;
           }
           op_phase_ = OpPhase::TGT_CONFIGURE;
         });
@@ -1214,16 +1289,14 @@ void SupervisorNode::tick()
         start_enter_state(current_state_);
       } else if (desired_state_ != current_state_) {
         start_switch_to(desired_state_);
-      } else if (desired_profile_ != current_profile_) {
-        current_profile_ = desired_profile_;
-  transitioning_to_profile_ = current_profile_;
-        RCLCPP_INFO(
-          this->get_logger(),
-          "FSM profile changed: now %s (%03u)",
-          state_name(current_state_).c_str(),
-          current_profile_);
-        transitioning_to_profile_ = current_profile_;
-        last_message_ = "Applied profile update";
+      } else {
+        const bool lifecycle_matches =
+          desired_activate_ ?
+          (last_lifecycle_id_ == State::PRIMARY_STATE_ACTIVE) :
+          (last_lifecycle_id_ == State::PRIMARY_STATE_INACTIVE);
+        if (desired_profile_ != current_profile_ || !lifecycle_matches) {
+          start_switch_to(desired_state_);
+        }
       }
     }
   }

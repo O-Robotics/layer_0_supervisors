@@ -78,6 +78,9 @@ public:
     CUR_GET,
     CUR_DEACTIVATE,
     CUR_CLEANUP,
+    TGT_GET,
+    TGT_DEACTIVATE,
+    TGT_CLEANUP,
     TGT_CONFIGURE,
     TGT_ACTIVATE
   };

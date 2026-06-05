@@ -1149,7 +1149,7 @@ auto read_int = [this](const std::string & name, int default_value) -> int {
   }
 
   readiness_.timeout_ms = read_int("ready.timeout_ms", 0);
-  readiness_.controller_query_timeout_ms = read_int("ready.controller_query_timeout_ms", 500);
+  readiness_.controller_query_timeout_ms = read_int("ready.controller_query_timeout_ms", 5000);
   readiness_.lifecycle_query_timeout_ms = read_int("ready.lifecycle_query_timeout_ms", 200);
 }
 

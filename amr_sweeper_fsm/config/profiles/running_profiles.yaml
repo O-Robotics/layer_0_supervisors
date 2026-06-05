@@ -193,7 +193,7 @@ profiles:
               - type: "controller"
                 target: "tool_controller"
                 required: true
-            window_ms: 15000
+            window_ms: 30000
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "level>=ERROR;action=FAULT"
@@ -477,7 +477,7 @@ profiles:
               - type: "controller"
                 target: "tool_controller"
                 required: true
-            window_ms: 15000
+            window_ms: 30000
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "level>=ERROR;action=FAULT"
@@ -718,7 +718,7 @@ profiles:
               - type: "controller"
                 target: "tool_controller"
                 required: true
-            window_ms: 15000
+            window_ms: 30000
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "level>=ERROR;action=FAULT"
@@ -1000,7 +1000,7 @@ profiles:
               - type: "controller"
                 target: "tool_controller"
                 required: true
-            window_ms: 15000
+            window_ms: 30000
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "level>=ERROR;action=FAULT"

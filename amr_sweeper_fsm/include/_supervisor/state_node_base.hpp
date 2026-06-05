@@ -185,7 +185,7 @@ protected:
     std::vector<std::string> services;
 
     int timeout_ms{0};
-    int controller_query_timeout_ms{500};
+    int controller_query_timeout_ms{5000};
     int lifecycle_query_timeout_ms{200};
   };
 
