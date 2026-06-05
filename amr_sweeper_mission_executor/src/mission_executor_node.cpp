@@ -1295,7 +1295,7 @@ MissionExecutorNode::MissionExecutorNode(const rclcpp::NodeOptions & options)
   schedule_ics_path_ = declare_parameter<std::string>("schedule_ics_path", "");
   robot_id_ = declare_parameter<std::string>("robot_id", "RBT-01");
   safety_stop_topic_ = declare_parameter<std::string>("safety_stop_topic", "safety_msgs/stop");
-  teleop_odometry_topic_ = declare_parameter<std::string>("teleop_odometry_topic", "diff_cont/odom");
+  teleop_odometry_topic_ = declare_parameter<std::string>("teleop_odometry_topic", "drive_controller/odom");
   manual_mapping_odometry_topic_ = declare_parameter<std::string>(
     "manual_mapping_odometry_topic",
     "odometry/fused");

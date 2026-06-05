@@ -38,6 +38,6 @@ Responsibilities:
 - finalize mission runs with actual end time, outcome, and an FSM return to `IDLING`
 - calculate the traveled-path length from `actual_path.geojson` and append it into mission end metadata
 - subscribe to `safety_msgs/stop` and append dedicated `SAFETY` VEVENT log entries into the schedule
-- watch `diff_cont/odom` during teleop missions and `odometry/fused` during manual mapping missions, and automatically end either mission type after 5 minutes without motion
+- watch `drive_controller/odom` during teleop missions and `odometry/fused` during manual mapping missions, and automatically end either mission type after 5 minutes without motion
 - record teleop traveled path into the active run folder's `actual_path.geojson`
 - record `RecordMap` GNSS points into `actual_path_navsat.geojson` so the latest perimeter can be previewed on a satellite map

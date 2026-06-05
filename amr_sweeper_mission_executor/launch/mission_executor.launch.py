@@ -36,7 +36,7 @@ def generate_launch_description():
         DeclareLaunchArgument("schedule_ics_path", default_value=""),
         DeclareLaunchArgument("robot_id", default_value="RBT-01"),
         DeclareLaunchArgument("safety_stop_topic", default_value="safety_msgs/stop"),
-        DeclareLaunchArgument("teleop_odometry_topic", default_value="diff_cont/odom"),
+        DeclareLaunchArgument("teleop_odometry_topic", default_value="drive_controller/odom"),
         DeclareLaunchArgument("manual_mapping_odometry_topic", default_value="odometry/fused"),
         DeclareLaunchArgument("manual_mission_inactivity_timeout_seconds", default_value="300.0"),
         DeclareLaunchArgument("idling_profile_id", default_value="101"),

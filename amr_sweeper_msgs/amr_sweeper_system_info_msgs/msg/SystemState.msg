@@ -1,0 +1,10 @@
+string device_type
+int16 robot_number
+int16 temperature
+int16 cpu_load
+int16 cpu_idle
+int16 memory_usage
+int16 disk_usage
+string conn_type
+bool is_wifi
+bool is_mobile

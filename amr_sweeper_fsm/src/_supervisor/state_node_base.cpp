@@ -11,6 +11,7 @@
 #include <vector>
 #include <filesystem>
 
+#include "controller_manager_msgs/srv/list_hardware_components.hpp"
 #include "lifecycle_msgs/srv/change_state.hpp"
 
 #include <yaml-cpp/yaml.h>
@@ -56,6 +57,23 @@ namespace {
       return fsm_layer_0::ProcessImportance::DEGRADED;
     }
     return fsm_layer_0::ProcessImportance::CRITICAL;
+  }
+
+  uint8_t parse_profile_required_lifecycle_level(const std::string & raw)
+  {
+    if (raw == "UNCONFIGURED" || raw == "UNCONFIGURE" || raw == "UNCONFIG") {
+      return lifecycle_msgs::msg::State::PRIMARY_STATE_UNCONFIGURED;
+    }
+    if (raw == "INACTIVE" || raw == "CONFIGURED") {
+      return lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE;
+    }
+    if (raw == "ACTIVE") {
+      return lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE;
+    }
+    if (raw == "FINALIZED" || raw == "FINAL") {
+      return lifecycle_msgs::msg::State::PRIMARY_STATE_FINALIZED;
+    }
+    return lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE;
   }
 
   bool is_layer_bringup_command(const std::string & command)
@@ -185,11 +203,22 @@ namespace {
             pp.ready_services.push_back(target);
           } else if (type == "controller") {
             pp.ready_active_controllers.push_back(target);
+          } else if (type == "hardware") {
+            fsm_layer_0::HardwareComponentRequirement req;
+            req.name = target;
+            req.raw = target;
+            if (r["state"]) {
+              req.required_state_id = parse_profile_required_lifecycle_level(
+                r["state"].as<std::string>("active"));
+            }
+            pp.ready_hardware_components.push_back(req);
           } else if (type == "lifecycle") {
             fsm_layer_0::LifecycleNodeRequirement req;
             req.node = target;
             req.raw = target;
-            req.min_state_id = lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE;
+            req.min_state_id = r["state"] ?
+              parse_profile_required_lifecycle_level(r["state"].as<std::string>("active")) :
+              lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE;
             pp.ready_lifecycle_nodes.push_back(req);
           }
         }
@@ -1230,6 +1259,60 @@ bool StateNodeBase::controller_is_active(const std::string & controller_name, st
   return false;
 }
 
+bool StateNodeBase::hardware_component_meets_requirement(
+  const HardwareComponentRequirement & req,
+  std::string & why_not)
+{
+  const std::string srv = qualify_to_ns("controller_manager/list_hardware_components");
+
+  const uint64_t id = g_probe_seq.fetch_add(1, std::memory_order_relaxed);
+  const std::string probe_name = "fsm_hprobe_" + std::to_string(id);
+  auto probe = std::make_shared<rclcpp::Node>(
+    probe_name,
+    rclcpp::NodeOptions()
+    .context(this->get_node_base_interface()->get_context())
+    .enable_rosout(false));
+
+  auto client = probe->create_client<controller_manager_msgs::srv::ListHardwareComponents>(srv);
+  if (!client->wait_for_service(std::chrono::milliseconds(0))) {
+    why_not = "controller manager hardware service not available: '" + srv + "'";
+    return false;
+  }
+
+  auto req_msg = std::make_shared<controller_manager_msgs::srv::ListHardwareComponents::Request>();
+  auto future = client->async_send_request(req_msg);
+
+  rclcpp::executors::SingleThreadedExecutor exec;
+  exec.add_node(probe);
+  const auto rc = exec.spin_until_future_complete(
+    future,
+    std::chrono::milliseconds(readiness_.controller_query_timeout_ms));
+  exec.remove_node(probe);
+
+  if (rc != rclcpp::FutureReturnCode::SUCCESS) {
+    why_not = "controller manager did not answer list_hardware_components for '" + req.name + "'";
+    return false;
+  }
+
+  const auto resp = future.get();
+  for (const auto & component : resp->component) {
+    if (component.name != req.name) {
+      continue;
+    }
+    if (component.state.id == req.required_state_id) {
+      why_not.clear();
+      return true;
+    }
+    why_not =
+      "hardware component '" + req.name + "' state is '" + component.state.label +
+      "' (expected id " + std::to_string(req.required_state_id) + ")";
+    return false;
+  }
+
+  why_not = "hardware component '" + req.name + "' not listed by controller_manager";
+  return false;
+}
+
 
 bool StateNodeBase::lifecycle_node_meets_requirement(
   const LifecycleNodeRequirement & req,
@@ -1310,6 +1393,7 @@ bool StateNodeBase::wait_for_readiness(std::string & why_not)
         !pp.ready_topics.empty() ||
         !pp.ready_services.empty() ||
         !pp.ready_active_controllers.empty() ||
+        !pp.ready_hardware_components.empty() ||
         !pp.ready_lifecycle_nodes.empty())) {
       has_profile_critical_reqs = true;
       break;
@@ -1437,6 +1521,18 @@ bool StateNodeBase::wait_for_readiness(std::string & why_not)
             proc_waiting = true;
             const std::string pname = pp.name.empty() ? pp.command : pp.name;
             why_not = "profile process '" + pname + "' not ready: " + lwhy;
+            break;
+          }
+        }
+      }
+
+      if (!proc_waiting) {
+        for (const auto & hreq : pp.ready_hardware_components) {
+          std::string hwhy;
+          if (!hardware_component_meets_requirement(hreq, hwhy)) {
+            proc_waiting = true;
+            const std::string pname = pp.name.empty() ? pp.command : pp.name;
+            why_not = "profile process '" + pname + "' not ready: " + hwhy;
             break;
           }
         }
@@ -1968,6 +2064,14 @@ bool StateNodeBase::profile_process_readiness_satisfied_(
     }
   }
 
+  for (const auto & hreq : pp.ready_hardware_components) {
+    if (!hardware_component_meets_requirement(hreq, why_not)) {
+      const std::string pname = pp.name.empty() ? pp.command : pp.name;
+      why_not = "profile process '" + pname + "' not ready: " + why_not;
+      return false;
+    }
+  }
+
   for (const auto & c : pp.ready_active_controllers) {
     if (!controller_is_active(c, why_not)) {
       const std::string pname = pp.name.empty() ? pp.command : pp.name;
@@ -1989,6 +2093,7 @@ std::vector<std::string> StateNodeBase::collect_profile_process_readiness_failur
     pp.ready_topics.size() +
     pp.ready_services.size() +
     pp.ready_lifecycle_nodes.size() +
+    pp.ready_hardware_components.size() +
     pp.ready_active_controllers.size());
 
   for (const auto & n : pp.ready_nodes) {
@@ -2017,6 +2122,13 @@ std::vector<std::string> StateNodeBase::collect_profile_process_readiness_failur
     }
   }
 
+  for (const auto & hreq : pp.ready_hardware_components) {
+    std::string hwhy;
+    if (!hardware_component_meets_requirement(hreq, hwhy)) {
+      failures.push_back(hwhy);
+    }
+  }
+
   for (const auto & c : pp.ready_active_controllers) {
     std::string cwhy;
     if (!controller_is_active(c, cwhy)) {
@@ -2036,6 +2148,7 @@ bool StateNodeBase::wait_for_profile_process_readiness_(
     pp.ready_topics.empty() &&
     pp.ready_services.empty() &&
     pp.ready_lifecycle_nodes.empty() &&
+    pp.ready_hardware_components.empty() &&
     pp.ready_active_controllers.empty())
   {
     why_not.clear();
@@ -2099,6 +2212,7 @@ bool StateNodeBase::start_state_processes(std::string & why_not)
         !pp.ready_topics.empty() ||
         !pp.ready_services.empty() ||
         !pp.ready_lifecycle_nodes.empty() ||
+        !pp.ready_hardware_components.empty() ||
         !pp.ready_active_controllers.empty();
       std::string err;
 

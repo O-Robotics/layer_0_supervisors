@@ -38,6 +38,13 @@ struct LifecycleNodeRequirement
   std::string raw;
 };
 
+struct HardwareComponentRequirement
+{
+  std::string name;
+  uint8_t required_state_id{lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE};
+  std::string raw;
+};
+
 struct ProfileProcess
 {
   std::string name;
@@ -53,6 +60,7 @@ struct ProfileProcess
   std::vector<std::string> ready_services;
   std::vector<std::string> ready_active_controllers;
   std::vector<LifecycleNodeRequirement> ready_lifecycle_nodes;
+  std::vector<HardwareComponentRequirement> ready_hardware_components;
   std::vector<std::string> ready_nodes;
 
 
@@ -198,6 +206,11 @@ protected:
 
   // Helper: true if the named ros2_control controller is listed as active.
   bool controller_is_active(const std::string & controller_name, std::string & why_not);
+
+  // Helper: true if the named ros2_control hardware component is in the expected state.
+  bool hardware_component_meets_requirement(
+    const HardwareComponentRequirement & req,
+    std::string & why_not);
 
   // Helper: true if lifecycle node state is >= required minimum.
   bool lifecycle_node_meets_requirement(

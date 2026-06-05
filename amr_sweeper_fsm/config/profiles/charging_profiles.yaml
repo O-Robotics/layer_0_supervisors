@@ -31,6 +31,7 @@ profiles:
             exec: "ros2 launch amr_sweeper_layer_1_hardware_bringup amr_sweeper_layer_1_hardware_bringup.launch.py"
             args:
               - "namespace:={ns}"
+              - "use_amr_sweeper_ros2_control:=false"
               - "use_amr_sweeper_battery:=true"
               - "use_amr_sweeper_system_info:=true"
               - "use_amr_sweeper_usb_cameras:=false"
@@ -60,12 +61,6 @@ profiles:
               - type: "topic"
                 target: "robot_description"
                 required: true
-              - type: "topic"
-                target: "joint_states"
-                required: true
-              - type: "topic"
-                target: "diff_cont/odom"
-                required: true
               - type: "service"
                 target: "robot_state_publisher/get_parameters"
                 required: true
@@ -80,21 +75,6 @@ profiles:
                 required: true
               - type: "service"
                 target: "gnss/amr_sweeper_gnss_ublox_node/get_parameters"
-                required: true
-              - type: "service"
-                target: "controller_manager/list_controllers"
-                required: true
-              - type: "service"
-                target: "controller_manager/list_hardware_components"
-                required: true
-              - type: "controller"
-                target: "joint_broad"
-                required: true
-              - type: "controller"
-                target: "diff_cont"
-                required: true
-              - type: "controller"
-                target: "controller_steadydrive"
                 required: true
             window_ms: 45000
           rosout_triggers:

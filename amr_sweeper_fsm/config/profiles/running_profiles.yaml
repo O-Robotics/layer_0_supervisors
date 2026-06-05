@@ -38,6 +38,7 @@ profiles:
             exec: "ros2 launch amr_sweeper_layer_1_hardware_bringup amr_sweeper_layer_1_hardware_bringup.launch.py"
             args:
               - "namespace:={ns}"
+              - "use_amr_sweeper_ros2_control:=true"
               - "use_amr_sweeper_battery:=true"
               - "use_amr_sweeper_system_info:=true"
               - "use_amr_sweeper_usb_cameras:=true"
@@ -66,12 +67,6 @@ profiles:
                 required: true
               - type: "topic"
                 target: "robot_description"
-                required: true
-              - type: "topic"
-                target: "joint_states"
-                required: true
-              - type: "topic"
-                target: "diff_cont/odom"
                 required: true
               - type: "topic"
                 target: "usb_cameras/rear_left_camera/image_raw"
@@ -109,20 +104,19 @@ profiles:
               - type: "service"
                 target: "gnss/ntrip_client/get_parameters"
                 required: true
-              - type: "service"
-                target: "controller_manager/list_controllers"
+              - type: "topic"
+                target: "joint_states"
                 required: true
-              - type: "service"
-                target: "controller_manager/list_hardware_components"
+              - type: "hardware"
+                target: "odrive_ros2_control"
+                state: "active"
+                required: true
+              - type: "hardware"
+                target: "steadydrive_ros2_control"
+                state: "active"
                 required: true
               - type: "controller"
                 target: "joint_broad"
-                required: true
-              - type: "controller"
-                target: "diff_cont"
-                required: true
-              - type: "controller"
-                target: "controller_steadydrive"
                 required: true
             window_ms: 45000
           rosout_triggers:
@@ -154,10 +148,11 @@ profiles:
             exec: "ros2 launch amr_sweeper_layer_2_controllers_bringup amr_sweeper_layer_2_controllers_bringup.launch.py"
             args:
               - "namespace:={ns}"
+              - "use_sim_time:=false"
+              - "use_amr_sweeper_drive_controller:=true"
+              - "use_amr_sweeper_tool_controller:=true"
               - "use_amr_sweeper_joystick:=false"
               - "use_amr_sweeper_sweeping_controller:=true"
-              - "use_amr_sweeper_wheel_controller:=true"
-              - "use_amr_sweeper_tool_controller:=true"
               - "use_amr_sweeper_attitude_controller:=true"
               - "use_amr_sweeper_collision_detector:=true"
               - "use_amr_sweeper_safety_controller:=true"
@@ -172,16 +167,10 @@ profiles:
                 target: "attitude/roll_pitch"
                 required: true
               - type: "topic"
-                target: "joint_states"
+                target: "drive_controller/odom"
                 required: true
               - type: "topic"
                 target: "safety_controller/status"
-                required: true
-              - type: "topic"
-                target: "controller_steadydrive/commands"
-                required: true
-              - type: "topic"
-                target: "diff_cont/cmd_vel"
                 required: true
               - type: "topic"
                 target: "collision_detector/impact_detected"
@@ -193,22 +182,13 @@ profiles:
                 target: "amr_sweeper_safety_controller/enable_controller"
                 required: true
               - type: "service"
-                target: "wheel_command_stamper/get_parameters"
-                required: true
-              - type: "service"
-                target: "tool_controller_node/get_parameters"
-                required: true
-              - type: "service"
-                target: "sweeping_controller_node/get_parameters"
-                required: true
-              - type: "service"
-                target: "collision_detector/get_parameters"
-                required: true
-              - type: "service"
-                target: "safety_controller/get_parameters"
-                required: true
-              - type: "service"
                 target: "amr_sweeper_collision_detector/enable_detector"
+                required: true
+              - type: "controller"
+                target: "drive_controller"
+                required: true
+              - type: "controller"
+                target: "tool_controller"
                 required: true
             window_ms: 15000
           rosout_triggers:
@@ -339,6 +319,7 @@ profiles:
             exec: "ros2 launch amr_sweeper_layer_1_hardware_bringup amr_sweeper_layer_1_hardware_bringup.launch.py"
             args:
               - "namespace:={ns}"
+              - "use_amr_sweeper_ros2_control:=true"
               - "use_amr_sweeper_battery:=true"
               - "use_amr_sweeper_system_info:=true"
               - "use_amr_sweeper_usb_cameras:=true"
@@ -367,12 +348,6 @@ profiles:
                 required: true
               - type: "topic"
                 target: "robot_description"
-                required: true
-              - type: "topic"
-                target: "joint_states"
-                required: true
-              - type: "topic"
-                target: "diff_cont/odom"
                 required: true
               - type: "topic"
                 target: "usb_cameras/rear_left_camera/image_raw"
@@ -410,20 +385,19 @@ profiles:
               - type: "service"
                 target: "gnss/ntrip_client/get_parameters"
                 required: true
-              - type: "service"
-                target: "controller_manager/list_controllers"
+              - type: "topic"
+                target: "joint_states"
                 required: true
-              - type: "service"
-                target: "controller_manager/list_hardware_components"
+              - type: "hardware"
+                target: "odrive_ros2_control"
+                state: "active"
+                required: true
+              - type: "hardware"
+                target: "steadydrive_ros2_control"
+                state: "active"
                 required: true
               - type: "controller"
                 target: "joint_broad"
-                required: true
-              - type: "controller"
-                target: "diff_cont"
-                required: true
-              - type: "controller"
-                target: "controller_steadydrive"
                 required: true
             window_ms: 45000
           rosout_triggers:
@@ -454,10 +428,12 @@ profiles:
             exec: "ros2 launch amr_sweeper_layer_2_controllers_bringup amr_sweeper_layer_2_controllers_bringup.launch.py"
             args:
               - "namespace:={ns}"
-              - "use_amr_sweeper_joystick:=true"
-              - "use_amr_sweeper_sweeping_controller:=true"
-              - "use_amr_sweeper_wheel_controller:=true"
+              - "use_sim_time:=false"
+              - "use_amr_sweeper_drive_controller:=true"
               - "use_amr_sweeper_tool_controller:=true"
+              - "use_amr_sweeper_joystick:=true"
+              - "use_joy_node:=true"
+              - "use_amr_sweeper_sweeping_controller:=true"
               - "use_amr_sweeper_attitude_controller:=true"
               - "use_amr_sweeper_collision_detector:=true"
               - "use_amr_sweeper_safety_controller:=true"
@@ -472,16 +448,10 @@ profiles:
                 target: "attitude/roll_pitch"
                 required: true
               - type: "topic"
-                target: "joint_states"
+                target: "drive_controller/odom"
                 required: true
               - type: "topic"
                 target: "safety_controller/status"
-                required: true
-              - type: "topic"
-                target: "controller_steadydrive/commands"
-                required: true
-              - type: "topic"
-                target: "diff_cont/cmd_vel"
                 required: true
               - type: "topic"
                 target: "collision_detector/impact_detected"
@@ -493,22 +463,13 @@ profiles:
                 target: "amr_sweeper_safety_controller/enable_controller"
                 required: true
               - type: "service"
-                target: "wheel_command_stamper/get_parameters"
-                required: true
-              - type: "service"
-                target: "tool_controller_node/get_parameters"
-                required: true
-              - type: "service"
-                target: "sweeping_controller_node/get_parameters"
-                required: true
-              - type: "service"
-                target: "collision_detector/get_parameters"
-                required: true
-              - type: "service"
-                target: "safety_controller/get_parameters"
-                required: true
-              - type: "service"
                 target: "amr_sweeper_collision_detector/enable_detector"
+                required: true
+              - type: "controller"
+                target: "drive_controller"
+                required: true
+              - type: "controller"
+                target: "tool_controller"
                 required: true
             window_ms: 15000
           rosout_triggers:
@@ -597,6 +558,7 @@ profiles:
             exec: "ros2 launch amr_sweeper_layer_1_hardware_bringup amr_sweeper_layer_1_hardware_bringup.launch.py"
             args:
               - "namespace:={ns}"
+              - "use_amr_sweeper_ros2_control:=true"
               - "use_amr_sweeper_battery:=true"
               - "use_amr_sweeper_system_info:=true"
               - "use_amr_sweeper_usb_cameras:=true"
@@ -625,12 +587,6 @@ profiles:
                 required: true
               - type: "topic"
                 target: "robot_description"
-                required: true
-              - type: "topic"
-                target: "joint_states"
-                required: true
-              - type: "topic"
-                target: "diff_cont/odom"
                 required: true
               - type: "topic"
                 target: "usb_cameras/rear_left_camera/image_raw"
@@ -668,20 +624,19 @@ profiles:
               - type: "service"
                 target: "gnss/ntrip_client/get_parameters"
                 required: true
-              - type: "service"
-                target: "controller_manager/list_controllers"
+              - type: "topic"
+                target: "joint_states"
                 required: true
-              - type: "service"
-                target: "controller_manager/list_hardware_components"
+              - type: "hardware"
+                target: "odrive_ros2_control"
+                state: "active"
+                required: true
+              - type: "hardware"
+                target: "steadydrive_ros2_control"
+                state: "active"
                 required: true
               - type: "controller"
                 target: "joint_broad"
-                required: true
-              - type: "controller"
-                target: "diff_cont"
-                required: true
-              - type: "controller"
-                target: "controller_steadydrive"
                 required: true
             window_ms: 45000
           rosout_triggers:
@@ -712,10 +667,11 @@ profiles:
             exec: "ros2 launch amr_sweeper_layer_2_controllers_bringup amr_sweeper_layer_2_controllers_bringup.launch.py"
             args:
               - "namespace:={ns}"
+              - "use_sim_time:=false"
+              - "use_amr_sweeper_drive_controller:=true"
+              - "use_amr_sweeper_tool_controller:=true"
               - "use_amr_sweeper_joystick:=false"
               - "use_amr_sweeper_sweeping_controller:=true"
-              - "use_amr_sweeper_wheel_controller:=true"
-              - "use_amr_sweeper_tool_controller:=true"
               - "use_amr_sweeper_attitude_controller:=true"
               - "use_amr_sweeper_collision_detector:=true"
               - "use_amr_sweeper_safety_controller:=true"
@@ -730,16 +686,10 @@ profiles:
                 target: "attitude/roll_pitch"
                 required: true
               - type: "topic"
-                target: "joint_states"
+                target: "drive_controller/odom"
                 required: true
               - type: "topic"
                 target: "safety_controller/status"
-                required: true
-              - type: "topic"
-                target: "controller_steadydrive/commands"
-                required: true
-              - type: "topic"
-                target: "diff_cont/cmd_vel"
                 required: true
               - type: "topic"
                 target: "collision_detector/impact_detected"
@@ -751,22 +701,13 @@ profiles:
                 target: "amr_sweeper_safety_controller/enable_controller"
                 required: true
               - type: "service"
-                target: "wheel_command_stamper/get_parameters"
-                required: true
-              - type: "service"
-                target: "tool_controller_node/get_parameters"
-                required: true
-              - type: "service"
-                target: "sweeping_controller_node/get_parameters"
-                required: true
-              - type: "service"
-                target: "collision_detector/get_parameters"
-                required: true
-              - type: "service"
-                target: "safety_controller/get_parameters"
-                required: true
-              - type: "service"
                 target: "amr_sweeper_collision_detector/enable_detector"
+                required: true
+              - type: "controller"
+                target: "drive_controller"
+                required: true
+              - type: "controller"
+                target: "tool_controller"
                 required: true
             window_ms: 15000
           rosout_triggers:
@@ -895,6 +836,7 @@ profiles:
             exec: "ros2 launch amr_sweeper_layer_1_hardware_bringup amr_sweeper_layer_1_hardware_bringup.launch.py"
             args:
               - "namespace:={ns}"
+              - "use_amr_sweeper_ros2_control:=true"
               - "use_amr_sweeper_battery:=true"
               - "use_amr_sweeper_system_info:=true"
               - "use_amr_sweeper_usb_cameras:=true"
@@ -923,12 +865,6 @@ profiles:
                 required: true
               - type: "topic"
                 target: "robot_description"
-                required: true
-              - type: "topic"
-                target: "joint_states"
-                required: true
-              - type: "topic"
-                target: "diff_cont/odom"
                 required: true
               - type: "topic"
                 target: "usb_cameras/rear_left_camera/image_raw"
@@ -966,20 +902,19 @@ profiles:
               - type: "service"
                 target: "gnss/ntrip_client/get_parameters"
                 required: true
-              - type: "service"
-                target: "controller_manager/list_controllers"
+              - type: "topic"
+                target: "joint_states"
                 required: true
-              - type: "service"
-                target: "controller_manager/list_hardware_components"
+              - type: "hardware"
+                target: "odrive_ros2_control"
+                state: "active"
+                required: true
+              - type: "hardware"
+                target: "steadydrive_ros2_control"
+                state: "active"
                 required: true
               - type: "controller"
                 target: "joint_broad"
-                required: true
-              - type: "controller"
-                target: "diff_cont"
-                required: true
-              - type: "controller"
-                target: "controller_steadydrive"
                 required: true
             window_ms: 45000
           rosout_triggers:
@@ -1010,10 +945,12 @@ profiles:
             exec: "ros2 launch amr_sweeper_layer_2_controllers_bringup amr_sweeper_layer_2_controllers_bringup.launch.py"
             args:
               - "namespace:={ns}"
-              - "use_amr_sweeper_joystick:=true"
-              - "use_amr_sweeper_sweeping_controller:=true"
-              - "use_amr_sweeper_wheel_controller:=true"
+              - "use_sim_time:=false"
+              - "use_amr_sweeper_drive_controller:=true"
               - "use_amr_sweeper_tool_controller:=true"
+              - "use_amr_sweeper_joystick:=true"
+              - "use_joy_node:=true"
+              - "use_amr_sweeper_sweeping_controller:=true"
               - "use_amr_sweeper_attitude_controller:=true"
               - "use_amr_sweeper_collision_detector:=true"
               - "use_amr_sweeper_safety_controller:=true"
@@ -1028,16 +965,10 @@ profiles:
                 target: "attitude/roll_pitch"
                 required: true
               - type: "topic"
-                target: "joint_states"
+                target: "drive_controller/odom"
                 required: true
               - type: "topic"
                 target: "safety_controller/status"
-                required: true
-              - type: "topic"
-                target: "controller_steadydrive/commands"
-                required: true
-              - type: "topic"
-                target: "diff_cont/cmd_vel"
                 required: true
               - type: "topic"
                 target: "collision_detector/impact_detected"
@@ -1049,22 +980,13 @@ profiles:
                 target: "amr_sweeper_safety_controller/enable_controller"
                 required: true
               - type: "service"
-                target: "wheel_command_stamper/get_parameters"
-                required: true
-              - type: "service"
-                target: "tool_controller_node/get_parameters"
-                required: true
-              - type: "service"
-                target: "sweeping_controller_node/get_parameters"
-                required: true
-              - type: "service"
-                target: "collision_detector/get_parameters"
-                required: true
-              - type: "service"
-                target: "safety_controller/get_parameters"
-                required: true
-              - type: "service"
                 target: "amr_sweeper_collision_detector/enable_detector"
+                required: true
+              - type: "controller"
+                target: "drive_controller"
+                required: true
+              - type: "controller"
+                target: "tool_controller"
                 required: true
             window_ms: 15000
           rosout_triggers:
