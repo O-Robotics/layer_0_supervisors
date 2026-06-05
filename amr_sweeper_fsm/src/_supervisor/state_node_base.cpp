@@ -98,6 +98,11 @@ namespace {
     return std::string(kAnsiLightMagenta) + message + kAnsiReset;
   }
 
+  std::string format_magenta_message(const std::string & message)
+  {
+    return std::string(kAnsiLightMagenta) + message + kAnsiReset;
+  }
+
   bool load_profile_processes(
     const std::string & yaml_path,
     uint16_t profile_id,
@@ -739,13 +744,19 @@ if (!profiles_file_.empty()) {
     fault_transition_on_ = tr.fault_transition_on;
     fault_transition_profile_ = tr.fault_transition_profile;
 
+    std::ostringstream transitions_message;
+    transitions_message
+      << "Loaded profile " << std::setw(3) << std::setfill('0') << chosen_profile
+      << " transitions: auto_on=" << (auto_transition_on_ ? "true" : "false")
+      << " auto_profile=" << auto_transition_profile_
+      << " fault_on=" << (fault_transition_on_ ? "true" : "false")
+      << " fault_profile=" << fault_transition_profile_;
+
+    const std::string colored_message = format_magenta_message(transitions_message.str());
     RCLCPP_INFO(
       get_logger(),
-      "Loaded profile transitions: auto_on=%s auto_profile=%u fault_on=%s fault_profile=%u",
-      auto_transition_on_ ? "true" : "false",
-      auto_transition_profile_,
-      fault_transition_on_ ? "true" : "false",
-      fault_transition_profile_);
+      "%s",
+      colored_message.c_str());
   }
 }
 
