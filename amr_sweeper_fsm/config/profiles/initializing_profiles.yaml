@@ -135,13 +135,13 @@ profiles:
                 target: "robot_description"
                 required: true
               - type: "topic"
-                target: "usb_cameras/rear_left_camera/image_raw"
+                target: "usb_cameras/rear_left_camera/image_raw/compressed"
                 required: true
               - type: "topic"
-                target: "usb_cameras/rear_right_camera/image_raw"
+                target: "usb_cameras/rear_right_camera/image_raw/compressed"
                 required: true
               - type: "topic"
-                target: "usb_cameras/tools_camera/image_raw"
+                target: "usb_cameras/tools_camera/image_raw/compressed"
                 required: true
               - type: "topic"
                 target: "depth_camera/depth/camera_info"
@@ -166,9 +166,6 @@ profiles:
                 required: true
               - type: "service"
                 target: "gnss/gnss_node/get_parameters"
-                required: true
-              - type: "service"
-                target: "gnss/ntrip_client/get_parameters"
                 required: true
               - type: "topic"
                 target: "joint_states"
@@ -379,13 +376,13 @@ profiles:
                 target: "joint_states"
                 required: true
               - type: "topic"
-                target: "usb_cameras/rear_left_camera/image_raw"
+                target: "usb_cameras/rear_left_camera/image_raw/compressed"
                 required: true
               - type: "topic"
-                target: "usb_cameras/rear_right_camera/image_raw"
+                target: "usb_cameras/rear_right_camera/image_raw/compressed"
                 required: true
               - type: "topic"
-                target: "usb_cameras/tools_camera/image_raw"
+                target: "usb_cameras/tools_camera/image_raw/compressed"
                 required: true
               - type: "topic"
                 target: "depth_camera/depth/camera_info"
@@ -531,13 +528,13 @@ profiles:
                 target: "robot_description"
                 required: true
               - type: "topic"
-                target: "usb_cameras/rear_left_camera/image_raw"
+                target: "usb_cameras/rear_left_camera/image_raw/compressed"
                 required: true
               - type: "topic"
-                target: "usb_cameras/rear_right_camera/image_raw"
+                target: "usb_cameras/rear_right_camera/image_raw/compressed"
                 required: true
               - type: "topic"
-                target: "usb_cameras/tools_camera/image_raw"
+                target: "usb_cameras/tools_camera/image_raw/compressed"
                 required: true
               - type: "topic"
                 target: "depth_camera/depth/camera_info"
@@ -562,9 +559,6 @@ profiles:
                 required: true
               - type: "service"
                 target: "gnss/gnss_node/get_parameters"
-                required: true
-              - type: "service"
-                target: "gnss/ntrip_client/get_parameters"
                 required: true
               - type: "topic"
                 target: "joint_states"
