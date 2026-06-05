@@ -104,11 +104,6 @@ namespace {
     return std::string(kAnsiGreen) + message + kAnsiReset;
   }
 
-  std::string format_magenta_message(const std::string & message)
-  {
-    return std::string(kAnsiLightMagenta) + message + kAnsiReset;
-  }
-
   bool load_profile_processes(
     const std::string & yaml_path,
     uint16_t profile_id,
