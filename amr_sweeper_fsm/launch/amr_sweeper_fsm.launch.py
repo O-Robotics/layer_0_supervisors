@@ -8,6 +8,7 @@ import os
 
 
 def generate_launch_description():
+    console_output_format = "[{severity}] [{time}] [{name}] : {message}"
     """
     Launch the AMR Sweeper FSM supervisor and all FSM-state lifecycle nodes.
 
@@ -192,6 +193,7 @@ def generate_launch_description():
         [
             SetEnvironmentVariable("FASTDDS_BUILTIN_TRANSPORTS", "UDPv4"),
             SetEnvironmentVariable("RCUTILS_COLORIZED_OUTPUT", "1"),
+            SetEnvironmentVariable("RCUTILS_CONSOLE_OUTPUT_FORMAT", console_output_format),
             declare_namespace,
             declare_use_sim_time,
             declare_use_profile,

@@ -1,7 +1,7 @@
 """Launch the AMR Sweeper layer 0 supervisor stack from one bringup entrypoint."""
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, SetEnvironmentVariable
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
@@ -17,6 +17,7 @@ def _launch_file(package_name: str, launch_file_name: str):
 
 
 def generate_launch_description():
+    console_output_format = "[{severity}] [{time}] [{name}] : {message}"
     namespace = LaunchConfiguration("namespace")
     use_sim_time = LaunchConfiguration("use_sim_time")
     state_params_file = LaunchConfiguration("state_params_file")
@@ -71,6 +72,8 @@ def generate_launch_description():
     ])
 
     return LaunchDescription([
+        SetEnvironmentVariable("RCUTILS_COLORIZED_OUTPUT", "1"),
+        SetEnvironmentVariable("RCUTILS_CONSOLE_OUTPUT_FORMAT", console_output_format),
         DeclareLaunchArgument("namespace", default_value="amr_sweeper"),
         DeclareLaunchArgument("use_sim_time", default_value="false"),
         DeclareLaunchArgument("state_params_file", default_value=default_state_params_file),
