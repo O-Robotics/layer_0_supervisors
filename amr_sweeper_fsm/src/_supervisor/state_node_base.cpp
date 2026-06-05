@@ -59,7 +59,7 @@ namespace {
     return fsm_layer_0::ProcessImportance::CRITICAL;
   }
 
-  uint8_t parse_profile_required_lifecycle_level(const std::string & raw)
+  uint8_t parse_lifecycle_primary_state_label(const std::string & raw)
   {
     if (raw == "UNCONFIGURED" || raw == "UNCONFIGURE" || raw == "UNCONFIG") {
       return lifecycle_msgs::msg::State::PRIMARY_STATE_UNCONFIGURED;
@@ -74,6 +74,11 @@ namespace {
       return lifecycle_msgs::msg::State::PRIMARY_STATE_FINALIZED;
     }
     return lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE;
+  }
+
+  uint8_t parse_profile_required_lifecycle_level(const std::string & raw)
+  {
+    return parse_lifecycle_primary_state_label(raw);
   }
 
   bool is_layer_bringup_command(const std::string & command)
@@ -464,24 +469,7 @@ bool StateNodeBase::ends_with(const std::string & str, const std::string & suf)
 
 uint8_t StateNodeBase::parse_lifecycle_level(const std::string & s)
 {
-  // Accept both the official labels and some common shorthands/typos.
-  // Lifecycle primary state ids:
-  //  0 unknown, 1 unconfigured, 2 inactive, 3 active, 4 finalized
-  if (s == "UNCONFIGURED" || s == "UNCONFIGURE" || s == "UNCONFIG") {
-    return lifecycle_msgs::msg::State::PRIMARY_STATE_UNCONFIGURED;
-  }
-  if (s == "INACTIVE" || s == "CONFIGURED") {
-    return lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE;
-  }
-  if (s == "ACTIVE") {
-    return lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE;
-  }
-  if (s == "FINALIZED" || s == "FINAL" ) {
-    return lifecycle_msgs::msg::State::PRIMARY_STATE_FINALIZED;
-  }
-
-  // Conservative default: require ACTIVE.
-  return lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE;
+  return parse_lifecycle_primary_state_label(s);
 }
 
 LifecycleNodeRequirement
