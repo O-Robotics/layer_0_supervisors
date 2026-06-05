@@ -19,8 +19,8 @@
 /**/initializing_state:
   ros__parameters:
     ready:
-      controller_query_timeout_ms: 1000   # Timeout for each controller_manager list_controllers probe.
-      lifecycle_query_timeout_ms: 1000    # Timeout for each lifecycle get_state probe.
+      controller_query_timeout_ms: 3000   # Timeout for each controller_manager hardware/controller probe during startup.
+      lifecycle_query_timeout_ms: 3000    # Timeout for each lifecycle get_state probe during bringup.
 
     # FSM-state faults evaluated continuously while the FSM-state is active.
     faults:
@@ -40,8 +40,8 @@
 /**/idling_state:
   ros__parameters:
     ready:
-      controller_query_timeout_ms: 1000   # Timeout for each controller_manager list_controllers probe.
-      lifecycle_query_timeout_ms: 1000    # Timeout for each lifecycle get_state probe.
+      controller_query_timeout_ms: 3000   # Timeout for each controller_manager hardware/controller probe during startup.
+      lifecycle_query_timeout_ms: 3000    # Timeout for each lifecycle get_state probe during bringup.
 
     # FSM-state faults evaluated continuously while the FSM-state is active.
     faults:
@@ -61,8 +61,8 @@
 /**/running_state:
   ros__parameters:
     ready:
-      controller_query_timeout_ms: 1000   # Timeout for each controller_manager list_controllers probe.
-      lifecycle_query_timeout_ms: 1000    # Timeout for each lifecycle get_state probe.
+      controller_query_timeout_ms: 3000   # Timeout for each controller_manager hardware/controller probe during startup.
+      lifecycle_query_timeout_ms: 3000    # Timeout for each lifecycle get_state probe during bringup.
 
     # FSM-state faults evaluated continuously while the FSM-state is active.
     faults:
@@ -82,8 +82,8 @@
 /**/charging_state:
   ros__parameters:
     ready:
-      controller_query_timeout_ms: 1000   # Timeout for each controller_manager list_controllers probe.
-      lifecycle_query_timeout_ms: 1000    # Timeout for each lifecycle get_state probe.
+      controller_query_timeout_ms: 3000   # Timeout for each controller_manager hardware/controller probe during startup.
+      lifecycle_query_timeout_ms: 3000    # Timeout for each lifecycle get_state probe during bringup.
 
     # FSM-state faults evaluated continuously while the FSM-state is active.
     faults:
@@ -103,8 +103,8 @@
 /**/fault_state:
   ros__parameters:
     ready:
-      controller_query_timeout_ms: 1000   # Timeout for each controller_manager list_controllers probe.
-      lifecycle_query_timeout_ms: 1000    # Timeout for each lifecycle get_state probe.
+      controller_query_timeout_ms: 3000   # Timeout for each controller_manager hardware/controller probe during startup.
+      lifecycle_query_timeout_ms: 3000    # Timeout for each lifecycle get_state probe during bringup.
 
     # FSM-state faults evaluated continuously while the FSM-state is active.
     faults:
