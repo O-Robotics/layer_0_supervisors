@@ -108,7 +108,7 @@ def generate_launch_description():
         DeclareLaunchArgument("http_host", default_value="0.0.0.0"),
         DeclareLaunchArgument("http_port", default_value="8080"),
         DeclareLaunchArgument("gnss_topic", default_value="gnss/navsat"),
-        DeclareLaunchArgument("battery_topic", default_value="battery_state"),
+        DeclareLaunchArgument("battery_topic", default_value="battery/battery_state"),
         DeclareLaunchArgument("fsm_state_topic", default_value="fsm_state"),
         DeclareLaunchArgument("fsm_status_topic", default_value="fsm_status"),
         DeclareLaunchArgument("site_title", default_value="AMR Sweeper Mission Control"),

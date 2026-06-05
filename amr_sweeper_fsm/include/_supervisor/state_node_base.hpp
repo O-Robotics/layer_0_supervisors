@@ -174,8 +174,8 @@ protected:
     // Backwards compatible:
     //   - "/amr_sweeper/amr_sweeper_battery"  -> requires ACTIVE
     // New syntax:
-    //   - "node=amr_sweeper_battery_node;level>=UNCONFIGURED"
-    //   - "node=/amr_sweeper/amr_sweeper_battery;level>=INACTIVE"
+    //   - "node=battery_node;level>=UNCONFIGURED"
+    //   - "node=/amr_sweeper/battery;level>=INACTIVE"
     std::vector<::fsm_layer_0::LifecycleNodeRequirement> lifecycle_nodes;
 
     // Graph-discovered topics (names must match exactly; absolute or relative).

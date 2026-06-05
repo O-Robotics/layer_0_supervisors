@@ -88,7 +88,8 @@ class MissionBackendNode(Node):
         self._fsm_state_topic = self.declare_parameter("fsm_state_topic", "fsm_state").value
         self._fsm_status_topic = self.declare_parameter("fsm_status_topic", "fsm_status").value
         self._gnss_topic = self.declare_parameter("gnss_topic", "gnss/navsat").value
-        self._battery_topic = self.declare_parameter("battery_topic", "battery_state").value
+        self._battery_topic = self.declare_parameter(
+            "battery_topic", "battery/battery_state").value
         self._rosout_topic = self.declare_parameter("rosout_topic", "/rosout").value
         self._max_log_entries = int(self.declare_parameter("max_log_entries", 100).value)
         self._safety_web_status_topic = self.declare_parameter(
