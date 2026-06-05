@@ -370,13 +370,16 @@ profiles:
                 target: "imu/data_raw"
                 required: true
               - type: "topic"
+                target: "imu/data_acc_gyro"
+                required: true
+              - type: "topic"
+                target: "imu/data_heading"
+                required: true
+              - type: "topic"
                 target: "gnss/navsat"
                 required: true
               - type: "topic"
-                target: "robot_description"
-                required: true
-              - type: "topic"
-                target: "joint_states"
+                target: "battery/battery_state"
                 required: true
               - type: "topic"
                 target: "usb_cameras/rear_left_camera/image_raw/compressed"
@@ -397,7 +400,25 @@ profiles:
                 target: "depth_camera/depth/color/points"
                 required: false
               - type: "service"
+                target: "robot_state_publisher/get_parameters"
+                required: true
+              - type: "service"
                 target: "battery/battery_node/get_parameters"
+                required: true
+              - type: "service"
+                target: "system_info/system_info_node/get_parameters"
+                required: true
+              - type: "service"
+                target: "imu/imu_node/get_parameters"
+                required: true
+              - type: "service"
+                target: "gnss/gnss_node/get_parameters"
+                required: true
+              - type: "service"
+                target: "gnss/ntrip_client/get_parameters"
+                required: true
+              - type: "topic"
+                target: "joint_states"
                 required: true
               - type: "hardware"
                 target: "odrive_ros2_control"
@@ -415,11 +436,14 @@ profiles:
                 required: true
             window_ms: 45000
           rosout_triggers:
-            - "node=amr_sweeper_layer_1_hardware_bringup;level>=ERROR;action=FAULT"
-            - "node=robot_state_publisher;level>=ERROR;action=FAULT"
-            - "node=battery;level>=ERROR;action=FAULT"
+            - "node=system_info_node;level>=ERROR;action=FAULT"
+            - "node=system_info_node;level>=WARN;action=DEGRADED"
+            - "node=system_info_node;match=Could not open file;action=FAULT"
+            - "node=battery_node;level>=ERROR;action=FAULT"
+            - "node=battery_node;level>=WARN;action=DEGRADED"
             - "node=depth_camera_watchdog;level>=ERROR;action=DEGRADED"
             - "node=depth_camera_watchdog;level>=WARN;action=DEGRADED"
+            - "level>=ERROR;match=Failed to open V4L2 device;action=FAULT"
           errors:
             on_readiness_fail: "FAULT"
             on_unexpected_exit: "FAULT"
@@ -442,13 +466,13 @@ profiles:
       transitions:
         auto_transition_on: false
         auto_transition_profile:
-        fault_transition_on: false
+        fault_transition_on: true
         fault_transition_profile: 400
 
       processes:
-        # Mission builder for debug sessions. Startup failures are tolerated.
+        # Logic block: mission builder (critical)
         - name: "amr_sweeper_vda5050_parser"
-          importance: "optional"
+          importance: "critical"
           startup:
             exec: "ros2 launch amr_sweeper_vda5050_parser amr_sweeper_vda5050_parser.launch.py"
             args:
@@ -465,6 +489,13 @@ profiles:
                 target: "build_current_mission"
                 required: true
             window_ms: 8000
+          rosout_triggers:
+            - "node=vda5050_parser_node;level>=ERROR;action=FAULT"
+          errors:
+            on_readiness_fail: "FAULT"
+            on_unexpected_exit: "FAULT"
+            priority: 250
+            force: true
           restart:
             max_restarts: 5
             restart_delay_ms: 1000
@@ -473,9 +504,9 @@ profiles:
             sigterm_timeout_ms: 1000
             sigkill_timeout_ms: 1000
 
-        # Scheduler for debug sessions. Startup failures are tolerated.
+        # Logic block: scheduler (critical)
         - name: "amr_sweeper_scheduler"
-          importance: "optional"
+          importance: "critical"
           startup:
             exec: "ros2 launch amr_sweeper_scheduler amr_sweeper_scheduler.launch.py"
             args:
@@ -488,6 +519,13 @@ profiles:
                 target: "reload_schedule"
                 required: true
             window_ms: 8000
+          rosout_triggers:
+            - "node=amr_sweeper_scheduler;level>=ERROR;action=FAULT"
+          errors:
+            on_readiness_fail: "FAULT"
+            on_unexpected_exit: "FAULT"
+            priority: 250
+            force: true
           restart:
             max_restarts: 5
             restart_delay_ms: 1000
@@ -496,9 +534,9 @@ profiles:
             sigterm_timeout_ms: 1000
             sigkill_timeout_ms: 1000
 
-        # Layer 1 hardware bringup for debug sessions. Startup failures are tolerated.
+        # Logic block: layer_1_hardware bringup (critical)
         - name: "amr_sweeper_layer_1_hardware_bringup"
-          importance: "optional"
+          importance: "critical"
           startup:
             exec: "ros2 launch amr_sweeper_layer_1_hardware_bringup amr_sweeper_layer_1_hardware_bringup.launch.py"
             args:
@@ -510,7 +548,7 @@ profiles:
               - "use_amr_sweeper_depth_camera:=true"
               - "use_amr_sweeper_imu:=true"
               - "use_amr_sweeper_gnss:=true"
-              - "use_ntrip_client:=false"
+              - "use_ntrip_client:=true"
             ready:
               - type: "topic"
                 target: "system_info/system_info"
@@ -531,9 +569,6 @@ profiles:
                 target: "battery/battery_state"
                 required: true
               - type: "topic"
-                target: "robot_description"
-                required: true
-              - type: "topic"
                 target: "usb_cameras/rear_left_camera/image_raw/compressed"
                 required: true
               - type: "topic"
@@ -544,10 +579,10 @@ profiles:
                 required: true
               - type: "topic"
                 target: "depth_camera/depth/camera_info"
-                required: false
+                required: true
               - type: "topic"
                 target: "depth_camera/scan"
-                required: false
+                required: true
               - type: "topic"
                 target: "depth_camera/depth/color/points"
                 required: false
@@ -565,6 +600,9 @@ profiles:
                 required: true
               - type: "service"
                 target: "gnss/gnss_node/get_parameters"
+                required: true
+              - type: "service"
+                target: "gnss/ntrip_client/get_parameters"
                 required: true
               - type: "topic"
                 target: "joint_states"
@@ -584,6 +622,20 @@ profiles:
                 target: "layer_1_hardware_bringup/ready"
                 required: true
             window_ms: 45000
+          rosout_triggers:
+            - "node=system_info_node;level>=ERROR;action=FAULT"
+            - "node=system_info_node;level>=WARN;action=DEGRADED"
+            - "node=system_info_node;match=Could not open file;action=FAULT"
+            - "node=battery_node;level>=ERROR;action=FAULT"
+            - "node=battery_node;level>=WARN;action=DEGRADED"
+            - "node=depth_camera_watchdog;level>=ERROR;action=DEGRADED"
+            - "node=depth_camera_watchdog;level>=WARN;action=DEGRADED"
+            - "level>=ERROR;match=Failed to open V4L2 device;action=FAULT"
+          errors:
+            on_readiness_fail: "FAULT"
+            on_unexpected_exit: "FAULT"
+            priority: 250
+            force: true
           restart:
             max_restarts: 5
             restart_delay_ms: 1000
@@ -592,9 +644,9 @@ profiles:
             sigterm_timeout_ms: 1000
             sigkill_timeout_ms: 1000
 
-        # Layer 2 controllers bringup for debug sessions. Startup failures are tolerated.
+        # Logic block: layer_2_controllers bringup (critical)
         - name: "amr_sweeper_layer_2_controllers_bringup"
-          importance: "optional"
+          importance: "critical"
           startup:
             exec: "ros2 launch amr_sweeper_layer_2_controllers_bringup amr_sweeper_layer_2_controllers_bringup.launch.py"
             args:
@@ -642,6 +694,14 @@ profiles:
                 target: "tool_controller"
                 required: true
             window_ms: 15000
+          rosout_triggers:
+            - "level>=FATAL;action=FAULT"
+            - "level>=ERROR;action=FAULT"
+          errors:
+            on_readiness_fail: "FAULT"
+            on_unexpected_exit: "FAULT"
+            priority: 250
+            force: true
           restart:
             max_restarts: 0
             restart_delay_ms: 1000
@@ -650,9 +710,9 @@ profiles:
             sigterm_timeout_ms: 1500
             sigkill_timeout_ms: 1500
 
-        # Layer 3 navigation bringup for debug sessions. Startup failures are tolerated.
+        # Logic block: layer_3_navigation bringup (critical)
         - name: "amr_sweeper_layer_3_navigation_bringup"
-          importance: "optional"
+          importance: "critical"
           startup:
             exec: "ros2 launch amr_sweeper_layer_3_navigation_bringup amr_sweeper_layer_3_navigation_bringup.launch.py"
             args:
@@ -662,7 +722,6 @@ profiles:
               - "use_amr_sweeper_localization:=true"
               - "use_amr_sweeper_mapping:=true"
               - "use_amr_sweeper_waypoint_follower:=true"
-              - "auto_start_mission:=false"
               - "use_test:={use_test}"
               - "test_output_directory:={test_output_directory}"
             ready:
@@ -697,6 +756,14 @@ profiles:
                 target: "amr_sweeper_mapping_node/get_parameters"
                 required: true
             window_ms: 45000
+          rosout_triggers:
+            - "level>=FATAL;action=FAULT"
+            - "level>=ERROR;action=FAULT"
+          errors:
+            on_readiness_fail: "FAULT"
+            on_unexpected_exit: "FAULT"
+            priority: 250
+            force: true
           restart:
             max_restarts: 5
             restart_delay_ms: 1000
