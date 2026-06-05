@@ -18,6 +18,7 @@
 
 namespace {
   std::atomic<uint64_t> g_probe_seq{0};
+  constexpr char kAnsiGreen[] = "\033[32m";
   constexpr char kAnsiLightMagenta[] = "\033[95m";
   constexpr char kAnsiReset[] = "\033[0m";
 
@@ -96,6 +97,11 @@ namespace {
       return message;
     }
     return std::string(kAnsiLightMagenta) + message + kAnsiReset;
+  }
+
+  std::string format_green_message(const std::string & message)
+  {
+    return std::string(kAnsiGreen) + message + kAnsiReset;
   }
 
   std::string format_magenta_message(const std::string & message)
@@ -752,7 +758,7 @@ if (!profiles_file_.empty()) {
       << " fault_on=" << (fault_transition_on_ ? "true" : "false")
       << " fault_profile=" << fault_transition_profile_;
 
-    const std::string colored_message = format_magenta_message(transitions_message.str());
+    const std::string colored_message = format_green_message(transitions_message.str());
     RCLCPP_INFO(
       get_logger(),
       "%s",
