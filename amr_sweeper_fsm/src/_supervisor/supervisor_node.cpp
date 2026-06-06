@@ -846,6 +846,8 @@ switch (current_state_) {
 current_profile_ = effective_profile;
 desired_profile_ = current_profile_;
 transitioning_to_profile_ = current_profile_;
+last_lifecycle_id_ = State::PRIMARY_STATE_ACTIVE;
+active_lifecycle_label_ = lifecycle_id_to_label(last_lifecycle_id_);
 
 const auto msg = green_log_text(
   "FSM state transition completed, now running: " + state_name(current_state_) + " (" +
