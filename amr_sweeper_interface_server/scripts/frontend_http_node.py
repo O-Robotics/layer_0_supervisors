@@ -333,6 +333,7 @@ class MissionFrontendHttpNode(MissionBackendNode):
     }}
     h1 {{
       color: var(--accent);
+      margin-bottom: 4px;
     }}
     .grid {{
       display: grid;
@@ -441,7 +442,7 @@ class MissionFrontendHttpNode(MissionBackendNode):
       margin-top: 12px;
     }}
     .live-strip {{
-      margin-top: 6px;
+      margin-top: 2px;
       display: flex;
       align-items: center;
       gap: 12px;
@@ -457,6 +458,12 @@ class MissionFrontendHttpNode(MissionBackendNode):
       border: none;
       font-size: 0.95rem;
       color: var(--muted);
+    }}
+    .live-status-text.connected {{
+      color: #22c55e;
+    }}
+    .live-status-text.disconnected {{
+      color: #ef4444;
     }}
     .live-dot {{
       width: 10px;
@@ -543,8 +550,7 @@ class MissionFrontendHttpNode(MissionBackendNode):
       <div class="live-strip">
         <div class="live-pill">
           <span id="live-dot" class="live-dot"></span>
-          <span>Status:</span>
-          <span id="live-status">Connecting</span>
+          <span id="live-status" class="live-status-text">CONNECTING</span>
         </div>
       </div>
       <div class="nav">
@@ -631,7 +637,10 @@ class MissionFrontendHttpNode(MissionBackendNode):
       );
       lastStatusEpochMs = Date.now();
 
-      document.getElementById('live-status').textContent = 'Connected';
+      const liveStatus = document.getElementById('live-status');
+      liveStatus.textContent = 'CONNECTED';
+      liveStatus.classList.add('connected');
+      liveStatus.classList.remove('disconnected');
       document.getElementById('live-dot').classList.add('connected');
 
       document.getElementById('fsm-state').textContent = fsm.current_state || 'Unknown';
@@ -723,7 +732,10 @@ class MissionFrontendHttpNode(MissionBackendNode):
       try {{
         await loadStatus();
       }} catch (error) {{
-        document.getElementById('live-status').textContent = 'Stalled';
+        const liveStatus = document.getElementById('live-status');
+        liveStatus.textContent = 'DISCONNECTED';
+        liveStatus.classList.add('disconnected');
+        liveStatus.classList.remove('connected');
         document.getElementById('live-dot').classList.remove('connected');
         setBanner('error', error.message || 'Failed to reach mission web server');
       }}
@@ -733,16 +745,21 @@ class MissionFrontendHttpNode(MissionBackendNode):
       const liveStatus = document.getElementById('live-status');
       const liveDot = document.getElementById('live-dot');
       if (!lastStatusEpochMs) {{
-        liveStatus.textContent = 'Connecting';
+        liveStatus.textContent = 'CONNECTING';
+        liveStatus.classList.remove('connected', 'disconnected');
         liveDot.classList.remove('connected');
         return;
       }}
       const ageSec = (Date.now() - lastStatusEpochMs) / 1000;
       if (ageSec < 2.5) {{
-        liveStatus.textContent = 'Connected';
+        liveStatus.textContent = 'CONNECTED';
+        liveStatus.classList.add('connected');
+        liveStatus.classList.remove('disconnected');
         liveDot.classList.add('connected');
       }} else {{
-        liveStatus.textContent = 'Stalled';
+        liveStatus.textContent = 'DISCONNECTED';
+        liveStatus.classList.add('disconnected');
+        liveStatus.classList.remove('connected');
         liveDot.classList.remove('connected');
       }}
     }}
@@ -752,7 +769,10 @@ class MissionFrontendHttpNode(MissionBackendNode):
       try {{
         await loadStatus();
       }} catch (_error) {{
-        document.getElementById('live-status').textContent = 'Stalled';
+        const liveStatus = document.getElementById('live-status');
+        liveStatus.textContent = 'DISCONNECTED';
+        liveStatus.classList.add('disconnected');
+        liveStatus.classList.remove('connected');
         document.getElementById('live-dot').classList.remove('connected');
       }}
     }}, 1000);
