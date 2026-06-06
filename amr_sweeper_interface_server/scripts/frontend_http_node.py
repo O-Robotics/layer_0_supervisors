@@ -333,7 +333,7 @@ class MissionFrontendHttpNode(MissionBackendNode):
     }}
     h1 {{
       color: var(--accent);
-      margin-bottom: 4px;
+      margin-bottom: 1px;
     }}
     .grid {{
       display: grid;
@@ -442,7 +442,7 @@ class MissionFrontendHttpNode(MissionBackendNode):
       margin-top: 12px;
     }}
     .live-strip {{
-      margin-top: 2px;
+      margin-top: 0;
       display: flex;
       align-items: center;
       gap: 12px;
