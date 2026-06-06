@@ -1230,6 +1230,34 @@ std::string sanitizeUidToken(std::string value)
   return value;
 }
 
+std::string escapeIcsText(std::string value)
+{
+  std::string escaped;
+  escaped.reserve(value.size());
+  for (const char character : value) {
+    switch (character) {
+      case '\\':
+        escaped += "\\\\";
+        break;
+      case ';':
+        escaped += "\\;";
+        break;
+      case ',':
+        escaped += "\\,";
+        break;
+      case '\n':
+        escaped += "\\n";
+        break;
+      case '\r':
+        break;
+      default:
+        escaped.push_back(character);
+        break;
+    }
+  }
+  return escaped;
+}
+
 std::filesystem::path discoverNewestSchedulePath(const std::filesystem::path & missions_directory)
 {
   std::optional<std::filesystem::path> selected_path;
@@ -3081,6 +3109,19 @@ void MissionExecutorNode::recordSafetyEvent(
   const auto time_point = std::chrono::system_clock::time_point(std::chrono::nanoseconds(event_time.nanoseconds()));
   const std::string event_utc = formatUtcTimestamp(time_point);
   const std::string event_local = formatLocalTimestamp(time_point);
+  std::ostringstream debug_description;
+  debug_description
+    << "sender=" << event.sender
+    << "; reason=" << event.reason;
+  if (!related_mission_id.empty()) {
+    debug_description << "; mission_id=" << related_mission_id;
+  }
+  if (!mission_run_directory.empty()) {
+    debug_description << "; mission_run_directory=" << mission_run_directory;
+  }
+  debug_description << "; recorded_by=mission_executor";
+  const std::string escaped_debug_description = escapeIcsText(debug_description.str());
+  const std::string escaped_reason = escapeIcsText(event.reason);
 
   std::ostringstream event_stream;
   event_stream
@@ -3089,10 +3130,12 @@ void MissionExecutorNode::recordSafetyEvent(
     << "DTSTART;TZID=" << timezone << ":" << event_local << "\n"
     << "DURATION:PT0S\n"
     << "SUMMARY:Safety stop " << event.sender << "\n"
+    << "DESCRIPTION:" << escaped_debug_description << "\n"
     << "X-ROBOT-ID:" << robot_id_ << "\n"
     << "X-SCHEDULE-TYPE:" << kSafetyScheduleType << "\n"
     << "X-SAFETY-SENDER:" << event.sender << "\n"
-    << "X-SAFETY-REASON:" << event.reason << "\n"
+    << "X-SAFETY-REASON:" << escaped_reason << "\n"
+    << "X-SAFETY-DEBUG:" << escaped_debug_description << "\n"
     << "X-ACTUAL-START-UTC:" << event_utc << "\n";
   if (!related_mission_id.empty()) {
     event_stream << "X-MISSION-ID:" << related_mission_id << "\n";
@@ -3130,10 +3173,12 @@ void MissionExecutorNode::recordSafetyEvent(
         << "DTSTART;TZID=" << actual_timezone << ":" << event_local << "\n"
         << "DURATION:PT0S\n"
         << "SUMMARY:Actual safety stop " << event.sender << "\n"
+        << "DESCRIPTION:" << escaped_debug_description << "\n"
         << "X-ROBOT-ID:" << robot_id_ << "\n"
         << "X-SCHEDULE-TYPE:" << kSafetyScheduleType << "\n"
         << "X-SAFETY-SENDER:" << event.sender << "\n"
-        << "X-SAFETY-REASON:" << event.reason << "\n"
+        << "X-SAFETY-REASON:" << escaped_reason << "\n"
+        << "X-SAFETY-DEBUG:" << escaped_debug_description << "\n"
         << "X-ACTUAL-START-UTC:" << event_utc << "\n";
       if (!related_mission_id.empty()) {
         actual_event_stream << "X-MISSION-ID:" << related_mission_id << "\n";

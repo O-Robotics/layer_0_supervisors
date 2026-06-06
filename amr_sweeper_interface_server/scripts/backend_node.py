@@ -7,13 +7,15 @@ import errno
 import threading
 import urllib.parse
 import calendar
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from collections import deque
 from html import escape
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import rclpy
 from amr_sweeper_fsm.msg import FSMState, FSMStatus
@@ -38,6 +40,26 @@ def _resolve_path(configured_path: str) -> Path:
     if path.is_absolute():
         return path
     return Path.cwd() / path
+
+
+def _escape_ics_text(value: str) -> str:
+    return (
+        str(value)
+        .replace("\\", "\\\\")
+        .replace("\n", "\\n")
+        .replace(",", "\\,")
+        .replace(";", "\\;")
+    )
+
+
+def _unescape_ics_text(value: str) -> str:
+    return (
+        str(value)
+        .replace("\\n", "\n")
+        .replace("\\,", ",")
+        .replace("\\;", ";")
+        .replace("\\\\", "\\")
+    )
 
 
 
@@ -414,10 +436,18 @@ class MissionBackendNode(Node):
             recent_logs = list(self._recent_logs)
 
         active_execution = self._discover_active_execution()
+        robot_now = datetime.now().astimezone()
         return {
             "success": True,
             "site_title": self._site_title,
             "public_base_url": self._public_base_url,
+            "robot_clock": {
+                "iso": robot_now.isoformat(),
+                "local_time": robot_now.strftime("%Y-%m-%d %H:%M:%S"),
+                "timezone": robot_now.tzname() or "",
+                "utc_offset": robot_now.strftime("%z"),
+                "unix_sec": int(robot_now.timestamp()),
+            },
             "fsm_state": fsm_state,
             "fsm_status": fsm_status,
             "position": navsat,
@@ -479,6 +509,35 @@ class MissionBackendNode(Node):
             return fixed_path
         return None
 
+    def _robot_timezone_name(self) -> str:
+        planned_path = self._discover_planned_schedule_path()
+        if planned_path is not None and planned_path.exists():
+            try:
+                for line in planned_path.read_text(encoding="utf-8").splitlines():
+                    if line.startswith("X-WR-TIMEZONE:"):
+                        value = line.split(":", 1)[1].strip()
+                        if value:
+                            return value
+            except Exception:
+                pass
+
+        local = datetime.now().astimezone()
+        tz_name = local.tzname()
+        if tz_name:
+            try:
+                ZoneInfo(tz_name)
+                return tz_name
+            except Exception:
+                pass
+        return "UTC"
+
+    def _robot_timezone(self):
+        timezone_name = self._robot_timezone_name()
+        try:
+            return ZoneInfo(timezone_name)
+        except Exception:
+            return datetime.now().astimezone().tzinfo or timezone.utc
+
     @staticmethod
     def _unfold_ics_lines(text: str) -> list[str]:
         lines: list[str] = []
@@ -501,8 +560,12 @@ class MissionBackendNode(Node):
         return parsed
 
     @staticmethod
-    def _parse_ics_datetime(value: str) -> datetime:
-        return datetime.strptime(value.strip(), "%Y%m%dT%H%M%S")
+    def _parse_ics_datetime(value: str, target_timezone) -> datetime:
+        cleaned = value.strip()
+        if cleaned.endswith("Z"):
+            parsed = datetime.strptime(cleaned, "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
+            return parsed.astimezone(target_timezone)
+        return datetime.strptime(cleaned, "%Y%m%dT%H%M%S").replace(tzinfo=target_timezone)
 
     @staticmethod
     def _parse_ics_duration(value: str) -> timedelta:
@@ -532,14 +595,17 @@ class MissionBackendNode(Node):
             number = ""
         return timedelta(hours=hours, minutes=minutes, seconds=seconds)
 
-    def _load_schedule_events(self, schedule_path: Path | None) -> tuple[Path | None, list[dict[str, Any]]]:
+    def _load_schedule_events(self, schedule_path: Path | None) -> tuple[Path | None, str, list[dict[str, Any]]]:
         if schedule_path is None or not schedule_path.exists():
-            return None, []
+            return None, self._robot_timezone_name(), []
 
         lines = self._unfold_ics_lines(schedule_path.read_text(encoding="utf-8"))
+        calendar_timezone = self._robot_timezone_name()
         events: list[dict[str, Any]] = []
         current: dict[str, Any] | None = None
         for line in lines:
+            if line.startswith("X-WR-TIMEZONE:"):
+                calendar_timezone = line.split(":", 1)[1].strip() or calendar_timezone
             if line == "BEGIN:VEVENT":
                 current = {}
                 continue
@@ -553,12 +619,12 @@ class MissionBackendNode(Node):
 
             raw_key, value = line.split(":", 1)
             key = raw_key.split(";", 1)[0]
-            current[key] = value
+            current[key] = _unescape_ics_text(value)
             if raw_key.startswith("DTSTART"):
                 current["DTSTART_RAW"] = raw_key
             if raw_key.startswith("DTEND"):
                 current["DTEND_RAW"] = raw_key
-        return schedule_path, events
+        return schedule_path, calendar_timezone, events
 
     @staticmethod
     def _nth_weekday_of_month(year: int, month: int, weekday: int, setpos: int) -> datetime | None:
@@ -583,13 +649,14 @@ class MissionBackendNode(Node):
         event: dict[str, Any],
         range_start: datetime,
         range_end: datetime,
+        target_timezone,
     ) -> list[dict[str, Any]]:
         if "DTSTART" not in event:
             return []
 
-        start = self._parse_ics_datetime(event["DTSTART"])
+        start = self._parse_ics_datetime(event["DTSTART"], target_timezone)
         end = (
-            self._parse_ics_datetime(event["DTEND"])
+            self._parse_ics_datetime(event["DTEND"], target_timezone)
             if "DTEND" in event
             else start + self._parse_ics_duration(event.get("DURATION", "PT0S"))
         )
@@ -611,7 +678,10 @@ class MissionBackendNode(Node):
                     "robot_id": event.get("X-ROBOT-ID", ""),
                     "start": occurrence_start.isoformat(),
                     "end": occurrence_end.isoformat(),
+                    "start_local": occurrence_start.strftime("%Y-%m-%dT%H:%M:%S"),
+                    "end_local": occurrence_end.strftime("%Y-%m-%dT%H:%M:%S"),
                     "date": occurrence_start.strftime("%Y-%m-%d"),
+                    "end_date": occurrence_end.strftime("%Y-%m-%d"),
                     "time": occurrence_start.strftime("%H:%M"),
                     "end_time": occurrence_end.strftime("%H:%M"),
                 }
@@ -671,43 +741,281 @@ class MissionBackendNode(Node):
         append_occurrence(start)
         return occurrences
 
+    @staticmethod
+    def _monthly_setpos_for_date(date_value: datetime) -> int:
+        return ((date_value.day - 1) // 7) + 1
+
+    @staticmethod
+    def _weekday_code(date_value: datetime) -> str:
+        return ["MO", "TU", "WE", "TH", "FR", "SA", "SU"][date_value.weekday()]
+
+    def _planned_entry_from_event(self, event: dict[str, Any], target_timezone) -> dict[str, Any]:
+        start = self._parse_ics_datetime(event["DTSTART"], target_timezone)
+        end = (
+            self._parse_ics_datetime(event["DTEND"], target_timezone)
+            if "DTEND" in event
+            else start + self._parse_ics_duration(event.get("DURATION", "PT0S"))
+        )
+        rrule = self._parse_rrule(event.get("RRULE", ""))
+        recurrence_type = "none"
+        recurrence_label = "One-off"
+        if rrule.get("FREQ") == "DAILY":
+            recurrence_type = "daily"
+            recurrence_label = "Daily"
+        elif rrule.get("FREQ") == "MONTHLY" and rrule.get("BYDAY") and rrule.get("BYSETPOS"):
+            recurrence_type = "monthly_nth_weekday"
+            recurrence_label = f"Monthly on the {rrule['BYSETPOS']}{rrule['BYDAY']}"
+
+        return {
+            "uid": event.get("UID", ""),
+            "summary": event.get("SUMMARY", ""),
+            "description": event.get("DESCRIPTION", ""),
+            "schedule_type": event.get("X-SCHEDULE-TYPE", "WORK") or "WORK",
+            "mission_id": event.get("X-MISSION-ID", ""),
+            "robot_id": event.get("X-ROBOT-ID", ""),
+            "start_local": start.strftime("%Y-%m-%dT%H:%M"),
+            "end_local": end.strftime("%Y-%m-%dT%H:%M"),
+            "recurrence_type": recurrence_type,
+            "recurrence_label": recurrence_label,
+        }
+
+    def list_planned_schedule_entries(self) -> dict[str, Any]:
+        schedule_path = self._discover_or_create_planned_schedule_path()
+        schedule_path, timezone_name, events = self._load_schedule_events(schedule_path)
+        target_timezone = ZoneInfo(timezone_name)
+        planned_entries = [
+            self._planned_entry_from_event(event, target_timezone)
+            for event in events
+            if event.get("UID")
+        ]
+        planned_entries.sort(key=lambda item: (item["start_local"], item["summary"], item["uid"]))
+        return {
+            "success": True,
+            "planned_schedule_path": str(schedule_path) if schedule_path is not None else "",
+            "robot_timezone": timezone_name,
+            "planned_entries": planned_entries,
+        }
+
+    def _discover_or_create_planned_schedule_path(self) -> Path:
+        existing = self._discover_planned_schedule_path()
+        if existing is not None:
+            return existing
+
+        missions_from_db_directory = _resolve_path(self._missions_from_db_directory)
+        missions_from_db_directory.mkdir(parents=True, exist_ok=True)
+        created_name = datetime.now(timezone.utc).strftime("schedule_%Y%m%dT%H%M%SZ.ics")
+        created_path = missions_from_db_directory / created_name
+        timezone_name = self._robot_timezone_name()
+        created_path.write_text(self._empty_schedule_document(timezone_name), encoding="utf-8")
+        return created_path
+
+    def _empty_schedule_document(self, timezone_name: str) -> str:
+        return "\n".join(
+            [
+                "BEGIN:VCALENDAR",
+                "VERSION:2.0",
+                "PRODID:-//amr_sweeper_interface_server//EditableSchedule 0.1//EN",
+                "CALSCALE:GREGORIAN",
+                "METHOD:PUBLISH",
+                "X-WR-CALNAME:AMR-Sweeper Schedule",
+                f"X-WR-TIMEZONE:{timezone_name}",
+                "",
+                "END:VCALENDAR",
+                "",
+            ]
+        )
+
+    def _read_schedule_document_parts(self, schedule_path: Path) -> tuple[list[str], list[dict[str, Any]]]:
+        if not schedule_path.exists():
+            schedule_path.write_text(self._empty_schedule_document(self._robot_timezone_name()), encoding="utf-8")
+
+        lines = self._unfold_ics_lines(schedule_path.read_text(encoding="utf-8"))
+        preamble: list[str] = []
+        raw_events: list[dict[str, Any]] = []
+        current: dict[str, Any] | None = None
+        in_events = False
+
+        for line in lines:
+            if line == "BEGIN:VEVENT":
+                current = {}
+                in_events = True
+                continue
+            if line == "END:VEVENT":
+                if current is not None:
+                    raw_events.append(current)
+                current = None
+                continue
+            if current is not None and ":" in line:
+                raw_key, value = line.split(":", 1)
+                key = raw_key.split(";", 1)[0]
+                current[key] = _unescape_ics_text(value)
+                if raw_key.startswith("DTSTART"):
+                    current["DTSTART_RAW"] = raw_key
+                if raw_key.startswith("DTEND"):
+                    current["DTEND_RAW"] = raw_key
+                continue
+            if line == "END:VCALENDAR":
+                break
+            if not in_events:
+                preamble.append(line)
+
+        if not preamble:
+            preamble = self._empty_schedule_document(self._robot_timezone_name()).splitlines()[:-2]
+        timezone_name = self._robot_timezone_name()
+        for line in preamble:
+            if line.startswith("X-WR-TIMEZONE:"):
+                timezone_name = line.split(":", 1)[1].strip() or timezone_name
+                break
+        target_timezone = ZoneInfo(timezone_name)
+        events = [
+            self._planned_entry_from_event(raw_event, target_timezone)
+            for raw_event in raw_events
+            if raw_event.get("UID") and raw_event.get("DTSTART")
+        ]
+        return preamble, events
+
+    def _write_schedule_document(self, schedule_path: Path, preamble: list[str], events: list[dict[str, Any]]) -> None:
+        timezone_name = self._robot_timezone_name()
+        normalized_preamble = [line for line in preamble if line != "END:VCALENDAR"]
+        has_timezone = any(line.startswith("X-WR-TIMEZONE:") for line in normalized_preamble)
+        if not has_timezone:
+            normalized_preamble.append(f"X-WR-TIMEZONE:{timezone_name}")
+
+        document_lines = list(normalized_preamble)
+        if document_lines and document_lines[-1] != "":
+            document_lines.append("")
+        for event in events:
+            document_lines.extend(self._serialize_schedule_event(event, timezone_name))
+            document_lines.append("")
+        document_lines.append("END:VCALENDAR")
+        document_lines.append("")
+        schedule_path.write_text("\n".join(document_lines), encoding="utf-8")
+
+    def _serialize_schedule_event(self, event: dict[str, Any], timezone_name: str) -> list[str]:
+        target_timezone = ZoneInfo(timezone_name)
+        start = self._parse_local_schedule_datetime(str(event.get("start_local", "")), target_timezone)
+        end = self._parse_local_schedule_datetime(str(event.get("end_local", "")), target_timezone)
+        lines = [
+            "BEGIN:VEVENT",
+            f"UID:{_escape_ics_text(event['uid'])}",
+            f"DTSTAMP:{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}",
+            f"SUMMARY:{_escape_ics_text(event.get('summary', 'Scheduled window'))}",
+            f"DESCRIPTION:{_escape_ics_text(event.get('description', ''))}",
+            f"DTSTART;TZID={timezone_name}:{start.strftime('%Y%m%dT%H%M%S')}",
+            f"DTEND;TZID={timezone_name}:{end.strftime('%Y%m%dT%H%M%S')}",
+        ]
+        recurrence_type = str(event.get("recurrence_type", "none"))
+        if recurrence_type == "daily":
+            lines.append("RRULE:FREQ=DAILY")
+        elif recurrence_type == "monthly_nth_weekday":
+            lines.append(
+                f"RRULE:FREQ=MONTHLY;BYDAY={self._weekday_code(start)};BYSETPOS={self._monthly_setpos_for_date(start)}"
+            )
+        if event.get("robot_id"):
+            lines.append(f"X-ROBOT-ID:{_escape_ics_text(event['robot_id'])}")
+        if event.get("schedule_type"):
+            lines.append(f"X-SCHEDULE-TYPE:{_escape_ics_text(event['schedule_type'])}")
+        if event.get("mission_id"):
+            lines.append(f"X-MISSION-ID:{_escape_ics_text(event['mission_id'])}")
+        lines.append("END:VEVENT")
+        return lines
+
+    def _parse_local_schedule_datetime(self, value: str, target_timezone) -> datetime:
+        cleaned = value.strip()
+        parsed = datetime.strptime(cleaned, "%Y-%m-%dT%H:%M")
+        return parsed.replace(tzinfo=target_timezone)
+
+    def save_planned_schedule_entry(self, payload: dict[str, Any]) -> dict[str, Any]:
+        schedule_path = self._discover_or_create_planned_schedule_path()
+        preamble, events = self._read_schedule_document_parts(schedule_path)
+        entry_uid = str(payload.get("uid", "")).strip() or f"{uuid4()}@amr_sweeper_interface_server"
+        entry = {
+            "uid": entry_uid,
+            "summary": str(payload.get("summary", "")).strip() or "Scheduled window",
+            "description": str(payload.get("description", "")).strip(),
+            "schedule_type": str(payload.get("schedule_type", "WORK")).strip() or "WORK",
+            "mission_id": str(payload.get("mission_id", "")).strip(),
+            "robot_id": str(payload.get("robot_id", "")).strip(),
+            "start_local": str(payload.get("start_local", "")).strip(),
+            "end_local": str(payload.get("end_local", "")).strip(),
+            "recurrence_type": str(payload.get("recurrence_type", "none")).strip() or "none",
+        }
+        if not entry["start_local"] or not entry["end_local"]:
+            raise RuntimeError("start_local and end_local are required")
+
+        target_timezone = self._robot_timezone()
+        start = self._parse_local_schedule_datetime(entry["start_local"], target_timezone)
+        end = self._parse_local_schedule_datetime(entry["end_local"], target_timezone)
+        if end <= start:
+            raise RuntimeError("end_local must be after start_local")
+
+        updated = False
+        for index, event in enumerate(events):
+            if event.get("UID") == entry_uid:
+                events[index] = {"UID": entry_uid, **entry}
+                updated = True
+                break
+        if not updated:
+            events.append({"UID": entry_uid, **entry})
+
+        self._write_schedule_document(schedule_path, preamble, events)
+        return {"success": True, "message": "Schedule entry saved", "uid": entry_uid}
+
+    def delete_planned_schedule_entry(self, payload: dict[str, Any]) -> dict[str, Any]:
+        schedule_path = self._discover_or_create_planned_schedule_path()
+        preamble, events = self._read_schedule_document_parts(schedule_path)
+        entry_uid = str(payload.get("uid", "")).strip()
+        if not entry_uid:
+            raise RuntimeError("uid is required")
+        filtered_events = [event for event in events if event.get("UID") != entry_uid]
+        if len(filtered_events) == len(events):
+            raise RuntimeError(f"Schedule entry '{entry_uid}' was not found")
+        self._write_schedule_document(schedule_path, preamble, filtered_events)
+        return {"success": True, "message": "Schedule entry deleted", "uid": entry_uid}
+
     def schedule_snapshot(self, week: str) -> dict[str, Any]:
+        target_timezone = self._robot_timezone()
+        timezone_name = self._robot_timezone_name()
         if week:
             selected_year, selected_week = week.split("-W", 1)
-            week_start = datetime.fromisocalendar(int(selected_year), int(selected_week), 1)
+            week_start = datetime.fromisocalendar(int(selected_year), int(selected_week), 1).replace(tzinfo=target_timezone)
         else:
-            now = datetime.now()
+            now = datetime.now(target_timezone)
             iso_year, iso_week, _ = now.isocalendar()
-            week_start = datetime.fromisocalendar(iso_year, iso_week, 1)
+            week_start = datetime.fromisocalendar(iso_year, iso_week, 1).replace(tzinfo=target_timezone)
 
         week_end = week_start + timedelta(days=7)
-        planned_path, planned_events = self._load_schedule_events(self._discover_planned_schedule_path())
-        actual_path, actual_events = self._load_schedule_events(self._discover_actual_schedule_path())
+        planned_path, planned_timezone_name, planned_events = self._load_schedule_events(self._discover_planned_schedule_path())
+        actual_path, _actual_timezone_name, actual_events = self._load_schedule_events(self._discover_actual_schedule_path())
         planned_occurrences: list[dict[str, Any]] = []
         actual_occurrences: list[dict[str, Any]] = []
         for event in planned_events:
-            for occurrence in self._expand_event_occurrences(event, week_start, week_end):
+            planned_timezone = ZoneInfo(planned_timezone_name)
+            for occurrence in self._expand_event_occurrences(event, week_start, week_end, planned_timezone):
                 occurrence["source"] = "planned"
                 planned_occurrences.append(occurrence)
         for event in actual_events:
-            for occurrence in self._expand_event_occurrences(event, week_start, week_end):
+            for occurrence in self._expand_event_occurrences(event, week_start, week_end, target_timezone):
                 occurrence["source"] = "actual"
                 actual_occurrences.append(occurrence)
         planned_occurrences.sort(key=lambda item: item["start"])
         actual_occurrences.sort(key=lambda item: item["start"])
 
         iso_year, iso_week, _ = week_start.isocalendar()
+        planned_entries = self.list_planned_schedule_entries()["planned_entries"]
 
         return {
             "success": True,
             "planned_schedule_path": str(planned_path) if planned_path is not None else "",
             "actual_schedule_path": str(actual_path) if actual_path is not None else "",
+            "robot_timezone": timezone_name,
             "week": f"{iso_year:04d}-W{iso_week:02d}",
             "week_number": int(iso_week),
             "week_label": f"Week {iso_week:02d} · {week_start.strftime('%d %b')} - {(week_end - timedelta(days=1)).strftime('%d %b %Y')}",
             "week_start": week_start.strftime("%Y-%m-%d"),
             "week_end": (week_end - timedelta(days=1)).strftime("%Y-%m-%d"),
             "planned_events": planned_occurrences,
+            "planned_entries": planned_entries,
             "actual_events": actual_occurrences,
         }
 
@@ -842,6 +1150,7 @@ class MissionBackendNode(Node):
             missions.append(
                 {
                     "mission_id": mission_id,
+                    "mission_file": str(mission_file),
                     "route_geojson": route_geojson,
                     "route_available": route_geojson is not None,
                 }
@@ -859,6 +1168,20 @@ class MissionBackendNode(Node):
             "active_execution": active_execution,
             "active_route_geojson": active_route,
         }
+
+    def mission_file_path(self, mission_id: str) -> Path:
+        if not mission_id:
+            raise RuntimeError("mission_id is required")
+
+        missions_directory = _resolve_path(self._missions_from_db_directory)
+        candidates = [missions_directory / f"{mission_id}.json"]
+        candidates.extend(missions_directory.glob(f"*/{mission_id}.json"))
+
+        for candidate in candidates:
+            if candidate.exists() and candidate.is_file():
+                return candidate
+
+        raise RuntimeError(f"Mission file for '{mission_id}' was not found")
 
     def _call_service(self, client, request, timeout_sec: float, service_name: str):
         if not client.wait_for_service(timeout_sec=timeout_sec):

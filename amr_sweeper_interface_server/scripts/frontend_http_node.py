@@ -85,6 +85,21 @@ class MissionFrontendHttpNode(MissionBackendNode):
                     except Exception as exc:  # noqa: BLE001
                         self._send_json(HTTPStatus.BAD_GATEWAY, {"success": False, "message": str(exc)})
                     return
+                if parsed.path.startswith("/api/missions/") and parsed.path.endswith("/download"):
+                    mission_segment = parsed.path[len("/api/missions/"):-len("/download")]
+                    mission_id = urllib.parse.unquote(mission_segment.rstrip("/"))
+                    if not mission_id:
+                        self._send_json(
+                            HTTPStatus.BAD_REQUEST,
+                            {"success": False, "message": "mission_id is required"},
+                        )
+                        return
+                    try:
+                        mission_path = node.mission_file_path(mission_id)
+                        self._send_download(mission_path, "application/json; charset=utf-8")
+                    except Exception as exc:  # noqa: BLE001
+                        self._send_json(HTTPStatus.NOT_FOUND, {"success": False, "message": str(exc)})
+                    return
                 if parsed.path == "/api/schedule":
                     try:
                         query = urllib.parse.parse_qs(parsed.query)
@@ -178,6 +193,20 @@ class MissionFrontendHttpNode(MissionBackendNode):
                     except Exception as exc:  # noqa: BLE001
                         self._send_json(HTTPStatus.BAD_GATEWAY, {"success": False, "message": str(exc)})
                     return
+                if parsed.path == "/api/schedule/entry":
+                    try:
+                        response = node.save_planned_schedule_entry(payload)
+                        self._send_json(HTTPStatus.OK, response)
+                    except Exception as exc:  # noqa: BLE001
+                        self._send_json(HTTPStatus.BAD_GATEWAY, {"success": False, "message": str(exc)})
+                    return
+                if parsed.path == "/api/schedule/entry/delete":
+                    try:
+                        response = node.delete_planned_schedule_entry(payload)
+                        self._send_json(HTTPStatus.OK, response)
+                    except Exception as exc:  # noqa: BLE001
+                        self._send_json(HTTPStatus.BAD_GATEWAY, {"success": False, "message": str(exc)})
+                    return
 
                 self._send_json(HTTPStatus.NOT_FOUND, {"success": False, "message": "Not found"})
 
@@ -225,6 +254,19 @@ class MissionFrontendHttpNode(MissionBackendNode):
                 self.send_header("Content-Type", content_type)
                 self.send_header("Cache-Control", "public, max-age=3600")
                 self.send_header("Content-Length", str(len(encoded)))
+                self.end_headers()
+                self.wfile.write(encoded)
+
+            def _send_download(self, path: Path, content_type: str) -> None:
+                if not path.exists() or not path.is_file():
+                    self._send_json(HTTPStatus.NOT_FOUND, {"success": False, "message": "Mission file not found"})
+                    return
+                encoded = path.read_bytes()
+                self.send_response(HTTPStatus.OK)
+                self.send_header("Content-Type", content_type)
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(encoded)))
+                self.send_header("Content-Disposition", f'attachment; filename="{path.name}"')
                 self.end_headers()
                 self.wfile.write(encoded)
 
@@ -335,22 +377,6 @@ class MissionFrontendHttpNode(MissionBackendNode):
       color: var(--muted);
       font-size: 0.95rem;
     }}
-    .mission-list {{
-      display: grid;
-      gap: 12px;
-      margin-top: 16px;
-    }}
-    .mission {{
-      border: 1px solid var(--line);
-      border-radius: 16px;
-      padding: 14px;
-      background: var(--panel);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 14px;
-      flex-wrap: wrap;
-    }}
     button {{
       border: 0;
       border-radius: 999px;
@@ -414,6 +440,50 @@ class MissionFrontendHttpNode(MissionBackendNode):
       flex-wrap: wrap;
       margin-top: 12px;
     }}
+    .live-strip {{
+      margin-top: 6px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }}
+    .live-pill {{
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border-radius: 999px;
+      padding: 0;
+      background: transparent;
+      border: none;
+      font-size: 0.95rem;
+      color: var(--muted);
+    }}
+    .live-dot {{
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent-strong);
+      box-shadow: 0 0 0 0 rgba(255, 224, 107, 0.45);
+      animation: pulse 1.2s infinite;
+    }}
+    .clock-block {{
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      flex-wrap: wrap;
+      color: var(--muted);
+    }}
+    .clock-value {{
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--ink);
+      letter-spacing: 0.04em;
+    }}
+    @keyframes pulse {{
+      0% {{ box-shadow: 0 0 0 0 rgba(255, 224, 107, 0.45); }}
+      70% {{ box-shadow: 0 0 0 10px rgba(255, 224, 107, 0); }}
+      100% {{ box-shadow: 0 0 0 0 rgba(255, 224, 107, 0); }}
+    }}
     .log-list {{
       display: grid;
       gap: 10px;
@@ -464,14 +534,24 @@ class MissionFrontendHttpNode(MissionBackendNode):
 <body>
   <main>
     <section class="hero">
-      <h1>{title}</h1>
+      <h1>AMR-Sweeper</h1>
       <div id="banner" class="banner"></div>
+      <div class="live-strip">
+        <div class="clock-block">
+          <div id="robot-clock" class="clock-value">--:--:--</div>
+          <div id="robot-clock-zone" class="muted">Waiting for robot clock...</div>
+        </div>
+        <div class="live-pill">
+          <span class="live-dot"></span>
+          <span id="live-status">Refreshing every second</span>
+        </div>
+      </div>
       <div class="nav">
         <a class="nav-link" href="/">Dashboard</a>
         <a class="nav-link" href="/calendar">Calendar</a>
         <a class="nav-link" href="/map">Missions</a>
-        <a class="nav-link" href="/developer">Developer</a>
         <a class="nav-link" href="/record-map">Record Map</a>
+        <a class="nav-link" href="/developer">Developer</a>
       </div>
     </section>
 
@@ -519,15 +599,11 @@ class MissionFrontendHttpNode(MissionBackendNode):
       </article>
     </section>
 
-    <section class="card" style="margin-top: 18px;">
-      <h2>Executable Missions</h2>
-      <div id="mission-list" class="mission-list"></div>
-    </section>
   </main>
 
   <script>
     const banner = document.getElementById('banner');
-    const missionList = document.getElementById('mission-list');
+    let lastStatusEpochMs = 0;
 
     function setBanner(kind, message) {{
       banner.className = `banner show ${{kind}}`;
@@ -546,12 +622,21 @@ class MissionFrontendHttpNode(MissionBackendNode):
       const battery = data.battery || {{}};
       const safety = data.safety_stop || {{}};
       const active = data.active_execution || {{}};
+      const robotClock = data.robot_clock || {{}};
       const safetyCauses = Array.isArray(safety.causes) ? safety.causes : [];
       const hasActiveMission = Boolean(
         active &&
         active.mission_id &&
         active.active !== false
       );
+      lastStatusEpochMs = Date.now();
+
+      document.getElementById('live-status').textContent = 'Live status connected';
+      document.getElementById('robot-clock').textContent = robotClock.local_time || '--:--:--';
+      document.getElementById('robot-clock-zone').textContent =
+        robotClock.timezone
+          ? `${{robotClock.timezone}}${{robotClock.utc_offset ? ` (UTC${{robotClock.utc_offset.slice(0, 3)}}:${{robotClock.utc_offset.slice(3)}})` : ''}}`
+          : 'Robot timezone unavailable';
 
       document.getElementById('fsm-state').textContent = fsm.current_state || 'Unknown';
       document.getElementById('fsm-profile').textContent = `Profile: ${{fsm.current_profile ?? '-'}}`;
@@ -605,37 +690,6 @@ class MissionFrontendHttpNode(MissionBackendNode):
       document.getElementById('stop-button').disabled = !hasActiveMission;
     }}
 
-    async function loadMissions() {{
-      const response = await fetch('/api/missions', {{ cache: 'no-store' }});
-      const data = await response.json();
-      missionList.innerHTML = '';
-
-      for (const mission of data.missions || []) {{
-        const item = document.createElement('div');
-        item.className = 'mission';
-        item.innerHTML = `
-          <div>
-            <strong>${{mission.mission_id}}</strong><br>
-            <span class="muted">${{mission.is_manual ? 'Manual' : 'Autonomous'}} | Type: ${{mission.mission_type || '-'}} | Mode: ${{mission.execution_mode || '-'}} | RUNNING profile: ${{mission.running_profile_id}} | Artifacts: ${{mission.artifacts_ready ? 'ready' : 'pending build'}}</span>
-          </div>
-          <div>
-            <button data-mission-id="${{mission.mission_id}}">Execute</button>
-          </div>
-        `;
-        item.querySelector('button').addEventListener('click', async () => {{
-          const executeResponse = await fetch(`/api/missions/${{encodeURIComponent(mission.mission_id)}}/execute`, {{
-            method: 'POST',
-            headers: {{ 'Content-Type': 'application/json' }},
-            body: JSON.stringify({{}})
-          }});
-          const executeData = await executeResponse.json();
-          setBanner(executeData.success ? 'ok' : 'error', executeData.message || 'Mission request completed');
-          await loadStatus();
-        }});
-        missionList.appendChild(item);
-      }}
-    }}
-
     document.getElementById('stop-button').addEventListener('click', async () => {{
       const response = await fetch('/api/stop', {{
         method: 'POST',
@@ -671,15 +725,36 @@ class MissionFrontendHttpNode(MissionBackendNode):
 
     async function refresh() {{
       try {{
-        await Promise.all([loadStatus(), loadMissions()]);
+        await loadStatus();
       }} catch (error) {{
+        document.getElementById('live-status').textContent = 'Connection stalled';
         setBanner('error', error.message || 'Failed to reach mission web server');
       }}
     }}
 
+    function refreshHeartbeat() {{
+      const liveStatus = document.getElementById('live-status');
+      if (!lastStatusEpochMs) {{
+        liveStatus.textContent = 'Waiting for first status update';
+        return;
+      }}
+      const ageSec = (Date.now() - lastStatusEpochMs) / 1000;
+      if (ageSec < 2.5) {{
+        liveStatus.textContent = `Live status connected · ${ageSec.toFixed(1)}s ago`;
+      }} else {{
+        liveStatus.textContent = `Connection stalled · last update ${ageSec.toFixed(1)}s ago`;
+      }}
+    }}
+
     refresh();
-    setInterval(loadStatus, 2000);
-    setInterval(loadMissions, 10000);
+    setInterval(async () => {{
+      try {{
+        await loadStatus();
+      }} catch (_error) {{
+        document.getElementById('live-status').textContent = 'Connection stalled';
+      }}
+    }}, 1000);
+    setInterval(refreshHeartbeat, 250);
   </script>
 </body>
 </html>
@@ -904,9 +979,71 @@ class MissionFrontendHttpNode(MissionBackendNode):
       margin-top: 12px;
       font-size: 0.9rem;
     }}
+    .editor-layout {{
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 18px;
+      margin-top: 18px;
+    }}
+    .form-grid {{
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+    }}
+    .form-grid .span-2 {{
+      grid-column: span 2;
+    }}
+    label {{
+      display: grid;
+      gap: 6px;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }}
+    input, select, textarea {{
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: rgba(18, 20, 21, 0.82);
+      color: var(--ink);
+      padding: 12px;
+      font: inherit;
+    }}
+    textarea {{
+      resize: vertical;
+      min-height: 100px;
+    }}
+    .entry-list {{
+      display: grid;
+      gap: 10px;
+      margin-top: 14px;
+    }}
+    .entry-card {{
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--panel);
+      padding: 12px;
+    }}
+    .entry-actions {{
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }}
+    .secondary {{
+      background: rgba(138, 164, 184, 0.8);
+      color: #08100a;
+    }}
+    .danger {{
+      background: var(--safety);
+      color: #fff4ec;
+    }}
     @media (max-width: 900px) {{
       .toolbar {{
         align-items: flex-start;
+      }}
+      .editor-layout {{
+        grid-template-columns: 1fr;
       }}
     }}
   </style>
@@ -920,8 +1057,8 @@ class MissionFrontendHttpNode(MissionBackendNode):
         <a class="nav-link" href="/">Dashboard</a>
         <a class="nav-link" href="/calendar">Calendar</a>
         <a class="nav-link" href="/map">Missions</a>
-        <a class="nav-link" href="/developer">Developer</a>
         <a class="nav-link" href="/record-map">Record Map</a>
+        <a class="nav-link" href="/developer">Developer</a>
       </div>
     </section>
     <section class="toolbar">
@@ -932,7 +1069,65 @@ class MissionFrontendHttpNode(MissionBackendNode):
       <div class="toolbar-group">
         <div id="week-number" style="font-size: 0.95rem; font-weight: 700; color: var(--accent);">Week --</div>
         <div id="week-label" style="font-size: 1.2rem; font-weight: 700;">Loading...</div>
+        <div id="calendar-timezone" class="muted">Robot timezone: --</div>
       </div>
+    </section>
+    <section class="editor-layout">
+      <section class="card">
+        <h2>Planned Entry Editor</h2>
+        <div class="muted">Create, edit, and delete planned calendar entries in the robot's local timezone.</div>
+        <form id="schedule-form" class="form-grid">
+          <input id="entry-uid" type="hidden">
+          <label>
+            Summary
+            <input id="entry-summary" type="text" placeholder="RBT-01 WORK window">
+          </label>
+          <label>
+            Schedule Type
+            <select id="entry-schedule-type">
+              <option value="WORK">WORK</option>
+              <option value="NO_WORK">NO_WORK</option>
+              <option value="SAFETY">SAFETY</option>
+            </select>
+          </label>
+          <label>
+            Mission ID
+            <input id="entry-mission-id" type="text" placeholder="Optional mission id">
+          </label>
+          <label>
+            Robot ID
+            <input id="entry-robot-id" type="text" placeholder="Optional robot id">
+          </label>
+          <label>
+            Start
+            <input id="entry-start-local" type="datetime-local">
+          </label>
+          <label>
+            End
+            <input id="entry-end-local" type="datetime-local">
+          </label>
+          <label class="span-2">
+            Recurrence
+            <select id="entry-recurrence-type">
+              <option value="none">One-off</option>
+              <option value="daily">Daily</option>
+              <option value="monthly_nth_weekday">Monthly on this weekday occurrence</option>
+            </select>
+          </label>
+          <label class="span-2">
+            Description
+            <textarea id="entry-description" placeholder="Optional notes for operators"></textarea>
+          </label>
+          <div class="span-2 entry-actions">
+            <button id="save-entry" type="submit">Save Entry</button>
+            <button id="reset-entry" class="secondary" type="button">New Entry</button>
+          </div>
+        </form>
+      </section>
+      <section class="card">
+        <h2>Planned Entries</h2>
+        <div id="planned-entry-list" class="entry-list"></div>
+      </section>
     </section>
     <section class="card">
       <div id="schedule-path" class="muted" style="margin-bottom: 12px;">Schedule: -</div>
@@ -949,6 +1144,7 @@ class MissionFrontendHttpNode(MissionBackendNode):
   </main>
   <script>
     let activeWeek = '';
+    let activeScheduleData = null;
     const weekdayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     const hourHeight = 64;
 
@@ -978,31 +1174,124 @@ class MissionFrontendHttpNode(MissionBackendNode):
       return `${{utcDate.getUTCFullYear()}}-W${{String(weekNumber).padStart(2, '0')}}`;
     }}
 
-    function minutesSinceMidnight(dateText) {{
-      const date = new Date(dateText);
-      return (date.getHours() * 60) + date.getMinutes();
+    function parseLocalDate(dateText) {{
+      const [year, month, day] = dateText.split('-').map(Number);
+      return new Date(year, month - 1, day, 0, 0, 0, 0);
+    }}
+
+    function parseLocalDateTime(dateText) {{
+      const [datePart, timePart] = dateText.split('T');
+      const [year, month, day] = datePart.split('-').map(Number);
+      const [hour, minute, second = '0'] = timePart.split(':');
+      return new Date(year, month - 1, day, Number(hour), Number(minute), Number(second), 0);
     }}
 
     function startOfDay(date) {{
-      return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
+    }}
+
+    function toDateInputValue(date) {{
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const hour = String(date.getHours()).padStart(2, '0');
+      const minute = String(date.getMinutes()).padStart(2, '0');
+      return `${{year}}-${{month}}-${{day}}T${{hour}}:${{minute}}`;
+    }}
+
+    function formatLocalTime(date) {{
+      return `${{String(date.getHours()).padStart(2, '0')}}:${{String(date.getMinutes()).padStart(2, '0')}}`;
     }}
 
     function clamp(value, min, max) {{
       return Math.max(min, Math.min(max, value));
     }}
 
+    function resetEntryForm() {{
+      document.getElementById('entry-uid').value = '';
+      document.getElementById('entry-summary').value = '';
+      document.getElementById('entry-schedule-type').value = 'WORK';
+      document.getElementById('entry-mission-id').value = '';
+      document.getElementById('entry-robot-id').value = '';
+      document.getElementById('entry-description').value = '';
+      document.getElementById('entry-recurrence-type').value = 'none';
+      const baseDate = activeScheduleData?.week_start ? parseLocalDate(activeScheduleData.week_start) : new Date();
+      const start = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate(), 8, 0, 0, 0);
+      const end = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate(), 10, 0, 0, 0);
+      document.getElementById('entry-start-local').value = toDateInputValue(start);
+      document.getElementById('entry-end-local').value = toDateInputValue(end);
+    }}
+
+    function populateEntryForm(entry) {{
+      document.getElementById('entry-uid').value = entry.uid || '';
+      document.getElementById('entry-summary').value = entry.summary || '';
+      document.getElementById('entry-schedule-type').value = entry.schedule_type || 'WORK';
+      document.getElementById('entry-mission-id').value = entry.mission_id || '';
+      document.getElementById('entry-robot-id').value = entry.robot_id || '';
+      document.getElementById('entry-start-local').value = entry.start_local || '';
+      document.getElementById('entry-end-local').value = entry.end_local || '';
+      document.getElementById('entry-recurrence-type').value = entry.recurrence_type || 'none';
+      document.getElementById('entry-description').value = entry.description || '';
+    }}
+
+    async function postJson(path, body) {{
+      const response = await fetch(path, {{
+        method: 'POST',
+        headers: {{ 'Content-Type': 'application/json' }},
+        body: JSON.stringify(body || {{}})
+      }});
+      return response.json();
+    }}
+
+    function renderPlannedEntries(entries) {{
+      const list = document.getElementById('planned-entry-list');
+      list.innerHTML = '';
+      if (!entries || entries.length === 0) {{
+        list.innerHTML = '<div class="muted">No planned entries yet.</div>';
+        return;
+      }}
+
+      for (const entry of entries) {{
+        const card = document.createElement('div');
+        card.className = 'entry-card';
+        card.innerHTML = `
+          <div><strong>${{entry.summary || entry.schedule_type || 'Planned entry'}}</strong></div>
+          <div class="muted">${{entry.start_local || '-'}} to ${{entry.end_local || '-'}} | ${{entry.recurrence_label || 'One-off'}}</div>
+          <div class="muted">${{entry.schedule_type || 'WORK'}}${{entry.mission_id ? ` | Mission: ${{entry.mission_id}}` : ''}}${{entry.robot_id ? ` | Robot: ${{entry.robot_id}}` : ''}}</div>
+          <div class="entry-actions">
+            <button class="secondary" type="button">Edit</button>
+            <button class="danger" type="button">Delete</button>
+          </div>
+        `;
+        const [editButton, deleteButton] = card.querySelectorAll('button');
+        editButton.addEventListener('click', () => populateEntryForm(entry));
+        deleteButton.addEventListener('click', async () => {{
+          const result = await postJson('/api/schedule/entry/delete', {{ uid: entry.uid }});
+          if (!result.success) {{
+            window.alert(result.message || 'Failed to delete schedule entry');
+            return;
+          }}
+          await loadCalendar(activeWeek);
+        }});
+        list.appendChild(card);
+      }}
+    }}
+
     async function loadCalendar(week) {{
       const response = await fetch(`/api/schedule?week=${{encodeURIComponent(week)}}`, {{ cache: 'no-store' }});
       const data = await response.json();
+      activeScheduleData = data;
       activeWeek = data.week;
       document.getElementById('week-label').textContent = data.week_label || data.week;
       document.getElementById('week-number').textContent = `CW ${{data.week_number ?? '--'}}`;
+      document.getElementById('calendar-timezone').textContent = `Robot timezone: ${{data.robot_timezone || '--'}}`;
       document.getElementById('schedule-path').textContent =
         `Planned: ${{data.planned_schedule_path || '-'}} | Actual: ${{data.actual_schedule_path || '-'}}`;
+      renderPlannedEntries(data.planned_entries || []);
 
       const grid = document.getElementById('calendar-grid');
       grid.innerHTML = '';
-      const weekStart = new Date(`${{data.week_start}}T00:00:00`);
+      const weekStart = parseLocalDate(data.week_start);
 
       const corner = document.createElement('div');
       corner.className = 'corner';
@@ -1047,8 +1336,8 @@ class MissionFrontendHttpNode(MissionBackendNode):
 
       function renderEvents(events, sourceLabel) {{
         for (const event of events || []) {{
-          const start = new Date(event.start);
-          const end = new Date(event.end);
+          const start = parseLocalDateTime(event.start_local);
+          const end = parseLocalDateTime(event.end_local);
           const visibleStart = start > weekStart ? start : weekStart;
           const visibleEnd = end < weekEnd ? end : weekEnd;
           if (visibleEnd <= visibleStart) {{
@@ -1077,11 +1366,20 @@ class MissionFrontendHttpNode(MissionBackendNode):
               chip.style.height = `${{Math.max(28, (durationMinutes / 60) * hourHeight - 8)}}px`;
               chip.title = event.description || event.summary || '';
               chip.innerHTML = `
-                <div class="event-time">${{segmentStart.toLocaleTimeString([], {{ hour: '2-digit', minute: '2-digit', hour12: false }})}} - ${{segmentEnd >= nextDay ? '24:00' : segmentEnd.toLocaleTimeString([], {{ hour: '2-digit', minute: '2-digit', hour12: false }})}}</div>
+                <div class="event-time">${{formatLocalTime(segmentStart)}} - ${{segmentEnd >= nextDay ? '24:00' : formatLocalTime(segmentEnd)}}</div>
                 <div><strong>${{event.summary || event.schedule_type || 'Event'}}</strong></div>
                 <div>${{event.mission_id || event.robot_id || ''}}</div>
                 <div class="event-source">${{sourceLabel}}</div>
               `;
+              if (sourceLabel === 'planned') {{
+                chip.style.cursor = 'pointer';
+                chip.addEventListener('click', () => {{
+                  const entry = (data.planned_entries || []).find((plannedEntry) => plannedEntry.uid === event.uid);
+                  if (entry) {{
+                    populateEntryForm(entry);
+                  }}
+                }});
+              }}
               column.appendChild(chip);
             }}
             segmentDay = nextDay;
@@ -1101,7 +1399,35 @@ class MissionFrontendHttpNode(MissionBackendNode):
       await loadCalendar(shiftWeek(activeWeek, 1));
     }});
 
-    loadCalendar(toIsoWeekString(new Date()));
+    document.getElementById('schedule-form').addEventListener('submit', async (event) => {{
+      event.preventDefault();
+      const payload = {{
+        uid: document.getElementById('entry-uid').value,
+        summary: document.getElementById('entry-summary').value,
+        schedule_type: document.getElementById('entry-schedule-type').value,
+        mission_id: document.getElementById('entry-mission-id').value,
+        robot_id: document.getElementById('entry-robot-id').value,
+        start_local: document.getElementById('entry-start-local').value,
+        end_local: document.getElementById('entry-end-local').value,
+        recurrence_type: document.getElementById('entry-recurrence-type').value,
+        description: document.getElementById('entry-description').value,
+      }};
+      const result = await postJson('/api/schedule/entry', payload);
+      if (!result.success) {{
+        window.alert(result.message || 'Failed to save schedule entry');
+        return;
+      }}
+      resetEntryForm();
+      await loadCalendar(activeWeek || toIsoWeekString(new Date()));
+    }});
+
+    document.getElementById('reset-entry').addEventListener('click', () => {{
+      resetEntryForm();
+    }});
+
+    loadCalendar(toIsoWeekString(new Date())).then(() => {{
+      resetEntryForm();
+    }});
   </script>
 </body>
 </html>
@@ -1323,8 +1649,8 @@ class MissionFrontendHttpNode(MissionBackendNode):
         <a class="nav-link" href="/">Dashboard</a>
         <a class="nav-link" href="/calendar">Calendar</a>
         <a class="nav-link" href="/map">Missions</a>
-        <a class="nav-link" href="/developer">Developer</a>
         <a class="nav-link" href="/record-map">Record Map</a>
+        <a class="nav-link" href="/developer">Developer</a>
       </div>
     </section>
 
@@ -1706,6 +2032,44 @@ class MissionFrontendHttpNode(MissionBackendNode):
       padding: 12px;
       background: var(--panel);
     }}
+    .mission-list {{
+      display: grid;
+      gap: 12px;
+      margin-top: 14px;
+    }}
+    .mission-group {{
+      display: grid;
+      gap: 12px;
+    }}
+    .mission-group-title {{
+      margin: 4px 0 0;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+      font-family: "Avenir Next Condensed", "Franklin Gothic Medium", "Arial Narrow", sans-serif;
+    }}
+    .mission {{
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 14px;
+      background: var(--panel);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }}
+    .mission-actions {{
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }}
+    .legend-actions {{
+      margin-top: 10px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }}
     button {{
       appearance: none;
       border: none;
@@ -1751,8 +2115,8 @@ class MissionFrontendHttpNode(MissionBackendNode):
         <a class="nav-link" href="/">Dashboard</a>
         <a class="nav-link" href="/calendar">Calendar</a>
         <a class="nav-link" href="/map">Missions</a>
-        <a class="nav-link" href="/developer">Developer</a>
         <a class="nav-link" href="/record-map">Record Map</a>
+        <a class="nav-link" href="/developer">Developer</a>
       </div>
     </section>
     <section class="map-layout">
@@ -1763,6 +2127,11 @@ class MissionFrontendHttpNode(MissionBackendNode):
         <h2>Legend</h2>
         <div id="legend-list" class="legend-list"></div>
       </section>
+    </section>
+    <section class="card" style="margin-top: 18px;">
+      <h2>Executable Missions</h2>
+      <div class="muted">Launch manual or autonomous missions from the synced mission database.</div>
+      <div id="mission-list" class="mission-list"></div>
     </section>
     <section class="card" style="margin-top: 18px;">
       <h2>Upload VDA5050 Mission</h2>
@@ -1780,6 +2149,7 @@ class MissionFrontendHttpNode(MissionBackendNode):
   </main>
   <script>
     const banner = document.getElementById('banner');
+    const missionList = document.getElementById('mission-list');
     const palette = ['#fdca0f', '#f5f1df', '#d2a500', '#ff7b5c', '#9aa0a3', '#ffe06b'];
 
     function setBanner(kind, message) {{
@@ -1826,63 +2196,92 @@ class MissionFrontendHttpNode(MissionBackendNode):
         }});
       }}
 
-      if (layers.length === 0) {{
+      if (layers.length === 0 && missions.length === 0) {{
         frame.textContent = 'No mission route geometry is available yet.';
         legend.innerHTML = '<div class="muted">Built route geometry will appear here once mission artifacts are available.</div>';
         return;
       }}
 
-      const points = [];
-      for (const layer of layers) {{
-        for (const line of layer.lines) {{
-          for (const point of line) {{
-            if (Array.isArray(point) && point.length >= 2) {{
-              points.push(point);
+      if (layers.length === 0) {{
+        frame.textContent = 'No mission route geometry is available yet.';
+      }}
+
+      if (layers.length > 0) {{
+        const points = [];
+        for (const layer of layers) {{
+          for (const line of layer.lines) {{
+            for (const point of line) {{
+              if (Array.isArray(point) && point.length >= 2) {{
+                points.push(point);
+              }}
             }}
           }}
         }}
+        const xs = points.map((point) => Number(point[0]));
+        const ys = points.map((point) => Number(point[1]));
+        const minX = Math.min(...xs);
+        const maxX = Math.max(...xs);
+        const minY = Math.min(...ys);
+        const maxY = Math.max(...ys);
+        const width = Math.max(1, maxX - minX);
+        const height = Math.max(1, maxY - minY);
+        const padding = 40;
+        const viewWidth = 900;
+        const viewHeight = 520;
+
+        function project(point) {{
+          const x = padding + ((Number(point[0]) - minX) / width) * (viewWidth - padding * 2);
+          const y = viewHeight - padding - ((Number(point[1]) - minY) / height) * (viewHeight - padding * 2);
+          return `${{x.toFixed(2)}},${{y.toFixed(2)}}`;
+        }}
+
+        const polylines = layers.flatMap((layer) =>
+          layer.lines.map((line) =>
+            `<polyline fill="none" stroke="${{layer.color}}" stroke-width="${{layer.mission_id === 'Active Mission' ? 5 : 3}}" points="${{line.map(project).join(' ')}}" />`
+          )
+        ).join('');
+
+        frame.innerHTML = `
+          <svg viewBox="0 0 ${{viewWidth}} ${{viewHeight}}" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+            <rect x="0" y="0" width="${{viewWidth}}" height="${{viewHeight}}" fill="#2c3032" />
+            <g opacity="0.15">
+              <line x1="40" y1="40" x2="40" y2="${{viewHeight - 40}}" stroke="#eef3eb" />
+              <line x1="40" y1="${{viewHeight - 40}}" x2="${{viewWidth - 40}}" y2="${{viewHeight - 40}}" stroke="#eef3eb" />
+            </g>
+            ${{polylines}}
+          </svg>
+        `;
       }}
-      const xs = points.map((point) => Number(point[0]));
-      const ys = points.map((point) => Number(point[1]));
-      const minX = Math.min(...xs);
-      const maxX = Math.max(...xs);
-      const minY = Math.min(...ys);
-      const maxY = Math.max(...ys);
-      const width = Math.max(1, maxX - minX);
-      const height = Math.max(1, maxY - minY);
-      const padding = 40;
-      const viewWidth = 900;
-      const viewHeight = 520;
 
-      function project(point) {{
-        const x = padding + ((Number(point[0]) - minX) / width) * (viewWidth - padding * 2);
-        const y = viewHeight - padding - ((Number(point[1]) - minY) / height) * (viewHeight - padding * 2);
-        return `${{x.toFixed(2)}},${{y.toFixed(2)}}`;
+      for (const mission of missions) {{
+        const item = document.createElement('div');
+        item.className = 'legend-item';
+        const layer = layers.find((entry) => entry.mission_id === mission.mission_id);
+        const downloadHref = `/api/missions/${{encodeURIComponent(mission.mission_id)}}/download`;
+        item.innerHTML = `
+          <div><strong>${{mission.mission_id}}</strong></div>
+          <div class="muted">
+            ${{
+              layer
+                ? `Color: <span style="color:${{layer.color}};">${{layer.color}}</span>`
+                : 'No route geometry available'
+            }}
+          </div>
+          ${{
+            downloadHref
+              ? `<div class="legend-actions"><a class="nav-link" href="${{downloadHref}}" download>Download JSON</a></div>`
+              : ''
+          }}
+        `;
+        legend.appendChild(item);
       }}
 
-      const polylines = layers.flatMap((layer) =>
-        layer.lines.map((line) =>
-          `<polyline fill="none" stroke="${{layer.color}}" stroke-width="${{layer.mission_id === 'Active Mission' ? 5 : 3}}" points="${{line.map(project).join(' ')}}" />`
-        )
-      ).join('');
-
-      frame.innerHTML = `
-        <svg viewBox="0 0 ${{viewWidth}} ${{viewHeight}}" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-          <rect x="0" y="0" width="${{viewWidth}}" height="${{viewHeight}}" fill="#2c3032" />
-          <g opacity="0.15">
-            <line x1="40" y1="40" x2="40" y2="${{viewHeight - 40}}" stroke="#eef3eb" />
-            <line x1="40" y1="${{viewHeight - 40}}" x2="${{viewWidth - 40}}" y2="${{viewHeight - 40}}" stroke="#eef3eb" />
-          </g>
-          ${{polylines}}
-        </svg>
-      `;
-
-      for (const layer of layers) {{
+      if (activeRoute) {{
         const item = document.createElement('div');
         item.className = 'legend-item';
         item.innerHTML = `
-          <div><strong>${{layer.mission_id}}</strong></div>
-          <div class="muted">Color: <span style="color:${{layer.color}};">${{layer.color}}</span></div>
+          <div><strong>Active Mission</strong></div>
+          <div class="muted">Color: <span style="color:#dc2626;">#dc2626</span></div>
         `;
         legend.appendChild(item);
       }}
@@ -1892,6 +2291,65 @@ class MissionFrontendHttpNode(MissionBackendNode):
       const response = await fetch('/api/map-data', {{ cache: 'no-store' }});
       const data = await response.json();
       renderMap(data.missions || [], data.active_route_geojson || null);
+    }}
+
+    async function loadMissions() {{
+      const response = await fetch('/api/missions', {{ cache: 'no-store' }});
+      const data = await response.json();
+      missionList.innerHTML = '';
+
+      const defaultMissionOrder = ['SpotSweep', '3x3Sweep', 'Teleop'];
+      const hiddenMissionIds = new Set(['RecordMap']);
+      const missions = (data.missions || []).filter((mission) => !hiddenMissionIds.has(mission.mission_id));
+      const defaultMissionMap = new Map(missions.map((mission) => [mission.mission_id, mission]));
+      const defaultMissions = defaultMissionOrder
+        .map((missionId) => defaultMissionMap.get(missionId))
+        .filter((mission) => Boolean(mission));
+      const savedMissions = missions
+        .filter((mission) => !defaultMissionOrder.includes(mission.mission_id))
+        .sort((left, right) => left.mission_id.localeCompare(right.mission_id));
+
+      function appendMissionGroup(title, groupMissions) {{
+        if (groupMissions.length === 0) {{
+          return;
+        }}
+        const group = document.createElement('section');
+        group.className = 'mission-group';
+        group.innerHTML = `<h3 class="mission-group-title">${{title}}</h3>`;
+
+        for (const mission of groupMissions) {{
+          const item = document.createElement('div');
+          item.className = 'mission';
+          item.innerHTML = `
+            <div>
+              <strong>${{mission.mission_id}}</strong><br>
+              <span class="muted">${{mission.is_manual ? 'Manual' : 'Autonomous'}} | Type: ${{mission.mission_type || '-'}} | Mode: ${{mission.execution_mode || '-'}} | RUNNING profile: ${{mission.running_profile_id}} | Artifacts: ${{mission.artifacts_ready ? 'ready' : 'pending build'}}</span>
+            </div>
+            <div class="mission-actions">
+              <button data-mission-id="${{mission.mission_id}}">Execute</button>
+            </div>
+          `;
+          item.querySelector('button').addEventListener('click', async () => {{
+            const executeResponse = await fetch(`/api/missions/${{encodeURIComponent(mission.mission_id)}}/execute`, {{
+              method: 'POST',
+              headers: {{ 'Content-Type': 'application/json' }},
+              body: JSON.stringify({{}})
+            }});
+            const executeData = await executeResponse.json();
+            setBanner(executeData.success ? 'ok' : 'error', executeData.message || 'Mission request completed');
+          }});
+          group.appendChild(item);
+        }}
+
+        missionList.appendChild(group);
+      }}
+
+      appendMissionGroup('Default Missions', defaultMissions);
+      appendMissionGroup('Saved Missions', savedMissions);
+
+      if (missionList.children.length === 0) {{
+        missionList.innerHTML = '<div class="muted">No executable missions are available right now.</div>';
+      }}
     }}
 
     document.getElementById('upload-file').addEventListener('change', async (event) => {{
@@ -1924,7 +2382,9 @@ class MissionFrontendHttpNode(MissionBackendNode):
       await loadMap();
     }});
 
-    loadMap();
+    Promise.all([loadMap(), loadMissions()]).catch((error) => {{
+      setBanner('error', error.message || 'Failed to load mission page state');
+    }});
   </script>
 </body>
 </html>
@@ -2036,8 +2496,8 @@ class MissionFrontendHttpNode(MissionBackendNode):
         <a class="nav-link" href="/">Dashboard</a>
         <a class="nav-link" href="/calendar">Calendar</a>
         <a class="nav-link" href="/map">Missions</a>
-        <a class="nav-link" href="/developer">Developer</a>
         <a class="nav-link" href="/record-map">Record Map</a>
+        <a class="nav-link" href="/developer">Developer</a>
       </div>
     </section>
 
