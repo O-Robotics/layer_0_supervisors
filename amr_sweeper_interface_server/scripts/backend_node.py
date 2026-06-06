@@ -1023,12 +1023,20 @@ class MissionBackendNode(Node):
 
         iso_year, iso_week, _ = week_start.isocalendar()
         planned_entries = self.list_planned_schedule_entries()["planned_entries"]
+        robot_now = datetime.now(target_timezone)
 
         return {
             "success": True,
             "planned_schedule_path": str(planned_path) if planned_path is not None else "",
             "actual_schedule_path": str(actual_path) if actual_path is not None else "",
             "robot_timezone": timezone_name,
+            "robot_clock": {
+                "iso": robot_now.isoformat(),
+                "local_time": robot_now.strftime("%Y-%m-%d %H:%M:%S"),
+                "timezone": robot_now.tzname() or "",
+                "utc_offset": robot_now.strftime("%z"),
+                "unix_sec": int(robot_now.timestamp()),
+            },
             "week": f"{iso_year:04d}-W{iso_week:02d}",
             "week_number": int(iso_week),
             "week_label": f"Week {iso_week:02d} · {week_start.strftime('%d %b')} - {(week_end - timedelta(days=1)).strftime('%d %b %Y')}",

@@ -462,9 +462,13 @@ class MissionFrontendHttpNode(MissionBackendNode):
       width: 10px;
       height: 10px;
       border-radius: 50%;
-      background: var(--accent-strong);
-      box-shadow: 0 0 0 0 rgba(255, 224, 107, 0.45);
+      background: #ef4444;
+      box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.45);
       animation: pulse 1.2s infinite;
+    }}
+    .live-dot.connected {{
+      background: #22c55e;
+      box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.45);
     }}
     .clock-block {{
       display: flex;
@@ -537,13 +541,10 @@ class MissionFrontendHttpNode(MissionBackendNode):
       <h1>AMR-Sweeper</h1>
       <div id="banner" class="banner"></div>
       <div class="live-strip">
-        <div class="clock-block">
-          <div id="robot-clock" class="clock-value">--:--:--</div>
-          <div id="robot-clock-zone" class="muted">Waiting for robot clock...</div>
-        </div>
         <div class="live-pill">
-          <span class="live-dot"></span>
-          <span id="live-status">Refreshing every second</span>
+          <span id="live-dot" class="live-dot"></span>
+          <span>Status:</span>
+          <span id="live-status">Connecting</span>
         </div>
       </div>
       <div class="nav">
@@ -622,7 +623,6 @@ class MissionFrontendHttpNode(MissionBackendNode):
       const battery = data.battery || {{}};
       const safety = data.safety_stop || {{}};
       const active = data.active_execution || {{}};
-      const robotClock = data.robot_clock || {{}};
       const safetyCauses = Array.isArray(safety.causes) ? safety.causes : [];
       const hasActiveMission = Boolean(
         active &&
@@ -631,12 +631,8 @@ class MissionFrontendHttpNode(MissionBackendNode):
       );
       lastStatusEpochMs = Date.now();
 
-      document.getElementById('live-status').textContent = 'Live status connected';
-      document.getElementById('robot-clock').textContent = robotClock.local_time || '--:--:--';
-      document.getElementById('robot-clock-zone').textContent =
-        robotClock.timezone
-          ? `${{robotClock.timezone}}${{robotClock.utc_offset ? ` (UTC${{robotClock.utc_offset.slice(0, 3)}}:${{robotClock.utc_offset.slice(3)}})` : ''}}`
-          : 'Robot timezone unavailable';
+      document.getElementById('live-status').textContent = 'Connected';
+      document.getElementById('live-dot').classList.add('connected');
 
       document.getElementById('fsm-state').textContent = fsm.current_state || 'Unknown';
       document.getElementById('fsm-profile').textContent = `Profile: ${{fsm.current_profile ?? '-'}}`;
@@ -727,22 +723,27 @@ class MissionFrontendHttpNode(MissionBackendNode):
       try {{
         await loadStatus();
       }} catch (error) {{
-        document.getElementById('live-status').textContent = 'Connection stalled';
+        document.getElementById('live-status').textContent = 'Stalled';
+        document.getElementById('live-dot').classList.remove('connected');
         setBanner('error', error.message || 'Failed to reach mission web server');
       }}
     }}
 
     function refreshHeartbeat() {{
       const liveStatus = document.getElementById('live-status');
+      const liveDot = document.getElementById('live-dot');
       if (!lastStatusEpochMs) {{
-        liveStatus.textContent = 'Waiting for first status update';
+        liveStatus.textContent = 'Connecting';
+        liveDot.classList.remove('connected');
         return;
       }}
       const ageSec = (Date.now() - lastStatusEpochMs) / 1000;
       if (ageSec < 2.5) {{
-        liveStatus.textContent = `Live status connected · ${{ageSec.toFixed(1)}}s ago`;
+        liveStatus.textContent = 'Connected';
+        liveDot.classList.add('connected');
       }} else {{
-        liveStatus.textContent = `Connection stalled · last update ${{ageSec.toFixed(1)}}s ago`;
+        liveStatus.textContent = 'Stalled';
+        liveDot.classList.remove('connected');
       }}
     }}
 
@@ -751,7 +752,8 @@ class MissionFrontendHttpNode(MissionBackendNode):
       try {{
         await loadStatus();
       }} catch (_error) {{
-        document.getElementById('live-status').textContent = 'Connection stalled';
+        document.getElementById('live-status').textContent = 'Stalled';
+        document.getElementById('live-dot').classList.remove('connected');
       }}
     }}, 1000);
     setInterval(refreshHeartbeat, 250);
@@ -843,6 +845,18 @@ class MissionFrontendHttpNode(MissionBackendNode):
       align-items: center;
       gap: 10px;
       flex-wrap: wrap;
+    }}
+    .calendar-clock {{
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      flex-wrap: wrap;
+    }}
+    .calendar-clock-value {{
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 0.04em;
     }}
     button {{
       border: 0;
@@ -1070,6 +1084,10 @@ class MissionFrontendHttpNode(MissionBackendNode):
         <div id="week-number" style="font-size: 0.95rem; font-weight: 700; color: var(--accent);">Week --</div>
         <div id="week-label" style="font-size: 1.2rem; font-weight: 700;">Loading...</div>
         <div id="calendar-timezone" class="muted">Robot timezone: --</div>
+        <div class="calendar-clock">
+          <div class="muted">Robot local time:</div>
+          <div id="calendar-robot-clock" class="calendar-clock-value">--:--:--</div>
+        </div>
       </div>
     </section>
     <section class="editor-layout">
@@ -1285,6 +1303,8 @@ class MissionFrontendHttpNode(MissionBackendNode):
       document.getElementById('week-label').textContent = data.week_label || data.week;
       document.getElementById('week-number').textContent = `CW ${{data.week_number ?? '--'}}`;
       document.getElementById('calendar-timezone').textContent = `Robot timezone: ${{data.robot_timezone || '--'}}`;
+      const robotClock = data.robot_clock || {{}};
+      document.getElementById('calendar-robot-clock').textContent = robotClock.local_time || '--:--:--';
       document.getElementById('schedule-path').textContent =
         `Planned: ${{data.planned_schedule_path || '-'}} | Actual: ${{data.actual_schedule_path || '-'}}`;
       renderPlannedEntries(data.planned_entries || []);
