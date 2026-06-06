@@ -1218,6 +1218,27 @@ std::chrono::system_clock::time_point parseUtcTimestamp(const std::string & valu
   return std::chrono::system_clock::from_time_t(as_time_t);
 }
 
+std::string localTimestampToUtcTimestamp(const std::string & value)
+{
+  std::tm time_info{};
+  std::istringstream stream(value);
+  stream >> std::get_time(&time_info, "%Y%m%dT%H%M%S");
+  if (stream.fail()) {
+    throw std::runtime_error("Failed to parse local timestamp: " + value);
+  }
+  time_info.tm_isdst = -1;
+  const std::time_t as_time_t = std::mktime(&time_info);
+  std::tm utc_time_info{};
+#if defined(_WIN32)
+  gmtime_s(&utc_time_info, &as_time_t);
+#else
+  gmtime_r(&as_time_t, &utc_time_info);
+#endif
+  std::ostringstream output_stream;
+  output_stream << std::put_time(&utc_time_info, "%Y%m%dT%H%M%SZ");
+  return output_stream.str();
+}
+
 std::string sanitizeUidToken(std::string value)
 {
   std::replace_if(
@@ -1260,12 +1281,11 @@ std::string escapeIcsText(std::string value)
 
 std::filesystem::path discoverNewestSchedulePath(const std::filesystem::path & missions_directory)
 {
-  std::optional<std::filesystem::path> selected_path;
-  std::optional<std::filesystem::file_time_type> selected_stamp;
   if (!std::filesystem::exists(missions_directory) || !std::filesystem::is_directory(missions_directory)) {
     return {};
   }
 
+  std::vector<std::filesystem::directory_entry> schedule_entries;
   for (const auto & entry : std::filesystem::directory_iterator(missions_directory)) {
     if (!entry.is_regular_file()) {
       continue;
@@ -1274,14 +1294,41 @@ std::filesystem::path discoverNewestSchedulePath(const std::filesystem::path & m
     if (filename.rfind("schedule_", 0) != 0 || entry.path().extension() != ".ics") {
       continue;
     }
-    const auto stamp = std::filesystem::last_write_time(entry.path());
-    if (!selected_stamp || stamp > *selected_stamp) {
-      selected_stamp = stamp;
-      selected_path = entry.path();
-    }
+    schedule_entries.push_back(entry);
   }
 
-  return selected_path.value_or(std::filesystem::path{});
+  if (schedule_entries.empty()) {
+    return {};
+  }
+
+  std::sort(
+    schedule_entries.begin(),
+    schedule_entries.end(),
+    [](const auto & left, const auto & right) {
+      return std::filesystem::last_write_time(left.path()) >
+             std::filesystem::last_write_time(right.path());
+    });
+
+  const std::filesystem::path newest_path = schedule_entries.front().path();
+  if (schedule_entries.size() == 1U) {
+    return newest_path;
+  }
+
+  const std::filesystem::path archive_directory = missions_directory / "archive";
+  std::filesystem::create_directories(archive_directory);
+  for (std::size_t index = 1; index < schedule_entries.size(); ++index) {
+    const auto & source_path = schedule_entries[index].path();
+    std::filesystem::path archived_path = archive_directory / source_path.filename();
+    int suffix = 1;
+    while (std::filesystem::exists(archived_path)) {
+      archived_path = archive_directory /
+        (source_path.stem().string() + "_" + std::to_string(suffix) + source_path.extension().string());
+      ++suffix;
+    }
+    std::filesystem::rename(source_path, archived_path);
+  }
+
+  return newest_path;
 }
 
 std::string discoverScheduleTimezone(const std::string & schedule_text)
@@ -2753,8 +2800,11 @@ void MissionExecutorNode::recordMissionExecutionStart(
   const srv::ExecuteMission::Request & request) const
 {
   auto context_document = loadJsonDocument(context.execution_context_file);
-  std::string schedule_path_string;
-  if (context_document.contains("schedule_log_path") && context_document.at("schedule_log_path").is_string()) {
+  std::string schedule_path_string = resolveScheduleSourcePath().string();
+  if (schedule_path_string.empty() &&
+    context_document.contains("schedule_log_path") &&
+    context_document.at("schedule_log_path").is_string())
+  {
     schedule_path_string = context_document.at("schedule_log_path").get<std::string>();
   }
   if (schedule_path_string.empty()) {
@@ -2782,13 +2832,23 @@ void MissionExecutorNode::recordMissionExecutionStart(
   if (!request.mission_window_start.empty()) {
     const std::string mission_tag = "X-MISSION-ID:" + mission.mission_id;
     const std::string start_tag = request.mission_window_start;
+    std::string start_tag_utc;
+    try {
+      start_tag_utc = localTimestampToUtcTimestamp(request.mission_window_start);
+    } catch (const std::exception &) {
+      start_tag_utc.clear();
+    }
     const auto mission_position = schedule_text.find(mission_tag);
     if (mission_position != std::string::npos) {
       const auto event_begin = schedule_text.rfind("BEGIN:VEVENT", mission_position);
       const auto event_end = schedule_text.find("END:VEVENT", mission_position);
-      if (event_begin != std::string::npos && event_end != std::string::npos &&
-        schedule_text.find(start_tag, event_begin) != std::string::npos &&
-        schedule_text.find(start_tag, event_begin) < event_end)
+      const auto local_start_position = schedule_text.find(start_tag, event_begin);
+      const auto utc_start_position =
+        start_tag_utc.empty() ? std::string::npos : schedule_text.find(start_tag_utc, event_begin);
+      const bool matching_start =
+        (local_start_position != std::string::npos && local_start_position < event_end) ||
+        (utc_start_position != std::string::npos && utc_start_position < event_end);
+      if (event_begin != std::string::npos && event_end != std::string::npos && matching_start)
       {
         const auto uid_position = schedule_text.find("UID:", event_begin);
         if (uid_position != std::string::npos && uid_position < event_end) {
@@ -2881,6 +2941,7 @@ void MissionExecutorNode::recordMissionExecutionStart(
   }
 
   context_document["schedule_event_uid"] = event_uid;
+  context_document["schedule_log_path"] = schedule_path.string();
   context_document["actual_start_utc"] = actual_start_utc;
   context_document["runtime_status"] = kRuntimeStatusStarted;
   std::ofstream context_stream(context.execution_context_file, std::ios::trunc);
@@ -2931,8 +2992,10 @@ void MissionExecutorNode::recordMissionExecutionEnd(
     context_stream << std::setw(2) << context_document << '\n';
   }
 
-  std::string schedule_path_string =
-    context_document.value("schedule_log_path", std::string{});
+  std::string schedule_path_string = resolveScheduleSourcePath().string();
+  if (schedule_path_string.empty()) {
+    schedule_path_string = context_document.value("schedule_log_path", std::string{});
+  }
   if (schedule_path_string.empty()) {
     return;
   }
@@ -2965,8 +3028,18 @@ void MissionExecutorNode::recordMissionExecutionEnd(
       event_begin = schedule_text.rfind("BEGIN:VEVENT", mission_anchor);
       event_end = schedule_text.find("END:VEVENT", mission_anchor);
       if (event_begin != std::string::npos && !mission_window_start.empty()) {
-        const auto start_anchor = schedule_text.find(mission_window_start, event_begin);
-        if (start_anchor == std::string::npos || start_anchor > event_end) {
+        auto local_start_anchor = schedule_text.find(mission_window_start, event_begin);
+        std::size_t utc_start_anchor = std::string::npos;
+        try {
+          const std::string mission_window_start_utc = localTimestampToUtcTimestamp(mission_window_start);
+          utc_start_anchor = schedule_text.find(mission_window_start_utc, event_begin);
+        } catch (const std::exception &) {
+          utc_start_anchor = std::string::npos;
+        }
+        const bool matching_start =
+          (local_start_anchor != std::string::npos && local_start_anchor < event_end) ||
+          (utc_start_anchor != std::string::npos && utc_start_anchor < event_end);
+        if (!matching_start) {
           event_begin = std::string::npos;
           event_end = std::string::npos;
         }
@@ -3075,17 +3148,15 @@ void MissionExecutorNode::recordSafetyEvent(
   const amr_sweeper_safety_msgs::msg::SafetyStop & event,
   const std::optional<nlohmann::json> & context_document) const
 {
-  std::string schedule_path_string;
+  std::string schedule_path_string = resolveScheduleSourcePath().string();
   std::string related_mission_id;
   std::string mission_run_directory;
   if (context_document) {
-    schedule_path_string = context_document->value("schedule_log_path", std::string{});
+    if (schedule_path_string.empty()) {
+      schedule_path_string = context_document->value("schedule_log_path", std::string{});
+    }
     related_mission_id = context_document->value("mission_id", std::string{});
     mission_run_directory = context_document->value("mission_run_directory", std::string{});
-  }
-  if (schedule_path_string.empty()) {
-    const auto schedule_path = ensureScheduleLogPath(resolveScheduleSourcePath());
-    schedule_path_string = schedule_path.string();
   }
   if (schedule_path_string.empty()) {
     return;
@@ -3356,21 +3427,7 @@ std::filesystem::path MissionExecutorNode::resolveScheduleSourcePath() const
 std::filesystem::path MissionExecutorNode::ensureScheduleLogPath(
   const std::filesystem::path & schedule_source_path) const
 {
-  if (schedule_source_path.empty()) {
-    return {};
-  }
-
-  const std::filesystem::path missions_log_directory = resolveMissionsLogDirectory();
-  std::filesystem::create_directories(missions_log_directory);
-  const std::filesystem::path schedule_log_path =
-    missions_log_directory / schedule_source_path.filename();
-  if (!std::filesystem::exists(schedule_log_path) && std::filesystem::exists(schedule_source_path)) {
-    std::filesystem::copy_file(
-      schedule_source_path,
-      schedule_log_path,
-      std::filesystem::copy_options::overwrite_existing);
-  }
-  return schedule_log_path;
+  return schedule_source_path;
 }
 
 std::filesystem::path MissionExecutorNode::ensureActualScheduleLogPath(

@@ -488,12 +488,32 @@ class MissionBackendNode(Node):
 
     def _discover_planned_schedule_path(self) -> Path | None:
         missions_from_db_directory = _resolve_path(self._missions_from_db_directory)
+        candidates = self._archive_conflicting_planned_schedules(missions_from_db_directory)
+        return candidates[0] if candidates else None
+
+    @staticmethod
+    def _archive_conflicting_planned_schedules(missions_from_db_directory: Path) -> list[Path]:
+        if not missions_from_db_directory.exists() or not missions_from_db_directory.is_dir():
+            return []
+
         candidates = sorted(
             missions_from_db_directory.glob("schedule_*.ics"),
             key=lambda path: path.stat().st_mtime,
             reverse=True,
         )
-        return candidates[0] if candidates else None
+        if len(candidates) <= 1:
+            return candidates
+
+        archive_directory = missions_from_db_directory / "archive"
+        archive_directory.mkdir(parents=True, exist_ok=True)
+        for source_path in candidates[1:]:
+            archived_path = archive_directory / source_path.name
+            suffix = 1
+            while archived_path.exists():
+                archived_path = archive_directory / f"{source_path.stem}_{suffix}{source_path.suffix}"
+                suffix += 1
+            source_path.rename(archived_path)
+        return [candidates[0]]
 
     def _discover_actual_schedule_path(self) -> Path | None:
         active_execution = self._discover_active_execution() or {}
@@ -901,8 +921,8 @@ class MissionBackendNode(Node):
             f"DTSTAMP:{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}",
             f"SUMMARY:{_escape_ics_text(event.get('summary', 'Scheduled window'))}",
             f"DESCRIPTION:{_escape_ics_text(event.get('description', ''))}",
-            f"DTSTART;TZID={timezone_name}:{start.strftime('%Y%m%dT%H%M%S')}",
-            f"DTEND;TZID={timezone_name}:{end.strftime('%Y%m%dT%H%M%S')}",
+            f"DTSTART:{start.astimezone(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}",
+            f"DTEND:{end.astimezone(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}",
         ]
         recurrence_type = str(event.get("recurrence_type", "none"))
         if recurrence_type == "daily":

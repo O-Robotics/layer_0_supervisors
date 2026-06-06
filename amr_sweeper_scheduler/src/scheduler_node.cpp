@@ -30,6 +30,9 @@ constexpr auto kLowerPriorityRetryCooldown = std::chrono::seconds(30);
 constexpr char kLegacyRobotId[] = "RBT-01";
 constexpr char kDefaultRobotConfigEnvPath[] = "/opt/robot_config/robot_config.global.env";
 
+std::string format_local_timestamp(const std::tm & tm);
+std::tm time_point_to_tm(const std::chrono::system_clock::time_point & time_point);
+
 std::optional<std::time_t> file_mtime(const std::string & path)
 {
   struct stat st;
@@ -50,6 +53,68 @@ std::filesystem::path resolve_path(const std::string & path)
     return workspace_relative;
   }
   return configured;
+}
+
+std::string unique_archived_filename(
+  const std::filesystem::path & archive_directory,
+  const std::filesystem::path & source_path)
+{
+  const std::string stem = source_path.stem().string();
+  const std::string extension = source_path.extension().string();
+  std::filesystem::path candidate = archive_directory / source_path.filename();
+  int suffix = 1;
+  while (std::filesystem::exists(candidate)) {
+    candidate = archive_directory / (stem + "_" + std::to_string(suffix) + extension);
+    ++suffix;
+  }
+  return candidate.string();
+}
+
+std::optional<std::filesystem::path> archive_older_schedule_files(
+  const std::filesystem::path & missions_directory)
+{
+  if (!std::filesystem::exists(missions_directory) || !std::filesystem::is_directory(missions_directory)) {
+    return std::nullopt;
+  }
+
+  std::vector<std::filesystem::directory_entry> schedule_entries;
+  for (const auto & entry : std::filesystem::directory_iterator(missions_directory)) {
+    if (!entry.is_regular_file()) {
+      continue;
+    }
+    const std::string filename = entry.path().filename().string();
+    if (entry.path().extension() != ".ics" || filename.rfind("schedule_", 0) != 0) {
+      continue;
+    }
+    schedule_entries.push_back(entry);
+  }
+
+  if (schedule_entries.empty()) {
+    return std::nullopt;
+  }
+
+  std::sort(
+    schedule_entries.begin(),
+    schedule_entries.end(),
+    [](const auto & left, const auto & right) {
+      return std::filesystem::last_write_time(left.path()) >
+             std::filesystem::last_write_time(right.path());
+    });
+
+  const std::filesystem::path newest_path = schedule_entries.front().path();
+  if (schedule_entries.size() == 1U) {
+    return newest_path;
+  }
+
+  const std::filesystem::path archive_directory = missions_directory / "archive";
+  std::filesystem::create_directories(archive_directory);
+  for (std::size_t index = 1; index < schedule_entries.size(); ++index) {
+    const auto & source_path = schedule_entries[index].path();
+    const std::filesystem::path archived_path(unique_archived_filename(archive_directory, source_path));
+    std::filesystem::rename(source_path, archived_path);
+  }
+
+  return newest_path;
 }
 
 std::tm parse_local_tm(const std::string & value)
@@ -73,6 +138,36 @@ std::chrono::system_clock::time_point to_time_point(const std::string & value)
 {
   auto tm = parse_local_tm(value);
   return std::chrono::system_clock::from_time_t(std::mktime(&tm));
+}
+
+std::chrono::system_clock::time_point utc_to_time_point(const std::string & value)
+{
+  if (value.size() < 16 || value.back() != 'Z') {
+    throw std::runtime_error("Invalid UTC timestamp: " + value);
+  }
+
+  std::tm tm{};
+  tm.tm_year = std::stoi(value.substr(0, 4)) - 1900;
+  tm.tm_mon = std::stoi(value.substr(4, 2)) - 1;
+  tm.tm_mday = std::stoi(value.substr(6, 2));
+  tm.tm_hour = std::stoi(value.substr(9, 2));
+  tm.tm_min = std::stoi(value.substr(11, 2));
+  tm.tm_sec = std::stoi(value.substr(13, 2));
+  tm.tm_isdst = 0;
+#if defined(_WIN32)
+  const std::time_t as_time_t = _mkgmtime(&tm);
+#else
+  const std::time_t as_time_t = timegm(&tm);
+#endif
+  return std::chrono::system_clock::from_time_t(as_time_t);
+}
+
+std::string normalize_schedule_timestamp_to_local(const std::string & value)
+{
+  if (!value.empty() && value.back() == 'Z') {
+    return format_local_timestamp(time_point_to_tm(utc_to_time_point(value)));
+  }
+  return value;
 }
 
 std::string format_local_timestamp(const std::tm & tm)
@@ -421,13 +516,13 @@ ScheduleModel IcalParserMinimal::parse_file(const std::string & ics_path, const 
       continue;
     }
     if (starts_with(line, "DTEND")) {
-      current.dtend_local = split_kv(line).second;
+      current.dtend_local = normalize_schedule_timestamp_to_local(split_kv(line).second);
       continue;
     }
     if (starts_with(line, "DTSTART")) {
       const auto key_value = split_kv(line);
       const std::string & key = key_value.first;
-      current.dtstart_local = key_value.second;
+      current.dtstart_local = normalize_schedule_timestamp_to_local(key_value.second);
       const std::string tzid_tag = "TZID=";
       const auto tz_pos = key.find(tzid_tag);
       if (tz_pos != std::string::npos) {
@@ -437,6 +532,8 @@ ScheduleModel IcalParserMinimal::parse_file(const std::string & ics_path, const 
           end = key.size();
         }
         current.dtstart_tzid = key.substr(start, end - start);
+      } else if (!key_value.second.empty() && key_value.second.back() == 'Z') {
+        current.dtstart_tzid = model.calendar_tzid.empty() ? "UTC" : model.calendar_tzid;
       } else {
         current.dtstart_tzid.clear();
       }
@@ -1179,33 +1276,7 @@ std::string SchedulerNode::resolved_schedule_path() const
 std::optional<std::filesystem::path> SchedulerNode::discover_latest_schedule_path() const
 {
   const std::filesystem::path missions_directory = resolve_path(missions_directory_);
-  if (!std::filesystem::exists(missions_directory) || !std::filesystem::is_directory(missions_directory)) {
-    return std::nullopt;
-  }
-
-  std::optional<std::filesystem::path> latest_path;
-  std::optional<std::filesystem::file_time_type> latest_mtime;
-  for (const auto & entry : std::filesystem::directory_iterator(missions_directory)) {
-    if (!entry.is_regular_file()) {
-      continue;
-    }
-    const auto & path = entry.path();
-    if (path.extension() != ".ics") {
-      continue;
-    }
-    const std::string filename = path.filename().string();
-    if (filename.rfind("schedule_", 0) != 0) {
-      continue;
-    }
-
-    const auto mtime = std::filesystem::last_write_time(path);
-    if (!latest_mtime || mtime > *latest_mtime) {
-      latest_mtime = mtime;
-      latest_path = path;
-    }
-  }
-
-  return latest_path;
+  return archive_older_schedule_files(missions_directory);
 }
 
 std::optional<std::string> SchedulerNode::resolve_mission_path(const std::string & mission_id) const

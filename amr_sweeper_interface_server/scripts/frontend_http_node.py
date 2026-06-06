@@ -740,9 +740,9 @@ class MissionFrontendHttpNode(MissionBackendNode):
       }}
       const ageSec = (Date.now() - lastStatusEpochMs) / 1000;
       if (ageSec < 2.5) {{
-        liveStatus.textContent = `Live status connected · ${ageSec.toFixed(1)}s ago`;
+        liveStatus.textContent = `Live status connected · ${{ageSec.toFixed(1)}}s ago`;
       }} else {{
-        liveStatus.textContent = `Connection stalled · last update ${ageSec.toFixed(1)}s ago`;
+        liveStatus.textContent = `Connection stalled · last update ${{ageSec.toFixed(1)}}s ago`;
       }}
     }}
 
