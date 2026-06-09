@@ -730,8 +730,8 @@ MissionParserNode::MissionParserNode(const rclcpp::NodeOptions & options)
 : rclcpp::Node("vda5050_parser_node", options)
 {
   mission_path_ = declare_parameter<std::string>("mission_path", "");
-  missions_directory_ = declare_parameter<std::string>("missions_directory", "src/missions_from_db");
-  missions_log_directory_ = declare_parameter<std::string>("missions_log_directory", "src/missions_log");
+  missions_directory_ = declare_parameter<std::string>("missions_directory", "missions/database");
+  missions_log_directory_ = declare_parameter<std::string>("missions_log_directory", "missions/logs");
   mission_file_extension_ = declare_parameter<std::string>("mission_file_extension", ".json");
   mission_build_resolution_ = declare_parameter<double>("mission_build_resolution", 0.1);
   mission_build_padding_meters_ = declare_parameter<double>("mission_build_padding_meters", 2.0);

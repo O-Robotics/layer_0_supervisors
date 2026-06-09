@@ -30,10 +30,10 @@ Responsibilities:
 - source built-in manual mission templates from `amr_sweeper_default_missions`
 - support one rerecordable built-in working-area capture mission: `RecordMap`
 - build VDA5050 mission artifacts on demand when scheduled missions are not ready yet
-- read synced schedules and VDA5050 mission payloads from `/missions_from_db`
+- read synced schedules and VDA5050 mission payloads from `/missions/database`
 - prepare mission-specific execution folders before the FSM handoff
-- write execution history under `/missions_log` using per-run `execution_context.json` files inside each mission folder
-- publish the most recent completed `RecordMap` output into `/missions_log/latest_recorded_map/` so operators can reuse or overwrite the latest working-area recording
+- write execution history under `/missions/logs` using per-run `execution_context.json` files inside each mission folder
+- publish the most recent completed `RecordMap` output into `/missions/logs/latest_recorded_map/` so operators can reuse or overwrite the latest working-area recording
 - append manual execution entries into the schedule log and stamp scheduled entries with actual start time
 - finalize mission runs with actual end time, outcome, and an FSM return to `IDLING`
 - calculate the traveled-path length from `actual_path.geojson` and append it into mission end metadata

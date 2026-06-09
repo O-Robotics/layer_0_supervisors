@@ -21,8 +21,8 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument("namespace", default_value="amr_sweeper"),
-        DeclareLaunchArgument("missions_from_db_directory", default_value="src/missions_from_db"),
-        DeclareLaunchArgument("missions_log_directory", default_value="src/missions_log"),
+        DeclareLaunchArgument("missions_from_db_directory", default_value="missions/database"),
+        DeclareLaunchArgument("missions_log_directory", default_value="missions/logs"),
         DeclareLaunchArgument("http_host", default_value="0.0.0.0"),
         DeclareLaunchArgument("http_port", default_value="8080"),
         DeclareLaunchArgument("gnss_topic", default_value="gnss/navsat"),

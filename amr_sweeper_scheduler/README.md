@@ -27,7 +27,7 @@ Reads an iCalendar schedule (`.ics`, RFC 5545), resolves scheduled mission entri
 - `namespace`: default `amr_sweeper`
 - `use_sim_time`: default `false`
 - `schedule_ics_path`: default `""`
-- `missions_directory`: default `src/missions_from_db`
+- `missions_directory`: default `missions/database`
 - `default_schedule_filename`: default `""`
 - `mission_file_extension`: default `.json`
 - `robot_id`: default `""`
@@ -62,7 +62,7 @@ The scheduler is intended to run as a lightweight ROS 2 node launched by FSM sta
 
 ## Notes
 
-- The scheduler auto-discovers the newest `src/missions_from_db/schedule_<timestamp>.ics` when `schedule_ics_path` is empty.
+- The scheduler auto-discovers the newest `missions/database/schedule_<timestamp>.ics` when `schedule_ics_path` is empty.
 - When launched with the default namespace, relative topics and services resolve under `/amr_sweeper/`.
 - `robot_id` should usually be left empty so the node derives `AMR-Sweeper_000xx` from `ROBOT_NUMBER` in `/opt/robot_config/robot_config.global.env`.
 - `X-ROBOT-ID` values in the schedule should match the derived robot ID format, for example `AMR-Sweeper_00012`.
@@ -73,9 +73,9 @@ The scheduler is intended to run as a lightweight ROS 2 node launched by FSM sta
 - The scheduler evaluates time in the local site timezone represented by the schedule.
 - Runtime log enrichment may add `X-ACTUAL-START-UTC`, `X-ACTUAL-END-UTC`, `X-ACTUAL-DURATION-SECONDS`, and `X-RUNTIME-STATUS`.
 - Safety-stop events are appended as dedicated `SAFETY` `VEVENT`s so the same schedule file can act as both future plan and runtime log.
-- Mission files are expected under `src/missions_from_db`, and execution history is written under `src/missions_log`.
-- A synced mission is typically staged as `src/missions_from_db/<mission_id>/<mission_id>.json`.
-- Each execution creates a timestamped folder under `src/missions_log/<mission_id>/`.
+- Mission files are expected under `missions/database`, and execution history is written under `missions/logs`.
+- A synced mission is typically staged as `missions/database/<mission_id>/<mission_id>.json`.
+- Each execution creates a timestamped folder under `missions/logs/<mission_id>/`.
 - If exactly one mission JSON exists, the scheduler can use it as a fallback during initial testing.
 - The recommended convention is for `X-MISSION-ID` to match the mission folder and mission filename stem.
 - Built-in manual missions such as `3x3Sweep`, `SpotSweep`, `RecordMap`, and `Teleop` come from `amr_sweeper_default_missions`.

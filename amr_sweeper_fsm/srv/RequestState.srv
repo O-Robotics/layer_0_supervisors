@@ -30,7 +30,7 @@ bool force
 string reason
 
 # Exact mission execution directory prepared by the scheduler for RUNNING.
-# Example: /.../src/missions_log/<order_id>_<timestamp>/<execution_timestamp>
+# Example: /.../missions/logs/<order_id>_<timestamp>/<execution_timestamp>
 string mission_execution_directory
 
 ---

@@ -41,7 +41,7 @@ profiles:
             args:
               - "namespace:={ns}"
               - "use_sim_time:=false"
-              - "missions_directory:=src/missions_from_db"
+              - "missions_directory:=missions/database"
               - "auto_build_on_start:=true"
               - "watch_for_updates:=true"
             ready:
@@ -75,7 +75,7 @@ profiles:
             args:
               - "namespace:={ns}"
               - "use_sim_time:=false"
-              - "missions_directory:=src/missions_from_db"
+              - "missions_directory:=missions/database"
               - "trigger_running_on_work_window:=false"
             ready:
               - type: "service"
@@ -285,6 +285,7 @@ profiles:
               - "use_amr_sweeper_localization:=true"
               - "use_amr_sweeper_mapping:=true"
               - "use_amr_sweeper_waypoint_follower:=true"
+              - "auto_start_mission:=false"
               - "use_test:={use_test}"
               - "test_output_directory:={test_output_directory}"
             ready:
@@ -478,7 +479,7 @@ profiles:
             args:
               - "namespace:={ns}"
               - "use_sim_time:=false"
-              - "missions_directory:=src/missions_from_db"
+              - "missions_directory:=missions/database"
               - "auto_build_on_start:=true"
               - "watch_for_updates:=true"
             ready:
@@ -512,7 +513,7 @@ profiles:
             args:
               - "namespace:={ns}"
               - "use_sim_time:=false"
-              - "missions_directory:=src/missions_from_db"
+              - "missions_directory:=missions/database"
               - "trigger_running_on_work_window:=false"
             ready:
               - type: "service"
@@ -722,6 +723,7 @@ profiles:
               - "use_amr_sweeper_localization:=true"
               - "use_amr_sweeper_mapping:=true"
               - "use_amr_sweeper_waypoint_follower:=true"
+              - "auto_start_mission:=false"
               - "use_test:={use_test}"
               - "test_output_directory:={test_output_directory}"
             ready:

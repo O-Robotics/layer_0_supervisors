@@ -1,8 +1,8 @@
 /**/amr_sweeper_scheduler:
   ros__parameters:
     # -- Mission sources and outputs ------------------------------------------
-    schedule_ics_path:                  src/missions_from_db          # Explicit schedule file path. Leave empty to auto-discover the newest schedule_<timestamp>.ics file in missions_directory.
-    missions_directory:                 src/missions_from_db          # Folder containing schedule_<timestamp>.ics and synced VDA5050 mission files/subfolders.
+    schedule_ics_path:                  missions/database          # Explicit schedule file path. Leave empty to auto-discover the newest schedule_<timestamp>.ics file in missions_directory.
+    missions_directory:                 missions/database          # Folder containing schedule_<timestamp>.ics and synced VDA5050 mission files/subfolders.
     default_schedule_filename:          ""                            # Legacy fallback schedule filename if auto-discovery finds no schedule_<timestamp>.ics files.
     mission_file_extension:             .json                         # File suffix used when cataloging VDA5050 mission files.
     robot_id:                           ""                            # Leave empty to derive AMR-Sweeper_000xx from ROBOT_NUMBER in robot_config_env_path.

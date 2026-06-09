@@ -77,11 +77,11 @@ class MissionBackendNode(Node):
         ).value
         self._missions_log_directory = self.declare_parameter(
             "missions_log_directory",
-            "src/missions_log",
+            "missions/logs",
         ).value
         self._missions_from_db_directory = self.declare_parameter(
             "missions_from_db_directory",
-            "src/missions_from_db",
+            "missions/database",
         ).value
         self._list_missions_service = self.declare_parameter(
             "list_missions_service",

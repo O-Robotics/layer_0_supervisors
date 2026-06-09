@@ -24,8 +24,8 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument("namespace", default_value="amr_sweeper"),
-        DeclareLaunchArgument("missions_directory", default_value="src/missions_from_db"),
-        DeclareLaunchArgument("missions_log_directory", default_value="src/missions_log"),
+        DeclareLaunchArgument("missions_directory", default_value="missions/database"),
+        DeclareLaunchArgument("missions_log_directory", default_value="missions/logs"),
         DeclareLaunchArgument(
             "manual_missions_directory",
             default_value=PathJoinSubstitution(

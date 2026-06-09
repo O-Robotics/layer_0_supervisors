@@ -39,7 +39,7 @@ profiles:
             args:
               - "namespace:={ns}"
               - "use_sim_time:=false"
-              - "missions_directory:=src/missions_from_db"
+              - "missions_directory:=missions/database"
               - "auto_build_on_start:=true"
               - "watch_for_updates:=true"
             ready:
@@ -69,7 +69,7 @@ profiles:
             args:
               - "namespace:={ns}"
               - "use_sim_time:=false"
-              - "missions_directory:=src/missions_from_db"
+              - "missions_directory:=missions/database"
             ready:
               - type: "service"
                 target: "reload_schedule"

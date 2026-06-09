@@ -25,7 +25,7 @@ def generate_launch_description():
         DeclareLaunchArgument("namespace", default_value="amr_sweeper"),
         DeclareLaunchArgument("use_sim_time", default_value="false"),
         DeclareLaunchArgument("schedule_ics_path", default_value=""),
-        DeclareLaunchArgument("missions_directory", default_value="src/missions_from_db"),
+        DeclareLaunchArgument("missions_directory", default_value="missions/database"),
         DeclareLaunchArgument("default_schedule_filename", default_value=""),
         DeclareLaunchArgument("mission_file_extension", default_value=".json"),
         DeclareLaunchArgument("robot_id", default_value=""),

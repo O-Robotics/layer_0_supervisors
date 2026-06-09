@@ -22,8 +22,8 @@ def generate_launch_description():
         DeclareLaunchArgument("namespace", default_value="amr_sweeper"),
         DeclareLaunchArgument("use_sim_time", default_value="false"),
         DeclareLaunchArgument("mission_path", default_value=""),
-        DeclareLaunchArgument("missions_directory", default_value="src/missions_from_db"),
-        DeclareLaunchArgument("missions_log_directory", default_value="src/missions_log"),
+        DeclareLaunchArgument("missions_directory", default_value="missions/database"),
+        DeclareLaunchArgument("missions_log_directory", default_value="missions/logs"),
         DeclareLaunchArgument("auto_build_on_start", default_value="true"),
         DeclareLaunchArgument("watch_for_updates", default_value="true"),
         Node(

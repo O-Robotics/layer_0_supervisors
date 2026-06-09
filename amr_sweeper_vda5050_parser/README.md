@@ -1,19 +1,19 @@
 # amr_sweeper_vda5050_parser
 
-Builds mission artifacts from VDA5050 mission files in `/missions_from_db`.
+Builds mission artifacts from VDA5050 mission files in `/missions/database`.
 
 This package is intended to run asynchronously in `IDLING` so the robot can keep its
 mission artifacts up to date before the scheduler asks the FSM to enter `RUNNING`.
 
 ## What It Does
 
-- Watches `/missions_from_db` for VDA5050 mission `.json` files
-- Stages each valid mission into its own subfolder at `/missions_from_db/<order_id>_<timestamp>/`
+- Watches `/missions/database` for VDA5050 mission `.json` files
+- Stages each valid mission into its own subfolder at `/missions/database/<order_id>_<timestamp>/`
 - Builds per-mission artifacts:
-  - `/missions_from_db/<order_id>_<timestamp>/<order_id>_<timestamp>.json`
-  - `/missions_from_db/<order_id>_<timestamp>/<order_id>_<timestamp>_costmap.pgm`
-  - `/missions_from_db/<order_id>_<timestamp>/<order_id>_<timestamp>_costmap.yaml`
-  - `/missions_from_db/<order_id>_<timestamp>/<order_id>_<timestamp>_path.geojson`
+  - `/missions/database/<order_id>_<timestamp>/<order_id>_<timestamp>.json`
+  - `/missions/database/<order_id>_<timestamp>/<order_id>_<timestamp>_costmap.pgm`
+  - `/missions/database/<order_id>_<timestamp>/<order_id>_<timestamp>_costmap.yaml`
+  - `/missions/database/<order_id>_<timestamp>/<order_id>_<timestamp>_path.geojson`
 - Leaves runtime selection to the exact per-mission artifacts referenced from `execution_context.json`
 - Exposes `build_current_mission` so the mission executor can force-parse and build the selected mission
 

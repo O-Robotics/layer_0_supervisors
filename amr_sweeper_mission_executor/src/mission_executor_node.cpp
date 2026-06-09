@@ -1361,10 +1361,10 @@ std::string discoverScheduleTimezone(const std::string & schedule_text)
 MissionExecutorNode::MissionExecutorNode(const rclcpp::NodeOptions & options)
 : rclcpp::Node("mission_executor_node", options)
 {
-  missions_directory_ = declare_parameter<std::string>("missions_directory", "src/missions_from_db");
+  missions_directory_ = declare_parameter<std::string>("missions_directory", "missions/database");
   missions_log_directory_ = declare_parameter<std::string>(
     "missions_log_directory",
-    "src/missions_log");
+    "missions/logs");
   manual_missions_directory_ = declare_parameter<std::string>("manual_missions_directory", "");
   mission_file_extension_ = declare_parameter<std::string>("mission_file_extension", ".json");
   schedule_ics_path_ = declare_parameter<std::string>("schedule_ics_path", "");
