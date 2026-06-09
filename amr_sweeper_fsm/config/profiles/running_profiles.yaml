@@ -1048,7 +1048,7 @@ profiles:
               - "use_amr_sweeper_usb_cameras:=true"
               - "use_amr_sweeper_depth_camera:=true"
               - "use_amr_sweeper_imu:=true"
-              - "use_amr_sweeper_gnss:=false"
+              - "use_amr_sweeper_gnss:=true"
               - "use_ntrip_client:=false"
             ready:
               - type: "topic"
@@ -1062,6 +1062,9 @@ profiles:
                 required: true
               - type: "topic"
                 target: "imu/data_heading"
+                required: true
+              - type: "topic"
+                target: "gnss/navsat"
                 required: true
               - type: "topic"
                 target: "battery/battery_state"
@@ -1098,6 +1101,9 @@ profiles:
                 required: true
               - type: "service"
                 target: "imu/imu_node/get_parameters"
+                required: true
+              - type: "service"
+                target: "gnss/gnss_node/get_parameters"
                 required: true
               - type: "topic"
                 target: "joint_states"
@@ -1214,7 +1220,7 @@ profiles:
               - "use_sim_time:=false"
               - "use_amr_sweeper_visual_odometry:=false"
               - "use_amr_sweeper_localization:=true"
-              - "use_gnss:=false"
+              - "use_gnss:=true"
               - "use_amr_sweeper_mapping:=true"
               - "use_amr_sweeper_waypoint_follower:=true"
               - "auto_start_mission:=false"
