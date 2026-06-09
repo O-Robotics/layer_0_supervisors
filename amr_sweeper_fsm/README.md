@@ -135,7 +135,7 @@ The shipped profile catalog is currently:
 - `202`: RUNNING manual mapping profile
 - `203`: RUNNING manual routed-mission profile
 - `204`: RUNNING manual teleoperation profile
-- `205`: RUNNING manual teleoperation with localization/SLAM profile
+- `205`: RUNNING manual RecordMap profile with localization/SLAM
 - `300`: CHARGING bridge profile with no processes; auto-requests `400`
 - `301`: default CHARGING profile
 - `400`: default FAULT profile with no processes and no further transition

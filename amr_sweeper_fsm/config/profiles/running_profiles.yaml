@@ -1001,7 +1001,7 @@ profiles:
 
 
   # ---------------------------------------------------------------------------
-  # Profile 205 (manual teleoperation to record temporary maps)
+  # Profile 205 (manual record map)
   # ---------------------------------------------------------------------------
   - profile:
       id: 205
@@ -1025,7 +1025,7 @@ profiles:
               - "use_amr_sweeper_depth_camera:=true"
               - "use_amr_sweeper_imu:=true"
               - "use_amr_sweeper_gnss:=true"
-              - "use_ntrip_client:=false"
+              - "use_ntrip_client:=true"
             ready:
               - type: "topic"
                 target: "system_info/system_info"
@@ -1192,10 +1192,11 @@ profiles:
               - "use_amr_sweeper_localization:=true"
               - "use_gnss:=true"
               - "use_amr_sweeper_mapping:=true"
-              - "use_amr_sweeper_waypoint_follower:=true"
-              - "auto_start_mission:=false"
-              - "use_test:=true"
-              - "test_output_directory:=/tmp/amr_sweeper_profile_205_record_map"
+              - "use_amr_sweeper_waypoint_follower:=false"
+              - "mission_execution_directory:={mission_execution_directory}"
+              - "auto_start_mission:=true"
+              - "use_test:={use_test}"
+              - "test_output_directory:={test_output_directory}"
             ready:
               - type: "topic"
                 target: "odometry/fused"
@@ -1209,18 +1210,6 @@ profiles:
               - type: "lifecycle"
                 target: "slam_toolbox"
                 required: true
-              - type: "lifecycle"
-                target: "controller_server"
-                required: true
-              - type: "lifecycle"
-                target: "planner_server"
-                required: true
-              - type: "lifecycle"
-                target: "bt_navigator"
-                required: true
-              - type: "lifecycle"
-                target: "waypoint_follower"
-                required: true
               - type: "service"
                 target: "amr_sweeper_slam_node/get_parameters"
                 required: true
@@ -1232,9 +1221,6 @@ profiles:
                 required: true
               - type: "topic"
                 target: "mapping/map"
-                required: true
-              - type: "topic"
-                target: "global_costmap/costmap"
                 required: true
             window_ms: 45000
           rosout_triggers:
