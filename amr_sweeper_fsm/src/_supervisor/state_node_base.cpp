@@ -2261,6 +2261,27 @@ std::string StateNodeBase::resolve_placeholders(std::string cmd) const
       cmd += " " + key + ":=" + value;
     }
   };
+  auto replace_launch_argument_placeholder =
+    [&cmd](const std::string & argument_name, const std::string & placeholder, const std::string & value) {
+      if (value.empty()) {
+        const std::string argument_token = argument_name + ":=" + placeholder;
+        size_t argument_pos = 0;
+        while ((argument_pos = cmd.find(argument_token, argument_pos)) != std::string::npos) {
+          const bool has_leading_space = argument_pos > 0 && cmd.at(argument_pos - 1U) == ' ';
+          const size_t erase_pos = has_leading_space ? argument_pos - 1U : argument_pos;
+          const size_t erase_len = argument_token.size() + (has_leading_space ? 1U : 0U);
+          cmd.erase(erase_pos, erase_len);
+          argument_pos = erase_pos;
+        }
+        return;
+      }
+
+      size_t placeholder_pos = 0;
+      while ((placeholder_pos = cmd.find(placeholder, placeholder_pos)) != std::string::npos) {
+        cmd.replace(placeholder_pos, placeholder.size(), value);
+        placeholder_pos += value.size();
+      }
+    };
 
   // `{ns}` resolves to namespace without leading slash. Root namespace -> "".
   std::string ns = this->get_namespace();
@@ -2278,11 +2299,10 @@ std::string StateNodeBase::resolve_placeholders(std::string cmd) const
   std::string mission_execution_directory;
   this->get_parameter("runtime.mission_execution_directory", mission_execution_directory);
   const std::string mission_key = "{mission_execution_directory}";
-  pos = 0;
-  while ((pos = cmd.find(mission_key, pos)) != std::string::npos) {
-    cmd.replace(pos, mission_key.size(), mission_execution_directory);
-    pos += mission_execution_directory.size();
-  }
+  replace_launch_argument_placeholder(
+    "mission_execution_directory",
+    mission_key,
+    mission_execution_directory);
 
   bool use_test = false;
   this->get_parameter("runtime.use_test", use_test);
