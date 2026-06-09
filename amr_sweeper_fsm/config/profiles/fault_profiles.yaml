@@ -17,4 +17,10 @@ profiles:
 
   - profile:
       id: 401
+      transitions:
+        auto_transition_on: false
+        auto_transition_profile:
+        fault_transition_on: false
+        fault_transition_profile: 400
+
       processes: []

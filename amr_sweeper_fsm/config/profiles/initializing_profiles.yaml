@@ -299,6 +299,9 @@ profiles:
                 target: "fusioncore"
                 required: true
               - type: "lifecycle"
+                target: "slam_toolbox"
+                required: true
+              - type: "lifecycle"
                 target: "controller_server"
                 required: true
               - type: "lifecycle"
@@ -735,6 +738,9 @@ profiles:
                 required: true
               - type: "lifecycle"
                 target: "fusioncore"
+                required: true
+              - type: "lifecycle"
+                target: "slam_toolbox"
                 required: true
               - type: "lifecycle"
                 target: "controller_server"

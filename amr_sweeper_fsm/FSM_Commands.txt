@@ -100,13 +100,13 @@ Profile 201 runtime wiring:
   - layer 1 hardware bringup (critical)
   - layer 2 controllers bringup without joystick (critical)
   - layer 3 localization/navigation/mapping bringup (critical)
-  - joystick launch as a separate optional process
   - passes mission_execution_directory into layer 3 bringup
 
 Other shipped RUNNING profiles:
   - 202: manual mapping
   - 203: manual routed missions
   - 204: manual teleoperation
+  - 205: manual teleoperation with localization and SLAM
 
 
 Example: request CHARGING default but keep lifecycle node Inactive (staging)

@@ -135,10 +135,11 @@ The shipped profile catalog is currently:
 - `202`: RUNNING manual mapping profile
 - `203`: RUNNING manual routed-mission profile
 - `204`: RUNNING manual teleoperation profile
+- `205`: RUNNING manual teleoperation with localization/SLAM profile
 - `300`: CHARGING bridge profile with no processes; auto-requests `400`
 - `301`: default CHARGING profile
 - `400`: default FAULT profile with no processes and no further transition
-- `401`: FAULT empty profile
+- `401`: FAULT empty/manual fallback profile
 
 `000`, `100`, `200`, and `300` are empty bridge profiles that auto-request `100`, `200`, `300`, and `400` respectively.
 `003` starts the same full-stack bringup path as `001`, but it keeps those processes non-blocking for debugging and remains in `INITIALIZING`.

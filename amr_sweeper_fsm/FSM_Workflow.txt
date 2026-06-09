@@ -84,6 +84,7 @@ RUNNING
   - Profile 202 is manual mapping.
   - Profile 203 is manual routed missions.
   - Profile 204 is manual teleoperation.
+  - Profile 205 is manual teleoperation with localization and SLAM kept active for operator awareness.
   - Profiles that use mission execution directories pass them into layer 3 bringup through the
     `runtime.mission_execution_directory` parameter placeholder.
 
@@ -93,7 +94,8 @@ CHARGING
 
 FAULT
   - Terminal fault profile intended for containment.
-  - Profile 400 is empty and does not auto-transition further; profile 401 is also empty.
+  - Profile 400 is empty and does not auto-transition further.
+  - Profile 401 is the empty/manual fallback profile.
   - No automatic transition out of FAULT is configured in shipped profiles.
 
 

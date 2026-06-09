@@ -237,6 +237,9 @@ profiles:
                 target: "fusioncore"
                 required: true
               - type: "lifecycle"
+                target: "slam_toolbox"
+                required: true
+              - type: "lifecycle"
                 target: "controller_server"
                 required: true
               - type: "lifecycle"
@@ -519,6 +522,9 @@ profiles:
               - type: "lifecycle"
                 target: "fusioncore"
                 required: true
+              - type: "lifecycle"
+                target: "slam_toolbox"
+                required: true
               - type: "service"
                 target: "amr_sweeper_slam_node/get_parameters"
                 required: true
@@ -759,6 +765,9 @@ profiles:
                 required: true
               - type: "lifecycle"
                 target: "fusioncore"
+                required: true
+              - type: "lifecycle"
+                target: "slam_toolbox"
                 required: true
               - type: "lifecycle"
                 target: "controller_server"
@@ -1231,6 +1240,9 @@ profiles:
                 required: true
               - type: "lifecycle"
                 target: "fusioncore"
+                required: true
+              - type: "lifecycle"
+                target: "slam_toolbox"
                 required: true
               - type: "service"
                 target: "amr_sweeper_slam_node/get_parameters"
