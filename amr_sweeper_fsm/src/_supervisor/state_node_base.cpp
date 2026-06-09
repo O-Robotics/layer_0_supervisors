@@ -8,6 +8,7 @@
 #include <chrono>
 #include <sstream>
 #include <string>
+#include <unordered_map>
 #include <vector>
 #include <filesystem>
 
@@ -103,6 +104,8 @@ namespace {
     fsm_layer_0::ProcessImportance importance{fsm_layer_0::ProcessImportance::CRITICAL};
   };
 
+  using LaunchArgMap = std::unordered_map<std::string, std::string>;
+
   std::string join_args_as_shell(const YAML::Node & args)
   {
     std::string out;
@@ -163,6 +166,173 @@ namespace {
       command.find("ros2 launch amr_sweeper_layer_1_hardware_bringup ") != std::string::npos ||
       command.find("ros2 launch amr_sweeper_layer_2_controllers_bringup ") != std::string::npos ||
       command.find("ros2 launch amr_sweeper_layer_3_navigation_bringup ") != std::string::npos;
+  }
+
+  bool parse_bool_text(const std::string & value, bool & out)
+  {
+    std::string lowered = value;
+    std::transform(lowered.begin(), lowered.end(), lowered.begin(), ::tolower);
+    if (lowered == "true" || lowered == "1" || lowered == "yes" || lowered == "on") {
+      out = true;
+      return true;
+    }
+    if (lowered == "false" || lowered == "0" || lowered == "no" || lowered == "off") {
+      out = false;
+      return true;
+    }
+    return false;
+  }
+
+  LaunchArgMap parse_launch_arguments_from_command(const std::string & command)
+  {
+    LaunchArgMap args;
+    std::stringstream ss(command);
+    std::string token;
+    while (ss >> token) {
+      const auto pos = token.find(":=");
+      if (pos == std::string::npos || pos == 0) {
+        continue;
+      }
+      args[token.substr(0, pos)] = token.substr(pos + 2);
+    }
+    return args;
+  }
+
+  bool launch_arg_enabled(
+    const LaunchArgMap & args,
+    const std::string & key,
+    bool default_value)
+  {
+    const auto it = args.find(key);
+    if (it == args.end()) {
+      return default_value;
+    }
+    bool parsed = default_value;
+    if (parse_bool_text(it->second, parsed)) {
+      return parsed;
+    }
+    return default_value;
+  }
+
+  bool target_matches_pattern(const std::string & target, const std::string & pattern)
+  {
+    if (target == pattern) {
+      return true;
+    }
+    if (target.size() >= pattern.size() &&
+        target.compare(target.size() - pattern.size(), pattern.size(), pattern) == 0) {
+      return true;
+    }
+    return target.find(pattern) != std::string::npos;
+  }
+
+  bool is_profile_requirement_enabled(
+    const std::string & resolved_command,
+    const std::string & kind,
+    const std::string & target)
+  {
+    const LaunchArgMap args = parse_launch_arguments_from_command(resolved_command);
+
+    if (resolved_command.find("ros2 launch amr_sweeper_layer_1_hardware_bringup ") != std::string::npos) {
+      if (
+        target_matches_pattern(target, "imu/data_raw") ||
+        target_matches_pattern(target, "imu/data_acc_gyro") ||
+        target_matches_pattern(target, "imu/data_heading") ||
+        target_matches_pattern(target, "imu/imu_node"))
+      {
+        return launch_arg_enabled(args, "use_amr_sweeper_imu", true);
+      }
+      if (
+        target_matches_pattern(target, "gnss/navsat") ||
+        target_matches_pattern(target, "gnss/gnss_node"))
+      {
+        return launch_arg_enabled(args, "use_amr_sweeper_gnss", true);
+      }
+      if (target_matches_pattern(target, "gnss/ntrip_client")) {
+        return launch_arg_enabled(args, "use_ntrip_client", true);
+      }
+      if (target_matches_pattern(target, "usb_cameras/")) {
+        return launch_arg_enabled(args, "use_amr_sweeper_usb_cameras", true);
+      }
+      if (target_matches_pattern(target, "depth_camera/")) {
+        return launch_arg_enabled(args, "use_amr_sweeper_depth_camera", true);
+      }
+      if (target_matches_pattern(target, "battery/")) {
+        return launch_arg_enabled(args, "use_amr_sweeper_battery", true);
+      }
+      if (target_matches_pattern(target, "system_info/")) {
+        return launch_arg_enabled(args, "use_amr_sweeper_system_info", true);
+      }
+      if (
+        kind == "hardware" ||
+        kind == "controller" ||
+        target_matches_pattern(target, "joint_states"))
+      {
+        return launch_arg_enabled(args, "use_amr_sweeper_ros2_control", true);
+      }
+    }
+
+    if (resolved_command.find("ros2 launch amr_sweeper_layer_2_controllers_bringup ") != std::string::npos) {
+      if (
+        target_matches_pattern(target, "drive_controller/odom") ||
+        target_matches_pattern(target, "drive_controller") ||
+        target_matches_pattern(target, "cmd_vel_sweep_wheels"))
+      {
+        return launch_arg_enabled(args, "use_amr_sweeper_drive_controller", true);
+      }
+      if (
+        target_matches_pattern(target, "tool_controller") ||
+        target_matches_pattern(target, "cmd_vel_sweep_tools"))
+      {
+        return launch_arg_enabled(args, "use_amr_sweeper_tool_controller", true);
+      }
+      if (
+        target_matches_pattern(target, "attitude/roll_pitch") ||
+        target_matches_pattern(target, "amr_sweeper_attitude_controller/enable_attitude_estimation"))
+      {
+        return launch_arg_enabled(args, "use_amr_sweeper_attitude_controller", true);
+      }
+      if (
+        target_matches_pattern(target, "safety_controller/status") ||
+        target_matches_pattern(target, "amr_sweeper_safety_controller/enable_controller"))
+      {
+        return launch_arg_enabled(args, "use_amr_sweeper_safety_controller", true);
+      }
+      if (
+        target_matches_pattern(target, "collision_detector/impact_detected") ||
+        target_matches_pattern(target, "amr_sweeper_collision_detector/enable_detector"))
+      {
+        return launch_arg_enabled(args, "use_amr_sweeper_collision_detector", true);
+      }
+    }
+
+    if (resolved_command.find("ros2 launch amr_sweeper_layer_3_navigation_bringup ") != std::string::npos) {
+      if (
+        target_matches_pattern(target, "odometry/fused") ||
+        target_matches_pattern(target, "pose") ||
+        target_matches_pattern(target, "fusioncore"))
+      {
+        return launch_arg_enabled(args, "use_amr_sweeper_localization", true);
+      }
+      if (
+        target_matches_pattern(target, "slam_toolbox") ||
+        target_matches_pattern(target, "amr_sweeper_slam_node") ||
+        target_matches_pattern(target, "amr_sweeper_gaussian_node") ||
+        target_matches_pattern(target, "amr_sweeper_mapping_node"))
+      {
+        return launch_arg_enabled(args, "use_amr_sweeper_mapping", true);
+      }
+      if (
+        target_matches_pattern(target, "controller_server") ||
+        target_matches_pattern(target, "planner_server") ||
+        target_matches_pattern(target, "bt_navigator") ||
+        target_matches_pattern(target, "waypoint_follower"))
+      {
+        return launch_arg_enabled(args, "use_amr_sweeper_waypoint_follower", true);
+      }
+    }
+
+    return true;
   }
 
   std::string format_started_message(const std::string & command)
@@ -1561,6 +1731,7 @@ bool StateNodeBase::wait_for_readiness(std::string & why_not)
     for (size_t i = 0; i < profile_processes_.size(); ++i) {
       const auto & pp = profile_processes_[i];
       const auto proc_deadline = proc_deadlines[i];
+      const auto resolved_command = resolve_placeholders(pp.command);
 
       auto missing_reason_for = [&](const std::string & what, const std::string & target) {
         const std::string pname = pp.name.empty() ? pp.command : pp.name;
@@ -1569,6 +1740,9 @@ bool StateNodeBase::wait_for_readiness(std::string & why_not)
 
       bool proc_waiting = false;
       for (const auto & n : pp.ready_nodes) {
+        if (!is_profile_requirement_enabled(resolved_command, "node", n)) {
+          continue;
+        }
         if (!graph_has_node(qualify_to_ns(n))) {
           proc_waiting = true;
           why_not = missing_reason_for("node", qualify_to_ns(n));
@@ -1578,6 +1752,9 @@ bool StateNodeBase::wait_for_readiness(std::string & why_not)
 
       if (!proc_waiting) {
         for (const auto & t : pp.ready_topics) {
+          if (!is_profile_requirement_enabled(resolved_command, "topic", t)) {
+            continue;
+          }
           if (!graph_has_topic(t)) {
             proc_waiting = true;
             why_not = missing_reason_for("topic", t);
@@ -1587,6 +1764,9 @@ bool StateNodeBase::wait_for_readiness(std::string & why_not)
       }
       if (!proc_waiting) {
         for (const auto & s : pp.ready_services) {
+          if (!is_profile_requirement_enabled(resolved_command, "service", s)) {
+            continue;
+          }
           if (!graph_has_service(s)) {
             proc_waiting = true;
             why_not = missing_reason_for("service", s);
@@ -1597,6 +1777,9 @@ bool StateNodeBase::wait_for_readiness(std::string & why_not)
 
       if (!proc_waiting) {
         for (const auto & lreq : pp.ready_lifecycle_nodes) {
+          if (!is_profile_requirement_enabled(resolved_command, "lifecycle", lreq.node)) {
+            continue;
+          }
           std::string lwhy;
           if (!lifecycle_node_meets_requirement(lreq, lwhy)) {
             proc_waiting = true;
@@ -1609,6 +1792,9 @@ bool StateNodeBase::wait_for_readiness(std::string & why_not)
 
       if (!proc_waiting) {
         for (const auto & hreq : pp.ready_hardware_components) {
+          if (!is_profile_requirement_enabled(resolved_command, "hardware", hreq.name)) {
+            continue;
+          }
           std::string hwhy;
           if (!hardware_component_meets_requirement(hreq, hwhy)) {
             proc_waiting = true;
@@ -1621,6 +1807,9 @@ bool StateNodeBase::wait_for_readiness(std::string & why_not)
 
       if (!proc_waiting) {
         for (const auto & c : pp.ready_active_controllers) {
+          if (!is_profile_requirement_enabled(resolved_command, "controller", c)) {
+            continue;
+          }
           std::string cwhy;
           if (!controller_is_active(c, cwhy)) {
             proc_waiting = true;
@@ -2133,12 +2322,16 @@ bool StateNodeBase::profile_process_readiness_satisfied_(
   const ProfileProcess & pp,
   std::string & why_not)
 {
+  const auto resolved_command = resolve_placeholders(pp.command);
   auto missing_reason_for = [&](const std::string & what, const std::string & target) {
     const std::string pname = pp.name.empty() ? pp.command : pp.name;
     return "profile process '" + pname + "' not ready: missing " + what + " '" + target + "'";
   };
 
   for (const auto & n : pp.ready_nodes) {
+    if (!is_profile_requirement_enabled(resolved_command, "node", n)) {
+      continue;
+    }
     const auto fq = qualify_to_ns(n);
     if (!graph_has_node(fq)) {
       why_not = missing_reason_for("node", fq);
@@ -2147,6 +2340,9 @@ bool StateNodeBase::profile_process_readiness_satisfied_(
   }
 
   for (const auto & t : pp.ready_topics) {
+    if (!is_profile_requirement_enabled(resolved_command, "topic", t)) {
+      continue;
+    }
     if (!graph_has_topic(t)) {
       why_not = missing_reason_for("topic", t);
       return false;
@@ -2154,6 +2350,9 @@ bool StateNodeBase::profile_process_readiness_satisfied_(
   }
 
   for (const auto & s : pp.ready_services) {
+    if (!is_profile_requirement_enabled(resolved_command, "service", s)) {
+      continue;
+    }
     if (!graph_has_service(s)) {
       why_not = missing_reason_for("service", s);
       return false;
@@ -2161,6 +2360,9 @@ bool StateNodeBase::profile_process_readiness_satisfied_(
   }
 
   for (const auto & lreq : pp.ready_lifecycle_nodes) {
+    if (!is_profile_requirement_enabled(resolved_command, "lifecycle", lreq.node)) {
+      continue;
+    }
     if (!lifecycle_node_meets_requirement(lreq, why_not)) {
       const std::string pname = pp.name.empty() ? pp.command : pp.name;
       why_not = "profile process '" + pname + "' not ready: " + why_not;
@@ -2169,6 +2371,9 @@ bool StateNodeBase::profile_process_readiness_satisfied_(
   }
 
   for (const auto & hreq : pp.ready_hardware_components) {
+    if (!is_profile_requirement_enabled(resolved_command, "hardware", hreq.name)) {
+      continue;
+    }
     if (!hardware_component_meets_requirement(hreq, why_not)) {
       const std::string pname = pp.name.empty() ? pp.command : pp.name;
       why_not = "profile process '" + pname + "' not ready: " + why_not;
@@ -2177,6 +2382,9 @@ bool StateNodeBase::profile_process_readiness_satisfied_(
   }
 
   for (const auto & c : pp.ready_active_controllers) {
+    if (!is_profile_requirement_enabled(resolved_command, "controller", c)) {
+      continue;
+    }
     if (!controller_is_active(c, why_not)) {
       const std::string pname = pp.name.empty() ? pp.command : pp.name;
       why_not = "profile process '" + pname + "' not ready: " + why_not;
@@ -2191,6 +2399,7 @@ bool StateNodeBase::profile_process_readiness_satisfied_(
 std::vector<std::string> StateNodeBase::collect_profile_process_readiness_failures_(
   const ProfileProcess & pp)
 {
+  const auto resolved_command = resolve_placeholders(pp.command);
   std::vector<std::string> failures;
   failures.reserve(
     pp.ready_nodes.size() +
@@ -2201,6 +2410,9 @@ std::vector<std::string> StateNodeBase::collect_profile_process_readiness_failur
     pp.ready_active_controllers.size());
 
   for (const auto & n : pp.ready_nodes) {
+    if (!is_profile_requirement_enabled(resolved_command, "node", n)) {
+      continue;
+    }
     const auto fq = qualify_to_ns(n);
     if (!graph_has_node(fq)) {
       failures.push_back("missing node '" + fq + "'");
@@ -2208,18 +2420,27 @@ std::vector<std::string> StateNodeBase::collect_profile_process_readiness_failur
   }
 
   for (const auto & t : pp.ready_topics) {
+    if (!is_profile_requirement_enabled(resolved_command, "topic", t)) {
+      continue;
+    }
     if (!graph_has_topic(t)) {
       failures.push_back("missing topic '" + t + "'");
     }
   }
 
   for (const auto & s : pp.ready_services) {
+    if (!is_profile_requirement_enabled(resolved_command, "service", s)) {
+      continue;
+    }
     if (!graph_has_service(s)) {
       failures.push_back("missing service '" + s + "'");
     }
   }
 
   for (const auto & lreq : pp.ready_lifecycle_nodes) {
+    if (!is_profile_requirement_enabled(resolved_command, "lifecycle", lreq.node)) {
+      continue;
+    }
     std::string lwhy;
     if (!lifecycle_node_meets_requirement(lreq, lwhy)) {
       failures.push_back(lwhy);
@@ -2227,6 +2448,9 @@ std::vector<std::string> StateNodeBase::collect_profile_process_readiness_failur
   }
 
   for (const auto & hreq : pp.ready_hardware_components) {
+    if (!is_profile_requirement_enabled(resolved_command, "hardware", hreq.name)) {
+      continue;
+    }
     std::string hwhy;
     if (!hardware_component_meets_requirement(hreq, hwhy)) {
       failures.push_back(hwhy);
@@ -2234,6 +2458,9 @@ std::vector<std::string> StateNodeBase::collect_profile_process_readiness_failur
   }
 
   for (const auto & c : pp.ready_active_controllers) {
+    if (!is_profile_requirement_enabled(resolved_command, "controller", c)) {
+      continue;
+    }
     std::string cwhy;
     if (!controller_is_active(c, cwhy)) {
       failures.push_back(cwhy);
