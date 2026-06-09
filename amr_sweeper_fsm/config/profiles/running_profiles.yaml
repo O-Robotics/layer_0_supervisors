@@ -45,7 +45,7 @@ profiles:
               - "use_amr_sweeper_depth_camera:=true"
               - "use_amr_sweeper_imu:=true"
               - "use_amr_sweeper_gnss:=true"
-              - "use_ntrip_client:=true"
+              - "use_ntrip_client:=false"
             ready:
               - type: "topic"
                 target: "system_info/system_info"
@@ -100,9 +100,6 @@ profiles:
                 required: true
               - type: "service"
                 target: "gnss/gnss_node/get_parameters"
-                required: true
-              - type: "service"
-                target: "gnss/ntrip_client/get_parameters"
                 required: true
               - type: "topic"
                 target: "joint_states"
