@@ -79,10 +79,10 @@ profiles:
                 required: true
               - type: "topic"
                 target: "depth_camera/depth/camera_info"
-                required: false
+                required: true
               - type: "topic"
                 target: "depth_camera/scan"
-                required: false
+                required: true
               - type: "topic"
                 target: "depth_camera/depth/color/points"
                 required: false
