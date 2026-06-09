@@ -21,6 +21,30 @@ def _launch_file(package_name: str, launch_file_name: str):
 def generate_launch_description():
     console_output_format = "[{severity}] [{time}] [{name}] : {message}"
     ros_log_dir = tempfile.mkdtemp(prefix="amr_sweeper_bringup_roslog_")
+    fsm_override_arg_names = [
+        "use_amr_sweeper_ros2_control",
+        "use_amr_sweeper_battery",
+        "use_amr_sweeper_system_info",
+        "use_amr_sweeper_usb_cameras",
+        "use_amr_sweeper_depth_camera",
+        "use_amr_sweeper_imu",
+        "use_amr_sweeper_gnss",
+        "use_ntrip_client",
+        "use_amr_sweeper_drive_controller",
+        "use_amr_sweeper_tool_controller",
+        "use_amr_sweeper_joystick",
+        "use_amr_sweeper_sweeping_controller",
+        "use_amr_sweeper_attitude_controller",
+        "use_amr_sweeper_collision_detector",
+        "use_amr_sweeper_safety_controller",
+        "use_joy_node",
+        "joy_dev",
+        "use_amr_sweeper_visual_odometry",
+        "use_amr_sweeper_localization",
+        "use_amr_sweeper_mapping",
+        "use_amr_sweeper_waypoint_follower",
+        "auto_start_mission",
+    ]
     namespace = LaunchConfiguration("namespace")
     use_sim_time = LaunchConfiguration("use_sim_time")
     state_params_file = LaunchConfiguration("state_params_file")
@@ -60,6 +84,7 @@ def generate_launch_description():
     fsm_status_topic = LaunchConfiguration("fsm_status_topic")
     site_title = LaunchConfiguration("site_title")
     public_base_url = LaunchConfiguration("public_base_url")
+    fsm_override_args = {name: LaunchConfiguration(name) for name in fsm_override_arg_names}
     default_state_params_file = PathJoinSubstitution([
         FindPackageShare("amr_sweeper_fsm"),
         "config",
@@ -73,6 +98,26 @@ def generate_launch_description():
         '"', test_schedule_ics_path, '" if ("', use_test, '" == "true" and "', schedule_ics_path,
         '" == "") else "', schedule_ics_path, '"',
     ])
+
+    extra_fsm_override_declarations = [
+        DeclareLaunchArgument(name, default_value="")
+        for name in fsm_override_arg_names
+    ]
+
+    fsm_launch_arguments = {
+        "namespace": namespace,
+        "use_sim_time": use_sim_time,
+        "use_profile": use_profile,
+        "tick_period_ms": tick_period_ms,
+        "state_params_file": state_params_file,
+        "use_test": use_test,
+        "test_output_directory": test_output_directory,
+        "missions_directory": missions_from_db_directory,
+        "auto_build_on_start": auto_build_on_start,
+        "watch_for_updates": watch_for_updates,
+        "trigger_running_on_work_window": trigger_running_on_work_window,
+    }
+    fsm_launch_arguments.update(fsm_override_args)
 
     return LaunchDescription([
         SetEnvironmentVariable("ROS_LOG_DIR", ros_log_dir),
@@ -120,17 +165,10 @@ def generate_launch_description():
         DeclareLaunchArgument("fsm_status_topic", default_value="fsm_status"),
         DeclareLaunchArgument("site_title", default_value="AMR Sweeper Mission Control"),
         DeclareLaunchArgument("public_base_url", default_value="http://192.168.2.1:8080"),
+        *extra_fsm_override_declarations,
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(_launch_file("amr_sweeper_fsm", "amr_sweeper_fsm.launch.py")),
-            launch_arguments={
-                "namespace": namespace,
-                "use_sim_time": use_sim_time,
-                "use_profile": use_profile,
-                "tick_period_ms": tick_period_ms,
-                "state_params_file": state_params_file,
-                "use_test": use_test,
-                "test_output_directory": test_output_directory,
-            }.items(),
+            launch_arguments=fsm_launch_arguments.items(),
         ),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(_launch_file("amr_sweeper_mission_executor", "mission_executor.launch.py")),

@@ -9,6 +9,34 @@ import os
 
 def generate_launch_description():
     console_output_format = "[{severity}] [{time}] [{name}] : {message}"
+    runtime_override_arg_names = [
+        "missions_directory",
+        "auto_build_on_start",
+        "watch_for_updates",
+        "trigger_running_on_work_window",
+        "use_amr_sweeper_ros2_control",
+        "use_amr_sweeper_battery",
+        "use_amr_sweeper_system_info",
+        "use_amr_sweeper_usb_cameras",
+        "use_amr_sweeper_depth_camera",
+        "use_amr_sweeper_imu",
+        "use_amr_sweeper_gnss",
+        "use_ntrip_client",
+        "use_amr_sweeper_drive_controller",
+        "use_amr_sweeper_tool_controller",
+        "use_amr_sweeper_joystick",
+        "use_amr_sweeper_sweeping_controller",
+        "use_amr_sweeper_attitude_controller",
+        "use_amr_sweeper_collision_detector",
+        "use_amr_sweeper_safety_controller",
+        "use_joy_node",
+        "joy_dev",
+        "use_amr_sweeper_visual_odometry",
+        "use_amr_sweeper_localization",
+        "use_amr_sweeper_mapping",
+        "use_amr_sweeper_waypoint_follower",
+        "auto_start_mission",
+    ]
     """
     Launch the AMR Sweeper FSM supervisor and all FSM-state lifecycle nodes.
 
@@ -41,6 +69,7 @@ def generate_launch_description():
     tick_period_ms = LaunchConfiguration("tick_period_ms")
     use_test = LaunchConfiguration("use_test")
     test_output_directory = LaunchConfiguration("test_output_directory")
+    runtime_override_args = {name: LaunchConfiguration(name) for name in runtime_override_arg_names}
 
     declare_namespace = DeclareLaunchArgument(
         "namespace",
@@ -93,6 +122,16 @@ def generate_launch_description():
         description="Shared generic artifact directory used by test-mode FSM-managed processes.",
     )
 
+    runtime_override_declarations = [
+        DeclareLaunchArgument(name, default_value="")
+        for name in runtime_override_arg_names
+    ]
+
+    runtime_override_parameters = [
+        {f"runtime.{name}": value}
+        for name, value in runtime_override_args.items()
+    ]
+
     # -------------------------------------------------------------------------
     # Nodes
     # -------------------------------------------------------------------------
@@ -111,6 +150,7 @@ def generate_launch_description():
             {"tick_period_ms": ParameterValue(tick_period_ms, value_type=int)},
             {"runtime.use_test": use_test},
             {"runtime.test_output_directory": test_output_directory},
+            *runtime_override_parameters,
         ],
     )
 
@@ -126,6 +166,7 @@ def generate_launch_description():
             {"use_sim_time": use_sim_time},
             {"runtime.use_test": use_test},
             {"runtime.test_output_directory": test_output_directory},
+            *runtime_override_parameters,
         ],
     )
 
@@ -140,6 +181,7 @@ def generate_launch_description():
             {"use_sim_time": use_sim_time},
             {"runtime.use_test": use_test},
             {"runtime.test_output_directory": test_output_directory},
+            *runtime_override_parameters,
         ],
     )
 
@@ -154,6 +196,7 @@ def generate_launch_description():
             {"use_sim_time": use_sim_time},
             {"runtime.use_test": use_test},
             {"runtime.test_output_directory": test_output_directory},
+            *runtime_override_parameters,
         ],
     )
 
@@ -168,6 +211,7 @@ def generate_launch_description():
             {"use_sim_time": use_sim_time},
             {"runtime.use_test": use_test},
             {"runtime.test_output_directory": test_output_directory},
+            *runtime_override_parameters,
         ],
     )
 
@@ -182,6 +226,7 @@ def generate_launch_description():
             {"use_sim_time": use_sim_time},
             {"runtime.use_test": use_test},
             {"runtime.test_output_directory": test_output_directory},
+            *runtime_override_parameters,
         ],
     )
 
@@ -201,6 +246,7 @@ def generate_launch_description():
             declare_state_params,
             declare_use_test,
             declare_test_output_directory,
+            *runtime_override_declarations,
             supervisor,
             initializing,
             idling,

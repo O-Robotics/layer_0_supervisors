@@ -84,7 +84,7 @@ RUNNING
   - Profile 202 is manual mapping.
   - Profile 203 is manual routed missions.
   - Profile 204 is manual teleoperation.
-  - Profile 205 is manual teleoperation with localization and SLAM kept active for operator awareness.
+  - Profile 205 is manual teleoperation with localization kept active for operator awareness.
   - Profiles that use mission execution directories pass them into layer 3 bringup through the
     `runtime.mission_execution_directory` parameter placeholder.
 

@@ -21,6 +21,81 @@ namespace {
   constexpr char kAnsiGreen[] = "\033[32m";
   constexpr char kAnsiLightMagenta[] = "\033[95m";
   constexpr char kAnsiReset[] = "\033[0m";
+  const std::vector<std::string> kRuntimeOverrideKeys{
+    "missions_directory",
+    "auto_build_on_start",
+    "watch_for_updates",
+    "trigger_running_on_work_window",
+    "use_amr_sweeper_ros2_control",
+    "use_amr_sweeper_battery",
+    "use_amr_sweeper_system_info",
+    "use_amr_sweeper_usb_cameras",
+    "use_amr_sweeper_depth_camera",
+    "use_amr_sweeper_imu",
+    "use_amr_sweeper_gnss",
+    "use_ntrip_client",
+    "use_amr_sweeper_drive_controller",
+    "use_amr_sweeper_tool_controller",
+    "use_amr_sweeper_joystick",
+    "use_amr_sweeper_sweeping_controller",
+    "use_amr_sweeper_attitude_controller",
+    "use_amr_sweeper_collision_detector",
+    "use_amr_sweeper_safety_controller",
+    "use_joy_node",
+    "joy_dev",
+    "use_amr_sweeper_visual_odometry",
+    "use_amr_sweeper_localization",
+    "use_amr_sweeper_mapping",
+    "use_amr_sweeper_waypoint_follower",
+    "auto_start_mission",
+  };
+
+  const std::vector<std::string> kLayer1BringupOverrideKeys{
+    "use_sim_time",
+    "use_amr_sweeper_ros2_control",
+    "use_amr_sweeper_battery",
+    "use_amr_sweeper_system_info",
+    "use_amr_sweeper_usb_cameras",
+    "use_amr_sweeper_depth_camera",
+    "use_amr_sweeper_imu",
+    "use_amr_sweeper_gnss",
+    "use_ntrip_client",
+  };
+
+  const std::vector<std::string> kLayer2BringupOverrideKeys{
+    "use_sim_time",
+    "use_amr_sweeper_drive_controller",
+    "use_amr_sweeper_tool_controller",
+    "use_amr_sweeper_joystick",
+    "use_amr_sweeper_sweeping_controller",
+    "use_amr_sweeper_attitude_controller",
+    "use_amr_sweeper_collision_detector",
+    "use_amr_sweeper_safety_controller",
+    "use_joy_node",
+    "joy_dev",
+  };
+
+  const std::vector<std::string> kLayer3BringupOverrideKeys{
+    "use_sim_time",
+    "use_amr_sweeper_visual_odometry",
+    "use_amr_sweeper_localization",
+    "use_amr_sweeper_mapping",
+    "use_amr_sweeper_waypoint_follower",
+    "auto_start_mission",
+  };
+
+  const std::vector<std::string> kParserOverrideKeys{
+    "use_sim_time",
+    "missions_directory",
+    "auto_build_on_start",
+    "watch_for_updates",
+  };
+
+  const std::vector<std::string> kSchedulerOverrideKeys{
+    "use_sim_time",
+    "missions_directory",
+    "trigger_running_on_work_window",
+  };
 
   struct TriggerLine
   {
@@ -580,6 +655,9 @@ StateNodeBase::StateNodeBase(const std::string & node_name, const rclcpp::NodeOp
   this->declare_parameter<std::string>("runtime.mission_execution_directory", "");
   this->declare_parameter<bool>("runtime.use_test", false);
   this->declare_parameter<std::string>("runtime.test_output_directory", "");
+  for (const auto & key : kRuntimeOverrideKeys) {
+    this->declare_parameter<std::string>("runtime." + key, "");
+  }
 }
 
 
@@ -618,6 +696,9 @@ StateNodeBase::on_configure(const rclcpp_lifecycle::State &)
   declare_if_needed("runtime.mission_execution_directory", std::string(""));
   declare_if_needed("runtime.use_test", false);
   declare_if_needed("runtime.test_output_directory", std::string(""));
+  for (const auto & key : kRuntimeOverrideKeys) {
+    declare_if_needed("runtime." + key, std::string(""));
+  }
 
   // Read (safe on every configure)
   this->get_parameter("faults.request_state_service", request_state_service_);
@@ -1981,6 +2062,17 @@ void StateNodeBase::on_process_monitor_tick_()
 
 std::string StateNodeBase::resolve_placeholders(std::string cmd) const
 {
+  auto append_runtime_overrides = [this, &cmd](const std::vector<std::string> & keys) {
+    for (const auto & key : keys) {
+      std::string value;
+      this->get_parameter("runtime." + key, value);
+      if (value.empty()) {
+        continue;
+      }
+      cmd += " " + key + ":=" + value;
+    }
+  };
+
   // `{ns}` resolves to namespace without leading slash. Root namespace -> "".
   std::string ns = this->get_namespace();
   if (!ns.empty() && ns.front() == '/') {
@@ -2020,6 +2112,18 @@ std::string StateNodeBase::resolve_placeholders(std::string cmd) const
   while ((pos = cmd.find(test_output_directory_key, pos)) != std::string::npos) {
     cmd.replace(pos, test_output_directory_key.size(), test_output_directory);
     pos += test_output_directory.size();
+  }
+
+  if (cmd.find("ros2 launch amr_sweeper_layer_1_hardware_bringup ") != std::string::npos) {
+    append_runtime_overrides(kLayer1BringupOverrideKeys);
+  } else if (cmd.find("ros2 launch amr_sweeper_layer_2_controllers_bringup ") != std::string::npos) {
+    append_runtime_overrides(kLayer2BringupOverrideKeys);
+  } else if (cmd.find("ros2 launch amr_sweeper_layer_3_navigation_bringup ") != std::string::npos) {
+    append_runtime_overrides(kLayer3BringupOverrideKeys);
+  } else if (cmd.find("ros2 launch amr_sweeper_vda5050_parser ") != std::string::npos) {
+    append_runtime_overrides(kParserOverrideKeys);
+  } else if (cmd.find("ros2 launch amr_sweeper_scheduler ") != std::string::npos) {
+    append_runtime_overrides(kSchedulerOverrideKeys);
   }
 
   return cmd;
