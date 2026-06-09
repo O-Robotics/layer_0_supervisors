@@ -460,7 +460,7 @@ profiles:
 
 
   # ---------------------------------------------------------------------------
-  # Profile 003 (debug bringup)
+  # Profile 003 (debug bringup, mirrors 001 but holds in INITIALIZING)
   # ---------------------------------------------------------------------------
   - profile:
       id: 003
