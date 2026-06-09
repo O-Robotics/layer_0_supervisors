@@ -341,9 +341,6 @@ profiles:
                 target: "gnss/navsat"
                 required: true
               - type: "topic"
-                target: "battery/battery_state"
-                required: true
-              - type: "topic"
                 target: "robot_description"
                 required: true
               - type: "topic"
@@ -366,9 +363,6 @@ profiles:
                 required: false
               - type: "service"
                 target: "robot_state_publisher/get_parameters"
-                required: true
-              - type: "service"
-                target: "battery/battery_node/get_parameters"
                 required: true
               - type: "service"
                 target: "system_info/system_info_node/get_parameters"
