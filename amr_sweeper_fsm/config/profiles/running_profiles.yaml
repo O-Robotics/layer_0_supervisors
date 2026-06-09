@@ -317,7 +317,7 @@ profiles:
             args:
               - "namespace:={ns}"
               - "use_amr_sweeper_ros2_control:=true"
-              - "use_amr_sweeper_battery:=true"
+              - "use_amr_sweeper_battery:=false"
               - "use_amr_sweeper_system_info:=true"
               - "use_amr_sweeper_usb_cameras:=true"
               - "use_amr_sweeper_depth_camera:=true"
@@ -556,7 +556,7 @@ profiles:
             args:
               - "namespace:={ns}"
               - "use_amr_sweeper_ros2_control:=true"
-              - "use_amr_sweeper_battery:=true"
+              - "use_amr_sweeper_battery:=false"
               - "use_amr_sweeper_system_info:=true"
               - "use_amr_sweeper_usb_cameras:=true"
               - "use_amr_sweeper_depth_camera:=true"
@@ -578,9 +578,6 @@ profiles:
                 required: true
               - type: "topic"
                 target: "gnss/navsat"
-                required: true
-              - type: "topic"
-                target: "battery/battery_state"
                 required: true
               - type: "topic"
                 target: "robot_description"
@@ -605,9 +602,6 @@ profiles:
                 required: false
               - type: "service"
                 target: "robot_state_publisher/get_parameters"
-                required: true
-              - type: "service"
-                target: "battery/battery_node/get_parameters"
                 required: true
               - type: "service"
                 target: "system_info/system_info_node/get_parameters"
@@ -864,9 +858,6 @@ profiles:
                 target: "gnss/navsat"
                 required: true
               - type: "topic"
-                target: "battery/battery_state"
-                required: true
-              - type: "topic"
                 target: "robot_description"
                 required: true
               - type: "topic"
@@ -889,9 +880,6 @@ profiles:
                 required: false
               - type: "service"
                 target: "robot_state_publisher/get_parameters"
-                required: true
-              - type: "service"
-                target: "battery/battery_node/get_parameters"
                 required: true
               - type: "service"
                 target: "system_info/system_info_node/get_parameters"
@@ -1031,7 +1019,7 @@ profiles:
             args:
               - "namespace:={ns}"
               - "use_amr_sweeper_ros2_control:=true"
-              - "use_amr_sweeper_battery:=true"
+              - "use_amr_sweeper_battery:=false"
               - "use_amr_sweeper_system_info:=true"
               - "use_amr_sweeper_usb_cameras:=true"
               - "use_amr_sweeper_depth_camera:=true"
@@ -1053,9 +1041,6 @@ profiles:
                 required: true
               - type: "topic"
                 target: "gnss/navsat"
-                required: true
-              - type: "topic"
-                target: "battery/battery_state"
                 required: true
               - type: "topic"
                 target: "robot_description"
@@ -1080,9 +1065,6 @@ profiles:
                 required: false
               - type: "service"
                 target: "robot_state_publisher/get_parameters"
-                required: true
-              - type: "service"
-                target: "battery/battery_node/get_parameters"
                 required: true
               - type: "service"
                 target: "system_info/system_info_node/get_parameters"
