@@ -99,6 +99,17 @@ struct PolygonBounds
   double max_y{0.0};
 };
 
+struct CostmapArtifact
+{
+  std::string image_name;
+  double resolution{0.0};
+  double origin_x{0.0};
+  double origin_y{0.0};
+  unsigned int width_cells{0U};
+  unsigned int height_cells{0U};
+  std::vector<unsigned char> costs;
+};
+
 std::string toLower(std::string value)
 {
   std::transform(
@@ -127,6 +138,57 @@ std::string defaultIfEmpty(const std::string & value, const std::string & fallba
 }
 
 std::string sanitizeUidToken(std::string value);
+
+std::string trim(const std::string & value)
+{
+  const auto begin = value.find_first_not_of(" \t");
+  if (begin == std::string::npos) {
+    return "";
+  }
+  const auto end = value.find_last_not_of(" \t");
+  return value.substr(begin, end - begin + 1U);
+}
+
+double normalizeYaw(const double yaw)
+{
+  return std::atan2(std::sin(yaw), std::cos(yaw));
+}
+
+double yawFromQuaternion(const geometry_msgs::msg::Quaternion & quaternion)
+{
+  const double siny_cosp = 2.0 * ((quaternion.w * quaternion.z) + (quaternion.x * quaternion.y));
+  const double cosy_cosp =
+    1.0 - 2.0 * ((quaternion.y * quaternion.y) + (quaternion.z * quaternion.z));
+  return std::atan2(siny_cosp, cosy_cosp);
+}
+
+MapPoint rotateAndTranslatePoint(
+  const MapPoint & point,
+  const double translate_x,
+  const double translate_y,
+  const double yaw)
+{
+  const double cos_yaw = std::cos(yaw);
+  const double sin_yaw = std::sin(yaw);
+  return {
+    translate_x + (point.x * cos_yaw) - (point.y * sin_yaw),
+    translate_y + (point.x * sin_yaw) + (point.y * cos_yaw)};
+}
+
+MapPoint inverseRotateAndTranslatePoint(
+  const MapPoint & point,
+  const double translate_x,
+  const double translate_y,
+  const double yaw)
+{
+  const double dx = point.x - translate_x;
+  const double dy = point.y - translate_y;
+  const double cos_yaw = std::cos(yaw);
+  const double sin_yaw = std::sin(yaw);
+  return {
+    (dx * cos_yaw) + (dy * sin_yaw),
+    (-dx * sin_yaw) + (dy * cos_yaw)};
+}
 
 double clampToUnitInterval(const double value)
 {
@@ -878,6 +940,184 @@ nlohmann::json buildLocalPathGeoJson(
   };
 }
 
+CostmapArtifact loadCostmapArtifact(const std::filesystem::path & yaml_path)
+{
+  std::ifstream yaml_stream(yaml_path);
+  if (!yaml_stream.is_open()) {
+    throw std::runtime_error("Failed to open mission costmap yaml: " + yaml_path.string());
+  }
+
+  CostmapArtifact artifact;
+  std::string line;
+  while (std::getline(yaml_stream, line)) {
+    const auto colon = line.find(':');
+    if (colon == std::string::npos) {
+      continue;
+    }
+    const std::string key = trim(line.substr(0, colon));
+    const std::string value = trim(line.substr(colon + 1U));
+    if (key == "image") {
+      artifact.image_name = value;
+    } else if (key == "resolution") {
+      artifact.resolution = std::stod(value);
+    } else if (key == "origin") {
+      const auto open = value.find('[');
+      const auto comma = value.find(',', open + 1U);
+      const auto second_comma = value.find(',', comma + 1U);
+      artifact.origin_x = std::stod(trim(value.substr(open + 1U, comma - open - 1U)));
+      artifact.origin_y = std::stod(trim(value.substr(comma + 1U, second_comma - comma - 1U)));
+    }
+  }
+
+  if (artifact.image_name.empty() || artifact.resolution <= 0.0) {
+    throw std::runtime_error("Mission costmap yaml is missing required image/resolution fields: " + yaml_path.string());
+  }
+
+  const auto image_path = yaml_path.parent_path() / artifact.image_name;
+  std::ifstream image_stream(image_path, std::ios::binary);
+  if (!image_stream.is_open()) {
+    throw std::runtime_error("Failed to open mission costmap image: " + image_path.string());
+  }
+
+  std::string magic;
+  image_stream >> magic;
+  if (magic != "P5" && magic != "P2") {
+    throw std::runtime_error("Unsupported mission costmap image format: " + magic);
+  }
+
+  unsigned int width = 0U;
+  unsigned int height = 0U;
+  int max_value = 0;
+  image_stream >> width >> height >> max_value;
+  artifact.width_cells = width;
+  artifact.height_cells = height;
+  artifact.costs.resize(static_cast<std::size_t>(width) * height);
+
+  if (magic == "P5") {
+    image_stream.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    for (int row = static_cast<int>(height) - 1; row >= 0; --row) {
+      for (unsigned int col = 0; col < width; ++col) {
+        unsigned char pixel = 0U;
+        image_stream.read(reinterpret_cast<char *>(&pixel), 1);
+        const std::size_t index = static_cast<std::size_t>(row) * width + col;
+        artifact.costs[index] = static_cast<unsigned char>(255U - pixel);
+      }
+    }
+    return artifact;
+  }
+
+  for (int row = static_cast<int>(height) - 1; row >= 0; --row) {
+    for (unsigned int col = 0; col < width; ++col) {
+      int pixel_value = 0;
+      image_stream >> pixel_value;
+      const auto clamped_value = static_cast<unsigned char>(
+        std::clamp(pixel_value, 0, max_value) * 255 / std::max(1, max_value));
+      const std::size_t index = static_cast<std::size_t>(row) * width + col;
+      artifact.costs[index] = static_cast<unsigned char>(255U - clamped_value);
+    }
+  }
+
+  return artifact;
+}
+
+void saveCostmapArtifact(const CostmapArtifact & artifact, const std::filesystem::path & yaml_path)
+{
+  const auto image_path = yaml_path.parent_path() / artifact.image_name;
+
+  std::ofstream image_stream(image_path, std::ios::binary | std::ios::trunc);
+  if (!image_stream.is_open()) {
+    throw std::runtime_error("Failed to write mission costmap image: " + image_path.string());
+  }
+  image_stream << "P5\n" << artifact.width_cells << " " << artifact.height_cells << "\n255\n";
+  for (int row = static_cast<int>(artifact.height_cells) - 1; row >= 0; --row) {
+    for (unsigned int col = 0; col < artifact.width_cells; ++col) {
+      const std::size_t index = static_cast<std::size_t>(row) * artifact.width_cells + col;
+      const unsigned char pixel = static_cast<unsigned char>(255U - artifact.costs.at(index));
+      image_stream.write(reinterpret_cast<const char *>(&pixel), 1);
+    }
+  }
+
+  std::ofstream yaml_stream(yaml_path, std::ios::trunc);
+  if (!yaml_stream.is_open()) {
+    throw std::runtime_error("Failed to write mission costmap yaml: " + yaml_path.string());
+  }
+  yaml_stream
+    << "image: " << artifact.image_name << "\n"
+    << "mode: trinary\n"
+    << "resolution: " << artifact.resolution << "\n"
+    << "origin: [" << artifact.origin_x << ", " << artifact.origin_y << ", 0.0]\n"
+    << "negate: 0\n"
+    << "occupied_thresh: 0.65\n"
+    << "free_thresh: 0.196\n";
+}
+
+CostmapArtifact transformCostmapArtifact(
+  const CostmapArtifact & source,
+  const double translate_x,
+  const double translate_y,
+  const double yaw)
+{
+  std::vector<MapPoint> corners{
+    {source.origin_x, source.origin_y},
+    {source.origin_x + (static_cast<double>(source.width_cells) * source.resolution), source.origin_y},
+    {source.origin_x + (static_cast<double>(source.width_cells) * source.resolution),
+      source.origin_y + (static_cast<double>(source.height_cells) * source.resolution)},
+    {source.origin_x, source.origin_y + (static_cast<double>(source.height_cells) * source.resolution)}};
+
+  PolygonBounds bounds{
+    std::numeric_limits<double>::max(),
+    std::numeric_limits<double>::max(),
+    std::numeric_limits<double>::lowest(),
+    std::numeric_limits<double>::lowest()};
+  for (const auto & corner : corners) {
+    const auto transformed = rotateAndTranslatePoint(corner, translate_x, translate_y, yaw);
+    bounds.min_x = std::min(bounds.min_x, transformed.x);
+    bounds.min_y = std::min(bounds.min_y, transformed.y);
+    bounds.max_x = std::max(bounds.max_x, transformed.x);
+    bounds.max_y = std::max(bounds.max_y, transformed.y);
+  }
+
+  CostmapArtifact transformed = source;
+  transformed.origin_x = bounds.min_x;
+  transformed.origin_y = bounds.min_y;
+  transformed.width_cells = std::max(
+    1U,
+    static_cast<unsigned int>(std::ceil((bounds.max_x - bounds.min_x) / source.resolution)));
+  transformed.height_cells = std::max(
+    1U,
+    static_cast<unsigned int>(std::ceil((bounds.max_y - bounds.min_y) / source.resolution)));
+  transformed.costs.assign(
+    static_cast<std::size_t>(transformed.width_cells) * transformed.height_cells,
+    kRecordMapOutsideCost);
+
+  for (unsigned int row = 0U; row < transformed.height_cells; ++row) {
+    for (unsigned int col = 0U; col < transformed.width_cells; ++col) {
+      const MapPoint world_point{
+        transformed.origin_x + (static_cast<double>(col) + 0.5) * transformed.resolution,
+        transformed.origin_y + (static_cast<double>(row) + 0.5) * transformed.resolution};
+      const auto source_point =
+        inverseRotateAndTranslatePoint(world_point, translate_x, translate_y, yaw);
+      const int source_col =
+        static_cast<int>(std::floor((source_point.x - source.origin_x) / source.resolution));
+      const int source_row =
+        static_cast<int>(std::floor((source_point.y - source.origin_y) / source.resolution));
+      if (source_col < 0 || source_row < 0 ||
+        source_col >= static_cast<int>(source.width_cells) ||
+        source_row >= static_cast<int>(source.height_cells))
+      {
+        continue;
+      }
+      const std::size_t source_index =
+        static_cast<std::size_t>(source_row) * source.width_cells + static_cast<std::size_t>(source_col);
+      const std::size_t target_index =
+        static_cast<std::size_t>(row) * transformed.width_cells + static_cast<std::size_t>(col);
+      transformed.costs[target_index] = source.costs.at(source_index);
+    }
+  }
+
+  return transformed;
+}
+
 std::optional<nlohmann::json> buildGeoReferenceMetadata(
   const std::vector<MapPoint> & local_trace,
   const std::vector<GeoPoint> & geo_trace,
@@ -1377,6 +1617,9 @@ MissionExecutorNode::MissionExecutorNode(const rclcpp::NodeOptions & options)
   manual_mapping_navsat_topic_ = declare_parameter<std::string>(
     "manual_mapping_navsat_topic",
     "gnss/navsat");
+  routed_mission_odometry_topic_ = declare_parameter<std::string>(
+    "routed_mission_odometry_topic",
+    "odometry/fused");
   mission_parser_node_name_ = declare_parameter<std::string>(
     "mission_parser_node_name",
     "vda5050_parser_node");
@@ -1484,13 +1727,17 @@ MissionExecutorNode::MissionExecutorNode(const rclcpp::NodeOptions & options)
     manual_mapping_navsat_topic_,
     rclcpp::SystemDefaultsQoS(),
     std::bind(&MissionExecutorNode::handleManualMissionNavSat, this, std::placeholders::_1));
+  routed_mission_odometry_subscription_ = create_subscription<nav_msgs::msg::Odometry>(
+    routed_mission_odometry_topic_,
+    rclcpp::SystemDefaultsQoS(),
+    std::bind(&MissionExecutorNode::handleRoutedMissionOdometry, this, std::placeholders::_1));
   manual_mission_watchdog_timer_ = create_wall_timer(
     std::chrono::seconds(5),
     std::bind(&MissionExecutorNode::checkManualMissionInactivity, this));
 
   RCLCPP_INFO(
     get_logger(),
-    "Mission executor watching %s and manual templates %s with profile mapping scheduled=%u manual_mapping=%u routed=%u teleop=%u teleop odometry %s manual mapping odometry %s and navsat %s",
+    "Mission executor watching %s and manual templates %s with profile mapping scheduled=%u manual_mapping=%u routed=%u teleop=%u teleop odometry %s manual mapping odometry %s routed mission odometry %s and navsat %s",
     missions_directory_.c_str(),
     resolveManualMissionsDirectory().string().c_str(),
     scheduled_running_profile_id_,
@@ -1499,6 +1746,7 @@ MissionExecutorNode::MissionExecutorNode(const rclcpp::NodeOptions & options)
     manual_teleop_profile_id_,
     teleop_odometry_topic_.c_str(),
     manual_mapping_odometry_topic_.c_str(),
+    routed_mission_odometry_topic_.c_str(),
     manual_mapping_navsat_topic_.c_str());
 }
 
@@ -1796,6 +2044,7 @@ void MissionExecutorNode::handleExecuteMission(
         request->mission_window_start,
         request->mission_window_end);
     }
+    rewriteBuiltinLocalPatternArtifacts(resolved_mission, context);
     std::string message;
     if (!requestRunningState(context, *request, message)) {
       response->success = false;
@@ -2017,6 +2266,18 @@ void MissionExecutorNode::handleManualMissionNavSat(const sensor_msgs::msg::NavS
   if (!actual_path_file.empty()) {
     refreshLocalPathGeoReference(actual_path_file, actual_navsat_path_file, geo_trace);
   }
+}
+
+void MissionExecutorNode::handleRoutedMissionOdometry(const nav_msgs::msg::Odometry::SharedPtr message)
+{
+  if (!message) {
+    return;
+  }
+
+  std::lock_guard<std::mutex> lock(routed_mission_pose_mutex_);
+  routed_mission_position_ = message->pose.pose.position;
+  routed_mission_orientation_ = message->pose.pose.orientation;
+  routed_mission_pose_ready_ = true;
 }
 
 void MissionExecutorNode::checkManualMissionInactivity()
@@ -2417,6 +2678,8 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
     {"mission_window_end", mission_window_end},
     {"run_started_at", run_timestamp},
     {"source_mission_file", mission_file.string()},
+    {"source_mission_route_file", mission_route.string()},
+    {"source_mission_costmap_yaml", mission_costmap_yaml.string()},
     {"actual_path_file", actual_path_file.string()},
     {"actual_path_navsat_file", actual_path_navsat_file.string()},
     {"gaussian_output_directory", gaussian_output_directory.string()},
@@ -2437,6 +2700,114 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
   prepared.execution_context_file = execution_context_file.string();
   prepared.running_profile_id = mission.running_profile_id;
   return prepared;
+}
+
+void MissionExecutorNode::rewriteBuiltinLocalPatternArtifacts(
+  const ManualMissionInfo & mission,
+  const PreparedMissionContext & context) const
+{
+  if (toLower(mission.mission_type) != kBuiltinLocalPatternMissionType) {
+    return;
+  }
+
+  geometry_msgs::msg::Point start_position;
+  geometry_msgs::msg::Quaternion start_orientation;
+  {
+    std::lock_guard<std::mutex> lock(routed_mission_pose_mutex_);
+    if (!routed_mission_pose_ready_) {
+      throw std::runtime_error(
+              "No routed mission start pose is available yet on " + routed_mission_odometry_topic_);
+    }
+    start_position = routed_mission_position_;
+    start_orientation = routed_mission_orientation_;
+  }
+
+  const double start_yaw = normalizeYaw(yawFromQuaternion(start_orientation));
+  const std::filesystem::path execution_context_file(context.execution_context_file);
+  auto context_document = loadJsonDocument(execution_context_file);
+
+  const std::filesystem::path run_route_file(
+    context_document.value("mission_route_file", std::string{}));
+  const std::filesystem::path run_costmap_yaml(
+    context_document.value("mission_costmap_yaml", std::string{}));
+  std::filesystem::path source_route_file(
+    context_document.value("source_mission_route_file", std::string{}));
+  std::filesystem::path source_costmap_yaml(
+    context_document.value("source_mission_costmap_yaml", std::string{}));
+  if (source_route_file.empty()) {
+    source_route_file = run_route_file;
+  }
+  if (source_costmap_yaml.empty()) {
+    source_costmap_yaml = run_costmap_yaml;
+  }
+
+  if (run_route_file.empty() || run_costmap_yaml.empty() ||
+    source_route_file.empty() || source_costmap_yaml.empty())
+  {
+    throw std::runtime_error("Mission execution context is missing local-pattern artifact paths");
+  }
+
+  auto route_document = loadJsonDocument(source_route_file);
+  if (!route_document.contains("features") || !route_document.at("features").is_array()) {
+    throw std::runtime_error("Local-pattern route artifact does not contain a GeoJSON feature list");
+  }
+
+  for (auto & feature : route_document["features"]) {
+    if (!feature.contains("geometry") || !feature["geometry"].is_object()) {
+      continue;
+    }
+    auto & geometry = feature["geometry"];
+    if (!geometry.contains("type") || geometry["type"] != "LineString" ||
+      !geometry.contains("coordinates") || !geometry["coordinates"].is_array())
+    {
+      continue;
+    }
+
+    for (auto & coordinate : geometry["coordinates"]) {
+      if (!coordinate.is_array() || coordinate.size() < 2U) {
+        continue;
+      }
+      const MapPoint transformed = rotateAndTranslatePoint(
+        {coordinate.at(0).get<double>(), coordinate.at(1).get<double>()},
+        start_position.x,
+        start_position.y,
+        start_yaw);
+      coordinate[0] = transformed.x;
+      coordinate[1] = transformed.y;
+    }
+
+    if (!feature.contains("properties") || !feature["properties"].is_object()) {
+      feature["properties"] = nlohmann::json::object();
+    }
+    feature["properties"]["coordinate_frame"] = "odom";
+  }
+
+  {
+    std::ofstream route_stream(run_route_file, std::ios::trunc);
+    if (!route_stream.is_open()) {
+      throw std::runtime_error("Failed to rewrite local-pattern route artifact: " + run_route_file.string());
+    }
+    route_stream << std::setw(2) << route_document << '\n';
+  }
+
+  const CostmapArtifact source_costmap = loadCostmapArtifact(source_costmap_yaml);
+  const CostmapArtifact transformed_costmap = transformCostmapArtifact(
+    source_costmap,
+    start_position.x,
+    start_position.y,
+    start_yaw);
+  saveCostmapArtifact(transformed_costmap, run_costmap_yaml);
+
+  context_document["local_pattern_start_pose"] = {
+    {"frame_id", "odom"},
+    {"x", start_position.x},
+    {"y", start_position.y},
+    {"yaw", start_yaw}};
+  std::ofstream context_stream(execution_context_file, std::ios::trunc);
+  if (!context_stream.is_open()) {
+    throw std::runtime_error("Failed to update execution context with local-pattern start pose");
+  }
+  context_stream << std::setw(2) << context_document << '\n';
 }
 
 std::optional<nlohmann::json> MissionExecutorNode::resolveExecutionContext(
