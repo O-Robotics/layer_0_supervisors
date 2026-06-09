@@ -1025,7 +1025,7 @@ profiles:
 
 
   # ---------------------------------------------------------------------------
-  # Profile 205 (manual teleoperation with localization)
+  # Profile 205 (manual teleoperation to record temporary maps)
   # ---------------------------------------------------------------------------
   - profile:
       id: 205
@@ -1048,8 +1048,8 @@ profiles:
               - "use_amr_sweeper_usb_cameras:=true"
               - "use_amr_sweeper_depth_camera:=true"
               - "use_amr_sweeper_imu:=true"
-              - "use_amr_sweeper_gnss:=true"
-              - "use_ntrip_client:=true"
+              - "use_amr_sweeper_gnss:=false"
+              - "use_ntrip_client:=false"
             ready:
               - type: "topic"
                 target: "system_info/system_info"
@@ -1062,9 +1062,6 @@ profiles:
                 required: true
               - type: "topic"
                 target: "imu/data_heading"
-                required: true
-              - type: "topic"
-                target: "gnss/navsat"
                 required: true
               - type: "topic"
                 target: "battery/battery_state"
@@ -1101,12 +1098,6 @@ profiles:
                 required: true
               - type: "service"
                 target: "imu/imu_node/get_parameters"
-                required: true
-              - type: "service"
-                target: "gnss/gnss_node/get_parameters"
-                required: true
-              - type: "service"
-                target: "gnss/ntrip_client/get_parameters"
                 required: true
               - type: "topic"
                 target: "joint_states"
@@ -1215,7 +1206,7 @@ profiles:
             sigkill_timeout_ms: 1500
 
         - name: "amr_sweeper_layer_3_navigation_bringup"
-          importance: "degraded"
+          importance: "critical"
           startup:
             exec: "ros2 launch amr_sweeper_layer_3_navigation_bringup amr_sweeper_layer_3_navigation_bringup.launch.py"
             args:
@@ -1223,11 +1214,12 @@ profiles:
               - "use_sim_time:=false"
               - "use_amr_sweeper_visual_odometry:=false"
               - "use_amr_sweeper_localization:=true"
-              - "use_amr_sweeper_mapping:=false"
-              - "use_amr_sweeper_waypoint_follower:=false"
+              - "use_gnss:=false"
+              - "use_amr_sweeper_mapping:=true"
+              - "use_amr_sweeper_waypoint_follower:=true"
               - "auto_start_mission:=false"
-              - "use_test:={use_test}"
-              - "test_output_directory:={test_output_directory}"
+              - "use_test:=true"
+              - "test_output_directory:=/tmp/amr_sweeper_profile_205_record_map"
             ready:
               - type: "topic"
                 target: "odometry/fused"
@@ -1238,15 +1230,45 @@ profiles:
               - type: "lifecycle"
                 target: "fusioncore"
                 required: true
+              - type: "lifecycle"
+                target: "slam_toolbox"
+                required: true
+              - type: "lifecycle"
+                target: "controller_server"
+                required: true
+              - type: "lifecycle"
+                target: "planner_server"
+                required: true
+              - type: "lifecycle"
+                target: "bt_navigator"
+                required: true
+              - type: "lifecycle"
+                target: "waypoint_follower"
+                required: true
+              - type: "service"
+                target: "amr_sweeper_slam_node/get_parameters"
+                required: true
+              - type: "service"
+                target: "amr_sweeper_gaussian_node/get_parameters"
+                required: true
+              - type: "service"
+                target: "amr_sweeper_mapping_node/get_parameters"
+                required: true
+              - type: "topic"
+                target: "map"
+                required: true
+              - type: "topic"
+                target: "global_costmap/costmap"
+                required: true
             window_ms: 45000
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "level>=ERROR;action=FAULT"
           errors:
-            on_readiness_fail: "DEGRADED"
-            on_unexpected_exit: "DEGRADED"
-            priority: 230
-            force: false
+            on_readiness_fail: "FAULT"
+            on_unexpected_exit: "FAULT"
+            priority: 250
+            force: true
           restart:
             max_restarts: 5
             restart_delay_ms: 1000
