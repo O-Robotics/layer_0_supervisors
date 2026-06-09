@@ -1219,7 +1219,6 @@ profiles:
               - "use_amr_sweeper_localization:=true"
               - "use_amr_sweeper_mapping:=true"
               - "use_amr_sweeper_waypoint_follower:=false"
-              - "mission_execution_directory:={mission_execution_directory}"
               - "auto_start_mission:=false"
               - "use_test:={use_test}"
               - "test_output_directory:={test_output_directory}"
