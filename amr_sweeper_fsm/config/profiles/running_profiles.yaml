@@ -1231,7 +1231,7 @@ profiles:
                 target: "amr_sweeper_mapping_node/get_parameters"
                 required: true
               - type: "topic"
-                target: "map"
+                target: "mapping/map"
                 required: true
               - type: "topic"
                 target: "global_costmap/costmap"
