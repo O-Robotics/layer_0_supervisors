@@ -128,7 +128,7 @@ def generate_launch_description():
     ]
 
     runtime_override_parameters = [
-        {f"runtime.{name}": value}
+        {f"runtime.{name}": ParameterValue(value, value_type=str)}
         for name, value in runtime_override_args.items()
     ]
 
