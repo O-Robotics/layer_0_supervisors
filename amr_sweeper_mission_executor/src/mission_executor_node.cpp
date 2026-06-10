@@ -149,12 +149,12 @@ std::string trim(const std::string & value)
   return value.substr(begin, end - begin + 1U);
 }
 
-double normalizeYaw(const double yaw)
+[[maybe_unused]] double normalizeYaw(const double yaw)
 {
   return std::atan2(std::sin(yaw), std::cos(yaw));
 }
 
-double yawFromQuaternion(const geometry_msgs::msg::Quaternion & quaternion)
+[[maybe_unused]] double yawFromQuaternion(const geometry_msgs::msg::Quaternion & quaternion)
 {
   const double siny_cosp = 2.0 * ((quaternion.w * quaternion.z) + (quaternion.x * quaternion.y));
   const double cosy_cosp =
@@ -940,7 +940,7 @@ nlohmann::json buildLocalPathGeoJson(
   };
 }
 
-CostmapArtifact loadCostmapArtifact(const std::filesystem::path & yaml_path)
+[[maybe_unused]] CostmapArtifact loadCostmapArtifact(const std::filesystem::path & yaml_path)
 {
   std::ifstream yaml_stream(yaml_path);
   if (!yaml_stream.is_open()) {
@@ -1020,7 +1020,9 @@ CostmapArtifact loadCostmapArtifact(const std::filesystem::path & yaml_path)
   return artifact;
 }
 
-void saveCostmapArtifact(const CostmapArtifact & artifact, const std::filesystem::path & yaml_path)
+[[maybe_unused]] void saveCostmapArtifact(
+  const CostmapArtifact & artifact,
+  const std::filesystem::path & yaml_path)
 {
   const auto image_path = yaml_path.parent_path() / artifact.image_name;
 
@@ -1051,7 +1053,7 @@ void saveCostmapArtifact(const CostmapArtifact & artifact, const std::filesystem
     << "free_thresh: 0.196\n";
 }
 
-CostmapArtifact transformCostmapArtifact(
+[[maybe_unused]] CostmapArtifact transformCostmapArtifact(
   const CostmapArtifact & source,
   const double translate_x,
   const double translate_y,
