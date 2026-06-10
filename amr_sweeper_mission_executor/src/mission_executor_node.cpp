@@ -2714,56 +2714,19 @@ void MissionExecutorNode::rewriteBuiltinLocalPatternArtifacts(
     return;
   }
 
-  geometry_msgs::msg::Point start_position;
-  geometry_msgs::msg::Quaternion start_orientation;
-  rclcpp::Time start_stamp{0, 0, get_clock()->get_clock_type()};
-  {
-    std::lock_guard<std::mutex> lock(routed_mission_pose_mutex_);
-    if (!routed_mission_pose_ready_) {
-      throw std::runtime_error(
-              "No routed mission start pose is available yet on " + routed_mission_odometry_topic_);
-    }
-    start_position = routed_mission_position_;
-    start_orientation = routed_mission_orientation_;
-    start_stamp = routed_mission_pose_stamp_;
-  }
-
-  if (start_stamp.nanoseconds() == 0) {
-    throw std::runtime_error(
-            "Routed mission start pose on " + routed_mission_odometry_topic_ +
-            " has no valid timestamp yet.");
-  }
-
-  const double pose_age_seconds = std::abs((now() - start_stamp).seconds());
-  if (pose_age_seconds > routed_mission_pose_max_age_seconds_) {
-    throw std::runtime_error(
-            "Routed mission start pose on " + routed_mission_odometry_topic_ +
-            " is stale (" + std::to_string(pose_age_seconds) + " s old).");
-  }
-
-  const double start_yaw = normalizeYaw(yawFromQuaternion(start_orientation));
   const std::filesystem::path execution_context_file(context.execution_context_file);
   auto context_document = loadJsonDocument(execution_context_file);
 
   const std::filesystem::path run_route_file(
     context_document.value("mission_route_file", std::string{}));
-  const std::filesystem::path run_costmap_yaml(
-    context_document.value("mission_costmap_yaml", std::string{}));
   std::filesystem::path source_route_file(
     context_document.value("source_mission_route_file", std::string{}));
-  std::filesystem::path source_costmap_yaml(
-    context_document.value("source_mission_costmap_yaml", std::string{}));
   if (source_route_file.empty()) {
     source_route_file = run_route_file;
   }
-  if (source_costmap_yaml.empty()) {
-    source_costmap_yaml = run_costmap_yaml;
-  }
 
-  if (run_route_file.empty() || run_costmap_yaml.empty() ||
-    source_route_file.empty() || source_costmap_yaml.empty())
-  {
-    throw std::runtime_error("Mission execution context is missing local-pattern artifact paths");
+  if (run_route_file.empty() || source_route_file.empty()) {
+    throw std::runtime_error("Mission execution context is missing local-pattern route artifacts");
   }
 
   auto route_document = loadJsonDocument(source_route_file);
@@ -2782,47 +2745,10 @@ void MissionExecutorNode::rewriteBuiltinLocalPatternArtifacts(
       continue;
     }
 
-    for (auto & coordinate : geometry["coordinates"]) {
-      if (!coordinate.is_array() || coordinate.size() < 2U) {
-        continue;
-      }
-      const MapPoint transformed = rotateAndTranslatePoint(
-        {coordinate.at(0).get<double>(), coordinate.at(1).get<double>()},
-        start_position.x,
-        start_position.y,
-        start_yaw);
-      coordinate[0] = transformed.x;
-      coordinate[1] = transformed.y;
-    }
-
     if (!feature.contains("properties") || !feature["properties"].is_object()) {
       feature["properties"] = nlohmann::json::object();
     }
-    feature["properties"]["coordinate_frame"] = "odom";
-  }
-
-  const auto transformed_features = route_document.at("features");
-  if (!transformed_features.empty() &&
-    transformed_features.at(0).contains("geometry") &&
-    transformed_features.at(0).at("geometry").contains("coordinates") &&
-    transformed_features.at(0).at("geometry").at("coordinates").is_array())
-  {
-    const auto & coordinates = transformed_features.at(0).at("geometry").at("coordinates");
-    if (coordinates.size() >= 2U) {
-      RCLCPP_INFO(
-        get_logger(),
-        "Anchored builtin local pattern %s at odom x=%.3f y=%.3f yaw=%.3f rad (%.1f deg), pose age %.2f s. First route points: [%.3f, %.3f] -> [%.3f, %.3f]",
-        mission.mission_id.c_str(),
-        start_position.x,
-        start_position.y,
-        start_yaw,
-        start_yaw * 180.0 / M_PI,
-        pose_age_seconds,
-        coordinates.at(0).at(0).get<double>(),
-        coordinates.at(0).at(1).get<double>(),
-        coordinates.at(1).at(0).get<double>(),
-        coordinates.at(1).at(1).get<double>());
-    }
+    feature["properties"]["coordinate_frame"] = "base_footprint";
   }
 
   {
@@ -2833,24 +2759,19 @@ void MissionExecutorNode::rewriteBuiltinLocalPatternArtifacts(
     route_stream << std::setw(2) << route_document << '\n';
   }
 
-  const CostmapArtifact source_costmap = loadCostmapArtifact(source_costmap_yaml);
-  const CostmapArtifact transformed_costmap = transformCostmapArtifact(
-    source_costmap,
-    start_position.x,
-    start_position.y,
-    start_yaw);
-  saveCostmapArtifact(transformed_costmap, run_costmap_yaml);
-
-  context_document["local_pattern_start_pose"] = {
-    {"frame_id", "odom"},
-    {"x", start_position.x},
-    {"y", start_position.y},
-    {"yaw", start_yaw}};
+  context_document["mission_costmap_yaml"] = "";
+  context_document["source_mission_costmap_yaml"] = "";
   std::ofstream context_stream(execution_context_file, std::ios::trunc);
   if (!context_stream.is_open()) {
-    throw std::runtime_error("Failed to update execution context with local-pattern start pose");
+    throw std::runtime_error("Failed to update execution context for local-pattern mission");
   }
   context_stream << std::setw(2) << context_document << '\n';
+
+  RCLCPP_INFO(
+    get_logger(),
+    "Prepared builtin local pattern %s for mission-start anchoring in layer 3; route frame set to "
+    "base_footprint and mission costmap disabled.",
+    mission.mission_id.c_str());
 }
 
 std::optional<nlohmann::json> MissionExecutorNode::resolveExecutionContext(
