@@ -154,6 +154,131 @@ profiles:
             sigkill_timeout_ms: 1000
 
   # ---------------------------------------------------------------------------
+  # Profile 102 (default without battery, for PSU power)
+  # ---------------------------------------------------------------------------
+  - profile:
+      id: 102
+      transitions:
+        auto_transition_on: false
+        auto_transition_profile:
+        fault_transition_on: true
+        fault_transition_profile: 400
+
+      processes:
+        - name: "amr_sweeper_vda5050_parser"
+          importance: "degraded"
+          startup:
+            exec: "ros2 launch amr_sweeper_vda5050_parser amr_sweeper_vda5050_parser.launch.py"
+            args:
+              - "namespace:={ns}"
+              - "use_sim_time:=false"
+              - "missions_directory:=missions/database"
+              - "auto_build_on_start:=true"
+              - "watch_for_updates:=true"
+            ready:
+              - type: "service"
+                target: "vda5050_parser_node/get_parameters"
+                required: true
+            window_ms: 6000
+          rosout_triggers:
+            - "node=vda5050_parser_node;level>=ERROR;action=DEGRADED"
+          errors:
+            on_readiness_fail: "DEGRADED"
+            on_unexpected_exit: "DEGRADED"
+            priority: 220
+            force: false
+          restart:
+            max_restarts: 5
+            restart_delay_ms: 1000
+          shutdown:
+            sigint_timeout_ms: 1000
+            sigterm_timeout_ms: 1000
+            sigkill_timeout_ms: 1000
+
+        - name: "amr_sweeper_scheduler"
+          importance: "degraded"
+          startup:
+            exec: "ros2 launch amr_sweeper_scheduler amr_sweeper_scheduler.launch.py"
+            args:
+              - "namespace:={ns}"
+              - "use_sim_time:=false"
+              - "missions_directory:=missions/database"
+            ready:
+              - type: "service"
+                target: "reload_schedule"
+                required: true
+            window_ms: 6000
+          rosout_triggers:
+            - "node=amr_sweeper_scheduler;level>=ERROR;action=DEGRADED"
+          errors:
+            on_readiness_fail: "DEGRADED"
+            on_unexpected_exit: "DEGRADED"
+            priority: 220
+            force: false
+          restart:
+            max_restarts: 5
+            restart_delay_ms: 1000
+          shutdown:
+            sigint_timeout_ms: 1000
+            sigterm_timeout_ms: 1000
+            sigkill_timeout_ms: 1000
+
+      # Logic block: layer_1_hardware bringup (critical)
+        - name: "amr_sweeper_layer_1_hardware_bringup"
+          importance: "critical"
+          startup:
+            exec: "ros2 launch amr_sweeper_layer_1_hardware_bringup amr_sweeper_layer_1_hardware_bringup.launch.py"
+            args:
+              - "namespace:={ns}"
+              - "use_amr_sweeper_ros2_control:=false"
+              - "use_amr_sweeper_battery:=false"
+              - "use_amr_sweeper_system_info:=true"
+              - "use_amr_sweeper_usb_cameras:=false"
+              - "use_amr_sweeper_depth_camera:=false"
+              - "use_amr_sweeper_imu:=false"
+              - "use_amr_sweeper_gnss:=true"
+              - "use_ntrip_client:=false"
+            ready:
+              - type: "topic"
+                target: "system_info/system_info"
+                required: true
+              - type: "topic"
+                target: "gnss/navsat"
+                required: true
+              - type: "topic"
+                target: "robot_description"
+                required: true
+              - type: "service"
+                target: "robot_state_publisher/get_parameters"
+                required: true
+              - type: "service"
+                target: "system_info/system_info_node/get_parameters"
+                required: true
+              - type: "service"
+                target: "gnss/gnss_node/get_parameters"
+                required: true
+              - type: "topic"
+                target: "layer_1_hardware_bringup/ready"
+                required: true
+            window_ms: 45000
+          rosout_triggers:
+            - "node=system_info_node;level>=ERROR;action=FAULT"
+            - "node=system_info_node;level>=WARN;action=DEGRADED"
+            - "node=system_info_node;match=Could not open file;action=FAULT"
+          errors:
+            on_readiness_fail: "FAULT"
+            on_unexpected_exit: "FAULT"
+            priority: 250
+            force: true
+          restart:
+            max_restarts: 5
+            restart_delay_ms: 1000
+          shutdown:
+            sigint_timeout_ms: 1000
+            sigterm_timeout_ms: 1000
+            sigkill_timeout_ms: 1000
+
+  # ---------------------------------------------------------------------------
   # Profile 110 (testing)
   # ---------------------------------------------------------------------------
   - profile:
