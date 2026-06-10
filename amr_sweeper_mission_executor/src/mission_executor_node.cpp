@@ -128,44 +128,6 @@ std::string defaultIfEmpty(const std::string & value, const std::string & fallba
 
 std::string sanitizeUidToken(std::string value);
 
-std::string trim(const std::string & value)
-{
-  const auto begin = value.find_first_not_of(" \t");
-  if (begin == std::string::npos) {
-    return "";
-  }
-  const auto end = value.find_last_not_of(" \t");
-  return value.substr(begin, end - begin + 1U);
-}
-
-MapPoint rotateAndTranslatePoint(
-  const MapPoint & point,
-  const double translate_x,
-  const double translate_y,
-  const double yaw)
-{
-  const double cos_yaw = std::cos(yaw);
-  const double sin_yaw = std::sin(yaw);
-  return {
-    translate_x + (point.x * cos_yaw) - (point.y * sin_yaw),
-    translate_y + (point.x * sin_yaw) + (point.y * cos_yaw)};
-}
-
-MapPoint inverseRotateAndTranslatePoint(
-  const MapPoint & point,
-  const double translate_x,
-  const double translate_y,
-  const double yaw)
-{
-  const double dx = point.x - translate_x;
-  const double dy = point.y - translate_y;
-  const double cos_yaw = std::cos(yaw);
-  const double sin_yaw = std::sin(yaw);
-  return {
-    (dx * cos_yaw) + (dy * sin_yaw),
-    (-dx * sin_yaw) + (dy * cos_yaw)};
-}
-
 double clampToUnitInterval(const double value)
 {
   return std::max(0.0, std::min(1.0, value));
