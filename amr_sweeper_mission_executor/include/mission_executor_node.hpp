@@ -164,6 +164,7 @@ private:
   double manual_mission_min_linear_speed_mps_{0.01};
   double manual_mission_min_angular_speed_rps_{0.01};
   double teleop_path_sample_distance_m_{0.1};
+  double routed_mission_pose_max_age_seconds_{2.0};
   std::uint16_t idling_profile_id_{101U};
   std::uint16_t scheduled_running_profile_id_{201U};
   std::uint16_t manual_mapping_profile_id_{202U};
@@ -204,6 +205,7 @@ private:
   bool routed_mission_pose_ready_{false};
   geometry_msgs::msg::Point routed_mission_position_;
   geometry_msgs::msg::Quaternion routed_mission_orientation_;
+  rclcpp::Time routed_mission_pose_stamp_{0, 0, RCL_ROS_TIME};
 };
 
 }  // namespace amr_sweeper_mission_executor

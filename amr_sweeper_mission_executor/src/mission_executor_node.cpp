@@ -1637,6 +1637,9 @@ MissionExecutorNode::MissionExecutorNode(const rclcpp::NodeOptions & options)
     "manual_mission_min_angular_speed_rps",
     0.01);
   teleop_path_sample_distance_m_ = declare_parameter<double>("teleop_path_sample_distance_m", 0.1);
+  routed_mission_pose_max_age_seconds_ = declare_parameter<double>(
+    "routed_mission_pose_max_age_seconds",
+    2.0);
   idling_profile_id_ = static_cast<std::uint16_t>(
     declare_parameter<int>("idling_profile_id", 101));
   scheduled_running_profile_id_ = static_cast<std::uint16_t>(
@@ -2277,6 +2280,7 @@ void MissionExecutorNode::handleRoutedMissionOdometry(const nav_msgs::msg::Odome
   std::lock_guard<std::mutex> lock(routed_mission_pose_mutex_);
   routed_mission_position_ = message->pose.pose.position;
   routed_mission_orientation_ = message->pose.pose.orientation;
+  routed_mission_pose_stamp_ = message->header.stamp;
   routed_mission_pose_ready_ = true;
 }
 
@@ -2712,6 +2716,7 @@ void MissionExecutorNode::rewriteBuiltinLocalPatternArtifacts(
 
   geometry_msgs::msg::Point start_position;
   geometry_msgs::msg::Quaternion start_orientation;
+  rclcpp::Time start_stamp{0, 0, get_clock()->get_clock_type()};
   {
     std::lock_guard<std::mutex> lock(routed_mission_pose_mutex_);
     if (!routed_mission_pose_ready_) {
@@ -2720,6 +2725,20 @@ void MissionExecutorNode::rewriteBuiltinLocalPatternArtifacts(
     }
     start_position = routed_mission_position_;
     start_orientation = routed_mission_orientation_;
+    start_stamp = routed_mission_pose_stamp_;
+  }
+
+  if (start_stamp.nanoseconds() == 0) {
+    throw std::runtime_error(
+            "Routed mission start pose on " + routed_mission_odometry_topic_ +
+            " has no valid timestamp yet.");
+  }
+
+  const double pose_age_seconds = std::abs((now() - start_stamp).seconds());
+  if (pose_age_seconds > routed_mission_pose_max_age_seconds_) {
+    throw std::runtime_error(
+            "Routed mission start pose on " + routed_mission_odometry_topic_ +
+            " is stale (" + std::to_string(pose_age_seconds) + " s old).");
   }
 
   const double start_yaw = normalizeYaw(yawFromQuaternion(start_orientation));
@@ -2780,6 +2799,30 @@ void MissionExecutorNode::rewriteBuiltinLocalPatternArtifacts(
       feature["properties"] = nlohmann::json::object();
     }
     feature["properties"]["coordinate_frame"] = "odom";
+  }
+
+  const auto transformed_features = route_document.at("features");
+  if (!transformed_features.empty() &&
+    transformed_features.at(0).contains("geometry") &&
+    transformed_features.at(0).at("geometry").contains("coordinates") &&
+    transformed_features.at(0).at("geometry").at("coordinates").is_array())
+  {
+    const auto & coordinates = transformed_features.at(0).at("geometry").at("coordinates");
+    if (coordinates.size() >= 2U) {
+      RCLCPP_INFO(
+        get_logger(),
+        "Anchored builtin local pattern %s at odom x=%.3f y=%.3f yaw=%.3f rad (%.1f deg), pose age %.2f s. First route points: [%.3f, %.3f] -> [%.3f, %.3f]",
+        mission.mission_id.c_str(),
+        start_position.x,
+        start_position.y,
+        start_yaw,
+        start_yaw * 180.0 / M_PI,
+        pose_age_seconds,
+        coordinates.at(0).at(0).get<double>(),
+        coordinates.at(0).at(1).get<double>(),
+        coordinates.at(1).at(0).get<double>(),
+        coordinates.at(1).at(1).get<double>());
+    }
   }
 
   {
