@@ -21,6 +21,7 @@ find_package(yaml_cpp_vendor REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
 find_package(lifecycle_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(builtin_interfaces REQUIRED)
 find_package(rcl_interfaces REQUIRED)
@@ -87,6 +88,7 @@ ament_target_dependencies(supervisor_node
   rclcpp
   rclcpp_lifecycle
   lifecycle_msgs
+  geometry_msgs
   ament_index_cpp
   rcl_interfaces
   controller_manager_msgs

@@ -212,6 +212,11 @@ static std::string green_log_text(const std::string & text)
   return std::string(kGreen) + text + kReset;
 }
 
+static geometry_msgs::msg::Twist zero_twist()
+{
+  return geometry_msgs::msg::Twist{};
+}
+
 // -----------------------------------------------------------------------------
 // Helpers
 // -----------------------------------------------------------------------------
@@ -261,6 +266,9 @@ SupervisorNode::SupervisorNode()
   service_wait_ms_ = this->declare_parameter<int>("service_wait_ms", service_wait_ms_);
   op_timeout_ms_ = this->declare_parameter<int>("op_timeout_ms", op_timeout_ms_);
   tick_period_ms_ = this->declare_parameter<int>("tick_period_ms", tick_period_ms_);
+  safety_stop_topic_ = this->declare_parameter<std::string>("safety_stop_topic", safety_stop_topic_);
+  wheel_stop_topic_ = this->declare_parameter<std::string>("wheel_stop_topic", wheel_stop_topic_);
+  tool_stop_topic_ = this->declare_parameter<std::string>("tool_stop_topic", tool_stop_topic_);
 
   // Startup profile selection.
   // NOTE: Launch may provide this parameter as a startup override.
@@ -282,6 +290,15 @@ SupervisorNode::SupervisorNode()
   request_srv_ = this->create_service<amr_sweeper_fsm::srv::RequestState>(
     "request_state",
     std::bind(&SupervisorNode::on_request_state, this, std::placeholders::_1, std::placeholders::_2));
+  safety_stop_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(
+    safety_stop_topic_,
+    rclcpp::SystemDefaultsQoS());
+  wheel_stop_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(
+    wheel_stop_topic_,
+    rclcpp::SystemDefaultsQoS());
+  tool_stop_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(
+    tool_stop_topic_,
+    rclcpp::SystemDefaultsQoS());
 
   init_clients();
 
@@ -392,6 +409,8 @@ void SupervisorNode::request_change_state(
 
 void SupervisorNode::start_enter_state(FSMState target)
 {
+  publish_immediate_stop_commands();
+
   // Enter = inspect target lifecycle state, then configure + activate target as needed.
   op_target_ = target;
   op_target_profile_ = desired_profile_;
@@ -430,6 +449,8 @@ void SupervisorNode::start_enter_state(FSMState target)
 
 void SupervisorNode::start_switch_to(FSMState target)
 {
+  publish_immediate_stop_commands();
+
   // Switch = (best-effort exit current) then enter target
   op_target_ = target;
   op_target_profile_ = desired_profile_;
@@ -486,6 +507,21 @@ void SupervisorNode::start_switch_to(FSMState target)
     RCLCPP_INFO(this->get_logger(), "%s", msg.c_str());
   }
 
+}
+
+void SupervisorNode::publish_immediate_stop_commands()
+{
+  const auto zero = zero_twist();
+
+  if (safety_stop_pub_) {
+    safety_stop_pub_->publish(zero);
+  }
+  if (wheel_stop_pub_) {
+    wheel_stop_pub_->publish(zero);
+  }
+  if (tool_stop_pub_) {
+    tool_stop_pub_->publish(zero);
+  }
 }
 
 void SupervisorNode::drive()

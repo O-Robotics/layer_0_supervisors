@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "geometry_msgs/msg/twist.hpp"
 #include "amr_sweeper_fsm/msg/fsm_state.hpp"
 #include "amr_sweeper_fsm/msg/fsm_status.hpp"
 #include "amr_sweeper_fsm/srv/request_state.hpp"
@@ -108,6 +109,7 @@ private:
 
   void start_enter_state(FSMState s);
   void start_switch_to(FSMState s);
+  void publish_immediate_stop_commands();
 
   // ===========================================================================
   // Request handling
@@ -233,6 +235,9 @@ private:
 
   // ROS interfaces.
   rclcpp::Service<amr_sweeper_fsm::srv::RequestState>::SharedPtr request_srv_;
+  rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr safety_stop_pub_;
+  rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr wheel_stop_pub_;
+  rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr tool_stop_pub_;
 
   // Engine tick timer.
   rclcpp::TimerBase::SharedPtr tick_timer_;
@@ -241,6 +246,9 @@ private:
   int service_wait_ms_{500};
   int op_timeout_ms_{1500};
   int tick_period_ms_{100};
+  std::string safety_stop_topic_{"cmd_vel_safety_stop"};
+  std::string wheel_stop_topic_{"cmd_vel_sweep_wheels"};
+  std::string tool_stop_topic_{"cmd_vel_sweep_tools"};
 };
 
 }  // namespace fsm_layer_0
