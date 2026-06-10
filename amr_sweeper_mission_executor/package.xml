@@ -12,7 +12,7 @@
   <member_of_group>rosidl_interface_packages</member_of_group>
 
   <depend>ament_index_cpp</depend>
-  <exec_depend>amr_sweeper_default_missions</exec_depend>
+  <exec_depend>amr_sweeper_navigation</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
   <depend>amr_sweeper_fsm</depend>

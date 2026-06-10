@@ -8,7 +8,7 @@ Dependencies to other AMR Sweeper packages:
 - `amr_sweeper_fsm`
 - `amr_sweeper_mission_executor`
 - `amr_sweeper_vda5050_parser`
-- `amr_sweeper_default_missions`
+- `amr_sweeper_navigation`
 
 ## Purpose
 
@@ -78,7 +78,7 @@ The scheduler is intended to run as a lightweight ROS 2 node launched by FSM sta
 - Each execution creates a timestamped folder under `missions/logs/<mission_id>/`.
 - If exactly one mission JSON exists, the scheduler can use it as a fallback during initial testing.
 - The recommended convention is for `X-MISSION-ID` to match the mission folder and mission filename stem.
-- Built-in manual missions such as `3x3Sweep`, `SpotSweep`, `RecordMap`, and `Teleop` come from `amr_sweeper_default_missions`.
+- Built-in manual missions such as `3x3Sweep`, `SpotSweep`, `RecordMap`, and `Teleop` come from `amr_sweeper_navigation/missions`.
 - Status examples include `SCHED_ICS_NOT_FOUND path=/...`, `SCHED_ICS_LOAD_FAILED reason=...`, and `SCHED_ICS_LOADED events=4`.
 - `SCHED_ICS_LOAD_FAILED reason=ICS contains no VEVENTs` is emitted as a warning.
 - `SCHED_ICS_LOADED events=<...>; schedule=<...>; robot_id=<...>` is emitted after a successful schedule load.

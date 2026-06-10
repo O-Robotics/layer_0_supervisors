@@ -27,7 +27,7 @@ its own before requesting the FSM transition to `RUNNING`.
 Responsibilities:
 - accept scheduled activations from the scheduler
 - accept external/manual activation calls for built-in missions
-- source built-in manual mission templates from `amr_sweeper_default_missions`
+- source built-in manual mission templates from `amr_sweeper_navigation/missions`
 - support one rerecordable built-in working-area capture mission: `RecordMap`
 - build VDA5050 mission artifacts on demand when scheduled missions are not ready yet
 - read synced schedules and VDA5050 mission payloads from `/missions/database`

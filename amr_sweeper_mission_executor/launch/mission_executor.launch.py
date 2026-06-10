@@ -29,7 +29,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "manual_missions_directory",
             default_value=PathJoinSubstitution(
-                [FindPackageShare("amr_sweeper_default_missions"), "missions"]
+                [FindPackageShare("amr_sweeper_navigation"), "missions"]
             ),
         ),
         DeclareLaunchArgument("fsm_request_service", default_value="request_state"),

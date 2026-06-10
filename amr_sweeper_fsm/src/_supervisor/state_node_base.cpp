@@ -47,7 +47,7 @@ namespace {
     "use_amr_sweeper_visual_odometry",
     "use_amr_sweeper_localization",
     "use_amr_sweeper_mapping",
-    "use_amr_sweeper_waypoint_follower",
+    "use_amr_sweeper_navigation",
     "auto_start_mission",
   };
 
@@ -81,7 +81,7 @@ namespace {
     "use_amr_sweeper_visual_odometry",
     "use_amr_sweeper_localization",
     "use_amr_sweeper_mapping",
-    "use_amr_sweeper_waypoint_follower",
+    "use_amr_sweeper_navigation",
     "auto_start_mission",
   };
 
@@ -328,7 +328,7 @@ namespace {
         target_matches_pattern(target, "bt_navigator") ||
         target_matches_pattern(target, "waypoint_follower"))
       {
-        return launch_arg_enabled(args, "use_amr_sweeper_waypoint_follower", true);
+        return launch_arg_enabled(args, "use_amr_sweeper_navigation", true);
       }
     }
 

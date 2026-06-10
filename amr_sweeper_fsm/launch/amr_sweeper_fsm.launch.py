@@ -34,7 +34,7 @@ def generate_launch_description():
         "use_amr_sweeper_visual_odometry",
         "use_amr_sweeper_localization",
         "use_amr_sweeper_mapping",
-        "use_amr_sweeper_waypoint_follower",
+        "use_amr_sweeper_navigation",
         "auto_start_mission",
     ]
     """

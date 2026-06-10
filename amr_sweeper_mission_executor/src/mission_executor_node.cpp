@@ -16,6 +16,7 @@
 #include <set>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -32,7 +33,7 @@ constexpr char kFollowWaypointsExecutionMode[] = "follow_waypoints";
 constexpr char kBuiltinManualMappingMissionType[] = "builtin_manual_mapping";
 constexpr char kBuiltinLocalPatternMissionType[] = "builtin_local_pattern";
 constexpr char kBuiltinTeleopMissionType[] = "builtin_teleop";
-constexpr char kDefaultMissionsPackageName[] = "amr_sweeper_default_missions";
+constexpr char kDefaultMissionsPackageName[] = "amr_sweeper_navigation";
 constexpr char kRuntimeStatusStarted[] = "STARTED";
 constexpr char kRuntimeStatusCompleted[] = "COMPLETED";
 constexpr char kRuntimeStatusAborted[] = "ABORTED";
@@ -111,14 +112,48 @@ std::string toLower(std::string value)
 
 nlohmann::json loadJsonDocument(const std::filesystem::path & path)
 {
-  std::ifstream input_stream(path);
-  if (!input_stream.is_open()) {
-    throw std::runtime_error("Failed to open mission file: " + path.string());
+  constexpr int kMaxAttempts = 3;
+  for (int attempt = 1; attempt <= kMaxAttempts; ++attempt) {
+    std::ifstream input_stream(path);
+    if (!input_stream.is_open()) {
+      throw std::runtime_error("Failed to open mission file: " + path.string());
+    }
+
+    try {
+      nlohmann::json document;
+      input_stream >> document;
+      return document;
+    } catch (const nlohmann::json::parse_error &) {
+      if (attempt >= kMaxAttempts) {
+        throw;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
   }
 
-  nlohmann::json document;
-  input_stream >> document;
-  return document;
+  throw std::runtime_error("Failed to parse JSON document: " + path.string());
+}
+
+void writeJsonDocumentAtomic(
+  const std::filesystem::path & path,
+  const nlohmann::json & document)
+{
+  std::filesystem::create_directories(path.parent_path());
+  const std::filesystem::path temp_path = path.string() + ".tmp";
+
+  {
+    std::ofstream output_stream(temp_path, std::ios::trunc);
+    if (!output_stream.is_open()) {
+      throw std::runtime_error("Failed to write JSON file: " + temp_path.string());
+    }
+    output_stream << std::setw(2) << document << '\n';
+    output_stream.flush();
+    if (!output_stream.good()) {
+      throw std::runtime_error("Failed to flush JSON file: " + temp_path.string());
+    }
+  }
+
+  std::filesystem::rename(temp_path, path);
 }
 
 std::string defaultIfEmpty(const std::string & value, const std::string & fallback)
@@ -941,11 +976,11 @@ void refreshLocalPathGeoReference(
     geographic_companion_path.filename().string(),
     georeference);
 
-  std::ofstream output_stream(local_path_file, std::ios::trunc);
-  if (!output_stream.is_open()) {
+  try {
+    writeJsonDocumentAtomic(local_path_file, document);
+  } catch (const std::exception &) {
     return;
   }
-  output_stream << std::setw(2) << document << '\n';
 }
 
 void refreshLocalPathGeoReferenceFromArtifacts(const nlohmann::json & context_document)
@@ -1586,11 +1621,7 @@ void MissionExecutorNode::handleUploadVda5050Mission(
 
     mission_document["mission_type"] = kScheduledMissionType;
 
-    std::ofstream mission_stream(mission_file, std::ios::trunc);
-    if (!mission_stream.is_open()) {
-      throw std::runtime_error("Failed to write mission file: " + mission_file.string());
-    }
-    mission_stream << std::setw(2) << mission_document << '\n';
+    writeJsonDocumentAtomic(mission_file, mission_document);
 
     // Clear stale generated artifacts so the parser rebuilds from the new VDA5050 payload on execution.
     const auto mission_folder = resolveMissionsLogDirectory() / mission_id;
@@ -1732,7 +1763,7 @@ void MissionExecutorNode::handleCreateRecordedMission(
       if (!mission_stream.is_open()) {
         throw std::runtime_error("Failed to write recorded mission file: " + mission_file.string());
       }
-      mission_stream << std::setw(2) << mission_document << '\n';
+      writeJsonDocumentAtomic(mission_file, mission_document);
     }
 
     response->success = true;
@@ -1959,9 +1990,9 @@ void MissionExecutorNode::handleManualMissionOdometry(const nav_msgs::msg::Odome
       navsat_companion_file,
       georeference);
 
-    std::ofstream output_stream(actual_path_file, std::ios::trunc);
-    if (output_stream.is_open()) {
-      output_stream << std::setw(2) << actual_path_document << '\n';
+    try {
+      writeJsonDocumentAtomic(actual_path_file, actual_path_document);
+    } catch (const std::exception &) {
     }
   }
 }
@@ -2022,9 +2053,9 @@ void MissionExecutorNode::handleManualMissionNavSat(const sensor_msgs::msg::NavS
       local_companion_file);
   }
 
-  std::ofstream output_stream(actual_navsat_path_file, std::ios::trunc);
-  if (output_stream.is_open()) {
-    output_stream << std::setw(2) << navsat_path_document << '\n';
+  try {
+    writeJsonDocumentAtomic(actual_navsat_path_file, navsat_path_document);
+  } catch (const std::exception &) {
   }
   if (!actual_path_file.empty()) {
     refreshLocalPathGeoReference(actual_path_file, actual_navsat_path_file, geo_trace);
@@ -2107,19 +2138,26 @@ std::vector<ManualMissionInfo> MissionExecutorNode::discoverManualMissions() con
       if (!std::filesystem::exists(directory) || !std::filesystem::is_directory(directory)) {
         return;
       }
-      for (const auto & entry : std::filesystem::directory_iterator(directory)) {
-        if (entry.is_regular_file()) {
-          maybe_add(entry.path());
+      std::error_code error;
+      for (std::filesystem::recursive_directory_iterator iterator(
+             directory,
+             std::filesystem::directory_options::skip_permission_denied,
+             error);
+           iterator != std::filesystem::recursive_directory_iterator();
+           iterator.increment(error))
+      {
+        if (error) {
+          error.clear();
           continue;
         }
-        if (!entry.is_directory()) {
+        if (!iterator->is_regular_file(error)) {
+          error.clear();
           continue;
         }
-        const std::filesystem::path canonical_nested_path =
-          entry.path() / (entry.path().filename().string() + ".json");
-        if (std::filesystem::exists(canonical_nested_path)) {
-          maybe_add(canonical_nested_path);
+        if (iterator->path().extension() != ".json") {
+          continue;
         }
+        maybe_add(iterator->path());
       }
     };
 
@@ -2410,11 +2448,7 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
       nlohmann::json::array(),
       "actual_path",
       navsat_companion_file);
-    std::ofstream actual_path_stream(actual_path_file);
-    if (!actual_path_stream.is_open()) {
-      throw std::runtime_error("Failed to create actual path artifact for mission_id=" + mission.mission_id);
-    }
-    actual_path_stream << std::setw(2) << actual_path_document << '\n';
+    writeJsonDocumentAtomic(actual_path_file, actual_path_document);
   }
   {
     const std::string local_companion_file = actual_path_file.filename().string();
@@ -2422,11 +2456,7 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
       {},
       "actual_path_navsat",
       local_companion_file);
-    std::ofstream actual_path_navsat_stream(actual_path_navsat_file);
-    if (!actual_path_navsat_stream.is_open()) {
-      throw std::runtime_error("Failed to create actual navsat path artifact for mission_id=" + mission.mission_id);
-    }
-    actual_path_navsat_stream << std::setw(2) << actual_path_navsat_document << '\n';
+    writeJsonDocumentAtomic(actual_path_navsat_file, actual_path_navsat_document);
   }
 
   const nlohmann::json context{
@@ -2453,11 +2483,7 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
     {"actual_schedule_log_path", ensureActualScheduleLogPath(resolveScheduleSourcePath()).string()}};
 
   const fs::path execution_context_file = mission_run_directory / "execution_context.json";
-  std::ofstream context_stream(execution_context_file);
-  if (!context_stream.is_open()) {
-    throw std::runtime_error("Failed to write manual mission execution context");
-  }
-  context_stream << std::setw(2) << context << '\n';
+  writeJsonDocumentAtomic(execution_context_file, context);
 
   PreparedMissionContext prepared;
   prepared.mission_execution_directory = mission_run_directory.string();
@@ -2511,21 +2537,11 @@ void MissionExecutorNode::rewriteBuiltinLocalPatternArtifacts(
     feature["properties"]["coordinate_frame"] = "base_footprint";
   }
 
-  {
-    std::ofstream route_stream(run_route_file, std::ios::trunc);
-    if (!route_stream.is_open()) {
-      throw std::runtime_error("Failed to rewrite local-pattern route artifact: " + run_route_file.string());
-    }
-    route_stream << std::setw(2) << route_document << '\n';
-  }
+  writeJsonDocumentAtomic(run_route_file, route_document);
 
   context_document["mission_costmap_yaml"] = "";
   context_document["source_mission_costmap_yaml"] = "";
-  std::ofstream context_stream(execution_context_file, std::ios::trunc);
-  if (!context_stream.is_open()) {
-    throw std::runtime_error("Failed to update execution context for local-pattern mission");
-  }
-  context_stream << std::setw(2) << context_document << '\n';
+  writeJsonDocumentAtomic(execution_context_file, context_document);
 
   RCLCPP_INFO(
     get_logger(),
@@ -3039,11 +3055,11 @@ void MissionExecutorNode::recordMissionExecutionStart(
   context_document["schedule_log_path"] = schedule_path.string();
   context_document["actual_start_utc"] = actual_start_utc;
   context_document["runtime_status"] = kRuntimeStatusStarted;
-  std::ofstream context_stream(context.execution_context_file, std::ios::trunc);
-  if (!context_stream.is_open()) {
+  try {
+    writeJsonDocumentAtomic(context.execution_context_file, context_document);
+  } catch (const std::exception &) {
     return;
   }
-  context_stream << std::setw(2) << context_document << '\n';
 }
 
 void MissionExecutorNode::recordMissionExecutionEnd(
@@ -3080,11 +3096,7 @@ void MissionExecutorNode::recordMissionExecutionEnd(
   const std::filesystem::path context_path(
     context_document.value("execution_context_file", std::string{}));
   if (!context_path.empty()) {
-    std::ofstream context_stream(context_path, std::ios::trunc);
-    if (!context_stream.is_open()) {
-      throw std::runtime_error("Failed to update execution context during end_mission");
-    }
-    context_stream << std::setw(2) << context_document << '\n';
+    writeJsonDocumentAtomic(context_path, context_document);
   }
 
   std::string schedule_path_string = resolveScheduleSourcePath().string();

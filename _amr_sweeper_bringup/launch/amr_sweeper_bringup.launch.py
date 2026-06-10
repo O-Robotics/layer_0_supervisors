@@ -42,7 +42,7 @@ def generate_launch_description():
         "use_amr_sweeper_visual_odometry",
         "use_amr_sweeper_localization",
         "use_amr_sweeper_mapping",
-        "use_amr_sweeper_waypoint_follower",
+        "use_amr_sweeper_navigation",
         "auto_start_mission",
     ]
     namespace = LaunchConfiguration("namespace")
@@ -91,7 +91,7 @@ def generate_launch_description():
         "state_parameters.yaml",
     ])
     default_manual_missions_directory = PathJoinSubstitution([
-        FindPackageShare("amr_sweeper_default_missions"),
+        FindPackageShare("amr_sweeper_navigation"),
         "missions",
     ])
     effective_schedule_ics_path = PythonExpression([

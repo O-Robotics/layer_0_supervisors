@@ -212,7 +212,7 @@ profiles:
               - "use_amr_sweeper_visual_odometry:=false"
               - "use_amr_sweeper_localization:=true"
               - "use_amr_sweeper_mapping:=false"
-              - "use_amr_sweeper_waypoint_follower:=true"
+              - "use_amr_sweeper_navigation:=true"
               - "mission_execution_directory:={mission_execution_directory}"
               - "auto_start_mission:=true"
               - "use_test:={use_test}"
@@ -492,7 +492,7 @@ profiles:
               - "use_amr_sweeper_visual_odometry:=false"
               - "use_amr_sweeper_localization:=true"
               - "use_amr_sweeper_mapping:=true"
-              - "use_amr_sweeper_waypoint_follower:=false"
+              - "use_amr_sweeper_navigation:=false"
               - "mission_execution_directory:={mission_execution_directory}"
               - "auto_start_mission:=true"
               - "use_test:={use_test}"
@@ -538,7 +538,7 @@ profiles:
 
 
   # ---------------------------------------------------------------------------
-  # Profile 203 (manual routed missions)
+  # Profile 203 (built-in local missions)
   # ---------------------------------------------------------------------------
   - profile:
       id: 203
@@ -729,8 +729,8 @@ profiles:
               - "use_sim_time:=false"
               - "use_amr_sweeper_visual_odometry:=false"
               - "use_amr_sweeper_localization:=true"
-              - "use_amr_sweeper_mapping:=true"
-              - "use_amr_sweeper_waypoint_follower:=true"
+              - "use_amr_sweeper_mapping:=false"
+              - "use_amr_sweeper_navigation:=true"
               - "mission_execution_directory:={mission_execution_directory}"
               - "auto_start_mission:=true"
               - "use_test:={use_test}"
@@ -746,9 +746,6 @@ profiles:
                 target: "fusioncore"
                 required: true
               - type: "lifecycle"
-                target: "slam_toolbox"
-                required: true
-              - type: "lifecycle"
                 target: "controller_server"
                 required: true
               - type: "lifecycle"
@@ -760,14 +757,14 @@ profiles:
               - type: "lifecycle"
                 target: "waypoint_follower"
                 required: true
-              - type: "service"
-                target: "amr_sweeper_slam_node/get_parameters"
+              - type: "lifecycle"
+                target: "velocity_smoother"
                 required: true
-              - type: "service"
-                target: "amr_sweeper_gaussian_node/get_parameters"
+              - type: "topic"
+                target: "cmd_vel_nav"
                 required: true
-              - type: "service"
-                target: "amr_sweeper_mapping_node/get_parameters"
+              - type: "topic"
+                target: "global_costmap/costmap"
                 required: true
             window_ms: 45000
           rosout_triggers:
@@ -1192,7 +1189,7 @@ profiles:
               - "use_amr_sweeper_localization:=true"
               - "use_gnss:=true"
               - "use_amr_sweeper_mapping:=true"
-              - "use_amr_sweeper_waypoint_follower:=false"
+              - "use_amr_sweeper_navigation:=false"
               - "mission_execution_directory:={mission_execution_directory}"
               - "auto_start_mission:=true"
               - "use_test:={use_test}"
