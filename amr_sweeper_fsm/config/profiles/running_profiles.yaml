@@ -147,12 +147,13 @@ profiles:
               - "use_amr_sweeper_attitude_controller:=true"
               - "use_amr_sweeper_collision_detector:=true"
               - "use_amr_sweeper_safety_controller:=true"
+              - "use_sweeping_mode:=cmd_vel_sweeping"
             ready:
               - type: "topic"
-                target: "cmd_vel_sweep_wheels"
+                target: "cmd_vel_drive"
                 required: true
               - type: "topic"
-                target: "cmd_vel_sweep_tools"
+                target: "cmd_vel_tools"
                 required: true
               - type: "topic"
                 target: "attitude/roll_pitch"
@@ -425,12 +426,13 @@ profiles:
               - "use_amr_sweeper_attitude_controller:=true"
               - "use_amr_sweeper_collision_detector:=true"
               - "use_amr_sweeper_safety_controller:=true"
+              - "use_sweeping_mode:=cmd_vel_sweeping"
             ready:
               - type: "topic"
-                target: "cmd_vel_sweep_wheels"
+                target: "cmd_vel_drive"
                 required: true
               - type: "topic"
-                target: "cmd_vel_sweep_tools"
+                target: "cmd_vel_tools"
                 required: true
               - type: "topic"
                 target: "attitude/roll_pitch"
@@ -660,12 +662,13 @@ profiles:
               - "use_amr_sweeper_attitude_controller:=true"
               - "use_amr_sweeper_collision_detector:=true"
               - "use_amr_sweeper_safety_controller:=true"
+              - "use_sweeping_mode:=cmd_vel_sweeping"
             ready:
               - type: "topic"
-                target: "cmd_vel_sweep_wheels"
+                target: "cmd_vel_drive"
                 required: true
               - type: "topic"
-                target: "cmd_vel_sweep_tools"
+                target: "cmd_vel_tools"
                 required: true
               - type: "topic"
                 target: "attitude/roll_pitch"
@@ -933,12 +936,13 @@ profiles:
               - "use_amr_sweeper_attitude_controller:=true"
               - "use_amr_sweeper_collision_detector:=true"
               - "use_amr_sweeper_safety_controller:=true"
+              - "use_sweeping_mode:=cmd_vel_sweeping"
             ready:
               - type: "topic"
-                target: "cmd_vel_sweep_wheels"
+                target: "cmd_vel_drive"
                 required: true
               - type: "topic"
-                target: "cmd_vel_sweep_tools"
+                target: "cmd_vel_tools"
                 required: true
               - type: "topic"
                 target: "attitude/roll_pitch"
@@ -1112,12 +1116,13 @@ profiles:
               - "use_amr_sweeper_attitude_controller:=true"
               - "use_amr_sweeper_collision_detector:=true"
               - "use_amr_sweeper_safety_controller:=true"
+              - "use_sweeping_mode:=cmd_vel_sweeping"
             ready:
               - type: "topic"
-                target: "cmd_vel_sweep_wheels"
+                target: "cmd_vel_drive"
                 required: true
               - type: "topic"
-                target: "cmd_vel_sweep_tools"
+                target: "cmd_vel_tools"
                 required: true
               - type: "topic"
                 target: "attitude/roll_pitch"

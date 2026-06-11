@@ -247,8 +247,8 @@ private:
   int op_timeout_ms_{1500};
   int tick_period_ms_{100};
   std::string safety_stop_topic_{"cmd_vel_safety_stop"};
-  std::string wheel_stop_topic_{"cmd_vel_sweep_wheels"};
-  std::string tool_stop_topic_{"cmd_vel_sweep_tools"};
+  std::string wheel_stop_topic_{"cmd_vel_drive"};
+  std::string tool_stop_topic_{"cmd_vel_tools"};
 };
 
 }  // namespace fsm_layer_0

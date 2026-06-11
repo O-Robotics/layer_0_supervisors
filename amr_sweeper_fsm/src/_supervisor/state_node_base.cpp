@@ -39,6 +39,7 @@ namespace {
     "use_amr_sweeper_tool_controller",
     "use_amr_sweeper_joystick",
     "use_amr_sweeper_sweeping_controller",
+    "use_sweeping_mode",
     "use_amr_sweeper_attitude_controller",
     "use_amr_sweeper_collision_detector",
     "use_amr_sweeper_safety_controller",
@@ -69,6 +70,7 @@ namespace {
     "use_amr_sweeper_tool_controller",
     "use_amr_sweeper_joystick",
     "use_amr_sweeper_sweeping_controller",
+    "use_sweeping_mode",
     "use_amr_sweeper_attitude_controller",
     "use_amr_sweeper_collision_detector",
     "use_amr_sweeper_safety_controller",
@@ -276,13 +278,13 @@ namespace {
       if (
         target_matches_pattern(target, "drive_controller/odom") ||
         target_matches_pattern(target, "drive_controller") ||
-        target_matches_pattern(target, "cmd_vel_sweep_wheels"))
+        target_matches_pattern(target, "cmd_vel_drive"))
       {
         return launch_arg_enabled(args, "use_amr_sweeper_drive_controller", true);
       }
       if (
         target_matches_pattern(target, "tool_controller") ||
-        target_matches_pattern(target, "cmd_vel_sweep_tools"))
+        target_matches_pattern(target, "cmd_vel_tools"))
       {
         return launch_arg_enabled(args, "use_amr_sweeper_tool_controller", true);
       }

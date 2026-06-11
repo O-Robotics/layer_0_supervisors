@@ -221,10 +221,10 @@ profiles:
               - "use_amr_sweeper_safety_controller:=true"
             ready:
               - type: "topic"
-                target: "cmd_vel_sweep_wheels"
+                target: "cmd_vel_drive"
                 required: true
               - type: "topic"
-                target: "cmd_vel_sweep_tools"
+                target: "cmd_vel_tools"
                 required: true
               - type: "topic"
                 target: "attitude/roll_pitch"
@@ -656,10 +656,10 @@ profiles:
               - "use_amr_sweeper_safety_controller:=true"
             ready:
               - type: "topic"
-                target: "cmd_vel_sweep_wheels"
+                target: "cmd_vel_drive"
                 required: true
               - type: "topic"
-                target: "cmd_vel_sweep_tools"
+                target: "cmd_vel_tools"
                 required: true
               - type: "topic"
                 target: "attitude/roll_pitch"
