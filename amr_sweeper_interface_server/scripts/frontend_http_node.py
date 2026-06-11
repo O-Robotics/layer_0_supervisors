@@ -739,6 +739,17 @@ class MissionFrontendHttpNode(MissionBackendNode):
       return `${{currentText}} -> ${{nextText}}`;
     }}
 
+    function formatProfileValue(profile) {{
+      if (profile === null || profile === undefined || profile === '') {{
+        return '-';
+      }}
+      const numericProfile = Number(profile);
+      if (!Number.isFinite(numericProfile)) {{
+        return String(profile);
+      }}
+      return String(Math.trunc(numericProfile)).padStart(3, '0');
+    }}
+
     function setBanner(kind, message) {{
       banner.className = `banner show ${{kind}}`;
       banner.textContent = message;
@@ -770,16 +781,17 @@ class MissionFrontendHttpNode(MissionBackendNode):
       document.getElementById('live-dot').classList.add('connected');
 
       const currentState = fsm.current_state || 'Unknown';
-      const currentProfile = fsm.current_profile ?? '-';
+      const currentProfile = formatProfileValue(fsm.current_profile);
       const targetProfile = fsm.transitioning_to_profile ?? null;
       const transitionInProgress = fsm.transition_status === 'TRANSITIONING';
       const targetState = deriveStateFromProfile(targetProfile) || currentState;
+      const formattedTargetProfile = formatProfileValue(targetProfile);
 
       document.getElementById('fsm-state').textContent = transitionInProgress
         ? formatArrowValue(currentState, targetState)
         : currentState;
       document.getElementById('fsm-profile').textContent = transitionInProgress
-        ? `Profile: ${{formatArrowValue(currentProfile, targetProfile ?? '-')}}`
+        ? `Profile: ${{formatArrowValue(currentProfile, formattedTargetProfile)}}`
         : `Profile: ${{currentProfile}}`;
 
       const transitionElement = document.getElementById('fsm-transition');
