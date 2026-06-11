@@ -76,9 +76,6 @@ profiles:
               - type: "service"
                 target: "gnss/gnss_node/get_parameters"
                 required: true
-              - type: "topic"
-                target: "layer_1_hardware_bringup/ready"
-                required: true
             window_ms: 45000
           rosout_triggers:
             - "node=system_info_node;level>=ERROR;action=FAULT"

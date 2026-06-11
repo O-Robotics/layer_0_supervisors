@@ -181,9 +181,6 @@ profiles:
               - type: "controller"
                 target: "joint_broad"
                 required: true
-              - type: "topic"
-                target: "layer_1_hardware_bringup/ready"
-                required: true
             window_ms: 45000
           rosout_triggers:
             - "node=system_info_node;level>=ERROR;action=FAULT"
@@ -435,9 +432,6 @@ profiles:
               - type: "controller"
                 target: "joint_broad"
                 required: true
-              - type: "topic"
-                target: "layer_1_hardware_bringup/ready"
-                required: true
             window_ms: 45000
           rosout_triggers:
             - "node=system_info_node;level>=ERROR;action=FAULT"
@@ -621,9 +615,6 @@ profiles:
                 required: true
               - type: "controller"
                 target: "joint_broad"
-                required: true
-              - type: "topic"
-                target: "layer_1_hardware_bringup/ready"
                 required: true
             window_ms: 45000
           rosout_triggers:
