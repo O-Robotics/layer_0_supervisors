@@ -28,6 +28,17 @@ bool ProcessManager::pid_alive(pid_t pid)
   return errno == EPERM;
 }
 
+bool ProcessManager::process_group_alive(pid_t pgid)
+{
+  if (pgid <= 0) {
+    return false;
+  }
+  if (::kill(-pgid, 0) == 0) {
+    return true;
+  }
+  return errno == EPERM;
+}
+
 void ProcessManager::send_signal(pid_t pid, int sig)
 {
   if (pid > 0) {
@@ -51,6 +62,21 @@ bool ProcessManager::wait_dead(pid_t pid, std::chrono::milliseconds timeout)
     ::usleep(20 * 1000);
   }
   return !pid_alive(pid);
+}
+
+bool ProcessManager::wait_process_group_dead(pid_t pgid, std::chrono::milliseconds timeout)
+{
+  const auto deadline = std::chrono::steady_clock::now() + timeout;
+
+  while (std::chrono::steady_clock::now() < deadline) {
+    int status = 0;
+    (void)::waitpid(pgid, &status, WNOHANG);
+    if (!process_group_alive(pgid)) {
+      return true;
+    }
+    ::usleep(20 * 1000);
+  }
+  return !process_group_alive(pgid);
 }
 
 bool ProcessManager::start(const std::string & command, std::string & err_out)
@@ -122,17 +148,18 @@ bool ProcessManager::stop(const std::string & command, std::string & err_out, co
   }
 
   const pid_t pid = it->second.pid;
+  const pid_t pgid = pid;
 
   // Signal process group (-pid) so typical "ros2 launch" trees are handled.
   // Prefer SIGTERM first for FSM-managed transitions so launch trees do not
   // report this as a user Ctrl-C interruption.
-  if (pid_alive(pid)) {
-    ::kill(-pid, SIGTERM);
-    if (!wait_dead(pid, policy.sigterm_timeout)) {
-      ::kill(-pid, SIGINT);
-      if (!wait_dead(pid, policy.sigint_timeout)) {
-        ::kill(-pid, SIGKILL);
-        (void)wait_dead(pid, policy.sigkill_timeout);
+  if (process_group_alive(pgid) || pid_alive(pid)) {
+    ::kill(-pgid, SIGTERM);
+    if (!wait_process_group_dead(pgid, policy.sigterm_timeout)) {
+      ::kill(-pgid, SIGINT);
+      if (!wait_process_group_dead(pgid, policy.sigint_timeout)) {
+        ::kill(-pgid, SIGKILL);
+        (void)wait_process_group_dead(pgid, policy.sigkill_timeout);
       }
     }
   }
@@ -169,7 +196,7 @@ bool ProcessManager::is_running(const std::string & command) const
   if (it == procs_.end()) {
     return false;
   }
-  return pid_alive(it->second.pid);
+  return process_group_alive(it->second.pid) || pid_alive(it->second.pid);
 }
 
 std::vector<ProcessManager::Proc> ProcessManager::list() const

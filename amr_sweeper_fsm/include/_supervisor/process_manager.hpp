@@ -59,8 +59,10 @@ private:
   std::map<std::string, Proc> procs_;
 
   static bool pid_alive(pid_t pid);
+  static bool process_group_alive(pid_t pgid);
   static void send_signal(pid_t pid, int sig);
   static bool wait_dead(pid_t pid, std::chrono::milliseconds timeout);
+  static bool wait_process_group_dead(pid_t pgid, std::chrono::milliseconds timeout);
 };
 
 }  // namespace fsm_layer_0
