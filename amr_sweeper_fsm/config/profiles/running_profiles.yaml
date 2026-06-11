@@ -211,7 +211,7 @@ profiles:
               - "use_sim_time:=false"
               - "use_amr_sweeper_visual_odometry:=false"
               - "use_amr_sweeper_localization:=true"
-              - "use_amr_sweeper_mapping:=false"
+              - "use_amr_sweeper_mapping:=true"
               - "use_amr_sweeper_navigation:=true"
               - "mission_execution_directory:={mission_execution_directory}"
               - "auto_start_mission:=true"
@@ -760,11 +760,11 @@ profiles:
               - type: "lifecycle"
                 target: "velocity_smoother"
                 required: true
-              - type: "topic"
-                target: "cmd_vel_nav"
+              - type: "service"
+                target: "amr_sweeper_mapping_node/get_parameters"
                 required: true
               - type: "topic"
-                target: "global_costmap/costmap"
+                target: "mapping/status"
                 required: true
             window_ms: 45000
           rosout_triggers:
