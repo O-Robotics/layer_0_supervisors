@@ -27,8 +27,10 @@ from amr_sweeper_mission_executor.srv import (
     ListExecutableMissions,
     UploadVda5050Mission,
 )
+from amr_sweeper_safety_msgs.msg import SafetyStop
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from rcl_interfaces.msg import Log
 from sensor_msgs.msg import BatteryState, NavSatFix
 from std_msgs.msg import String
@@ -118,10 +120,17 @@ class MissionBackendNode(Node):
             "safety_web_status_topic",
             "safety_controller/web_status",
         ).value
+        self._safety_stop_topic = self.declare_parameter(
+            "safety_stop_topic",
+            "safety_msgs/stop",
+        ).value
         self._clear_safety_stop_service = self.declare_parameter(
             "clear_safety_stop_service",
             "amr_sweeper_safety_controller/clear_safety_stop",
         ).value
+        self._safety_clear_min_delay_sec = float(
+            self.declare_parameter("safety_clear_min_delay_sec", 2.0).value
+        )
         self._list_missions_client = self.create_client(
             ListExecutableMissions,
             self._list_missions_service,
@@ -149,6 +158,14 @@ class MissionBackendNode(Node):
         self._clear_safety_stop_client = self.create_client(
             Trigger,
             self._clear_safety_stop_service,
+        )
+        safety_stop_qos = QoSProfile(depth=10)
+        safety_stop_qos.reliability = ReliabilityPolicy.RELIABLE
+        safety_stop_qos.durability = DurabilityPolicy.TRANSIENT_LOCAL
+        self._safety_stop_publisher = self.create_publisher(
+            SafetyStop,
+            self._safety_stop_topic,
+            safety_stop_qos,
         )
 
         self._state_lock = threading.Lock()
@@ -415,6 +432,12 @@ class MissionBackendNode(Node):
 
     def clear_safety_stop(self, payload: dict[str, Any]) -> dict[str, Any]:
         del payload
+        remaining_delay = self._safety_clear_delay_remaining_seconds()
+        if remaining_delay > 0.0:
+            return {
+                "success": False,
+                "message": f"Safety stop cannot be cleared for another {remaining_delay:.1f} s",
+            }
         response = self._call_service(
             self._clear_safety_stop_client,
             Trigger.Request(),
@@ -424,6 +447,17 @@ class MissionBackendNode(Node):
         return {
             "success": bool(response.success),
             "message": response.message,
+        }
+
+    def trigger_safety_stop(self, payload: dict[str, Any]) -> dict[str, Any]:
+        message = SafetyStop()
+        message.stamp = self.get_clock().now().to_msg()
+        message.sender = str(payload.get("sender", self.get_name())).strip() or self.get_name()
+        message.reason = str(payload.get("reason", "safety stop requested from HTTP UI")).strip()
+        self._safety_stop_publisher.publish(message)
+        return {
+            "success": True,
+            "message": "Safety stop requested",
         }
 
     def status_snapshot(self) -> dict[str, Any]:
@@ -436,6 +470,11 @@ class MissionBackendNode(Node):
             recent_logs = list(self._recent_logs)
 
         active_execution = self._discover_active_execution()
+        safety_clear_remaining_sec = self._safety_clear_delay_remaining_seconds(safety_status)
+        if safety_status is None:
+            safety_status = {}
+        safety_status["clear_available_in_sec"] = safety_clear_remaining_sec
+        safety_status["can_clear"] = safety_clear_remaining_sec <= 0.0 and bool(safety_status.get("latched"))
         robot_now = datetime.now().astimezone()
         return {
             "success": True,
@@ -457,7 +496,52 @@ class MissionBackendNode(Node):
             "recent_logs": recent_logs,
         }
 
+    def _safety_clear_delay_remaining_seconds(self, safety_status: dict[str, Any] | None = None) -> float:
+        if safety_status is None:
+            with self._state_lock:
+                safety_status = dict(self._latest_safety_status) if self._latest_safety_status is not None else None
+        if not safety_status or not bool(safety_status.get("latched")):
+            return 0.0
+
+        latest_event_sec = 0.0
+        causes = safety_status.get("causes")
+        if isinstance(causes, list):
+            for cause in causes:
+                if not isinstance(cause, dict):
+                    continue
+                stamp = cause.get("stamp")
+                if not isinstance(stamp, dict):
+                    continue
+                try:
+                    sec = float(stamp.get("sec", 0))
+                    nanosec = float(stamp.get("nanosec", 0))
+                except (TypeError, ValueError):
+                    continue
+                latest_event_sec = max(latest_event_sec, sec + (nanosec / 1_000_000_000.0))
+
+        if latest_event_sec <= 0.0:
+            return 0.0
+
+        now_sec = self.get_clock().now().nanoseconds / 1_000_000_000.0
+        remaining = self._safety_clear_min_delay_sec - (now_sec - latest_event_sec)
+        return max(0.0, remaining)
+
+    def _fsm_reports_running(self) -> bool:
+        with self._state_lock:
+            fsm_status = dict(self._latest_fsm_status) if self._latest_fsm_status is not None else None
+            fsm_state = dict(self._latest_fsm_state) if self._latest_fsm_state is not None else None
+
+        current_state = ""
+        if fsm_status is not None:
+            current_state = str(fsm_status.get("current_state", "")).strip().upper()
+        if not current_state and fsm_state is not None:
+            current_state = str(fsm_state.get("current_state", "")).strip().upper()
+        return current_state == "RUNNING"
+
     def _discover_active_execution(self) -> dict[str, Any] | None:
+        if not self._fsm_reports_running():
+            return None
+
         missions_log_directory = _resolve_path(self._missions_log_directory)
         selected: dict[str, Any] | None = None
         selected_run_started_at = ""

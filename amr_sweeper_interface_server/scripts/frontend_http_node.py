@@ -172,6 +172,13 @@ class MissionFrontendHttpNode(MissionBackendNode):
                     except Exception as exc:  # noqa: BLE001
                         self._send_json(HTTPStatus.BAD_GATEWAY, {"success": False, "message": str(exc)})
                     return
+                if parsed.path == "/api/safety/stop":
+                    try:
+                        response = node.trigger_safety_stop(payload)
+                        self._send_json(HTTPStatus.OK, response)
+                    except Exception as exc:  # noqa: BLE001
+                        self._send_json(HTTPStatus.BAD_GATEWAY, {"success": False, "message": str(exc)})
+                    return
                 if parsed.path == "/api/record-map/start":
                     try:
                         response = node.start_record_map(payload)
@@ -281,6 +288,12 @@ class MissionFrontendHttpNode(MissionBackendNode):
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{title}</title>
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  >
   <style>
     :root {{
       --bg: #1b1e20;
@@ -352,6 +365,11 @@ class MissionFrontendHttpNode(MissionBackendNode):
     .status-card {{
       grid-column: span 2;
     }}
+    .map-card {{
+      grid-column: span 2;
+      padding: 0;
+      overflow: hidden;
+    }}
     .status-sections {{
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -377,6 +395,20 @@ class MissionFrontendHttpNode(MissionBackendNode):
     .muted {{
       color: var(--muted);
       font-size: 0.95rem;
+    }}
+    .inline-status {{
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }}
+    .spinner {{
+      width: 0.9rem;
+      height: 0.9rem;
+      border-radius: 50%;
+      border: 2px solid rgba(253, 202, 15, 0.28);
+      border-top-color: var(--accent);
+      animation: spin 0.85s linear infinite, pulse-fade 1.2s ease-in-out infinite;
+      flex: 0 0 auto;
     }}
     button {{
       border: 0;
@@ -490,10 +522,25 @@ class MissionFrontendHttpNode(MissionBackendNode):
       color: var(--ink);
       letter-spacing: 0.04em;
     }}
+    .map-info {{
+      padding: 18px 18px 0;
+    }}
+    .position-map {{
+      width: 100%;
+      min-height: 360px;
+    }}
     @keyframes pulse {{
       0% {{ box-shadow: 0 0 0 0 rgba(255, 224, 107, 0.45); }}
       70% {{ box-shadow: 0 0 0 10px rgba(255, 224, 107, 0); }}
       100% {{ box-shadow: 0 0 0 0 rgba(255, 224, 107, 0); }}
+    }}
+    @keyframes spin {{
+      from {{ transform: rotate(0deg); }}
+      to {{ transform: rotate(360deg); }}
+    }}
+    @keyframes pulse-fade {{
+      0%, 100% {{ opacity: 0.45; }}
+      50% {{ opacity: 1; }}
     }}
     .log-list {{
       display: grid;
@@ -524,16 +571,21 @@ class MissionFrontendHttpNode(MissionBackendNode):
       background: rgba(185, 28, 28, 0.08);
       border-color: rgba(185, 28, 28, 0.35);
     }}
-    .cause-list {{
-      display: grid;
-      gap: 8px;
-      margin-top: 12px;
+    .safety-action {{
+      margin-top: 8px;
     }}
-    .cause-item {{
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      padding: 10px 12px;
-      background: rgba(10, 16, 12, 0.5);
+    .safety-action button {{
+      width: 100%;
+      min-height: 112px;
+      font-size: 1.15rem;
+      letter-spacing: 0.08em;
+    }}
+    .safety-action button.stop {{
+      background: #d22c2c;
+      color: #fff8f6;
+    }}
+    .safety-action button.stop:hover {{
+      background: #ec3b3b;
     }}
     @media (max-width: 780px) {{
       .status-card {{
@@ -567,10 +619,17 @@ class MissionFrontendHttpNode(MissionBackendNode):
         <h2>System Status</h2>
         <div class="status-sections">
           <section class="status-panel">
-            <h3>FSM</h3>
             <div id="fsm-state" class="stat">Waiting...</div>
             <div id="fsm-profile" class="muted">Profile: -</div>
             <div id="fsm-transition" class="muted">Transition: -</div>
+            <div class="actions">
+              <button id="reboot-button">Reboot</button>
+            </div>
+          </section>
+          <section id="safety-card" class="status-panel safety-card">
+            <div class="safety-action">
+              <button class="stop" id="safety-stop-button">SAFETY STOP</button>
+            </div>
           </section>
           <section class="status-panel">
             <h3>Active Mission</h3>
@@ -578,39 +637,107 @@ class MissionFrontendHttpNode(MissionBackendNode):
             <div id="active-directory" class="muted">Run folder: -</div>
             <div class="actions">
               <button class="stop" id="stop-button" disabled>Stop Mission</button>
-              <button id="reboot-button">Reboot</button>
             </div>
           </section>
           <section class="status-panel">
-            <h3>Safety Stop</h3>
-            <div id="safety-state" class="stat">Clear</div>
-            <div id="safety-summary" class="muted">No active safety stop.</div>
-            <div class="actions">
-              <button class="stop" id="clear-safety-button">Clear Safety Stop</button>
-            </div>
-            <div id="safety-causes" class="cause-list"></div>
+            <h3>Battery</h3>
+            <div id="battery-percent" class="stat">--</div>
+            <div id="battery-voltage" class="muted">Voltage: --</div>
+            <div id="battery-current" class="muted">Current: --</div>
           </section>
         </div>
       </article>
-      <article class="card">
-        <h2>Position</h2>
-        <div id="position-lat" class="stat">--</div>
-        <div id="position-lon" class="muted">Longitude: --</div>
-        <div id="position-alt" class="muted">Altitude: --</div>
-      </article>
-      <article class="card">
-        <h2>Battery</h2>
-        <div id="battery-percent" class="stat">--</div>
-        <div id="battery-voltage" class="muted">Voltage: --</div>
-        <div id="battery-current" class="muted">Current: --</div>
+      <article class="card map-card">
+        <div class="map-info">
+          <h2>Position</h2>
+          <div id="position-lat" class="muted">Latitude: --</div>
+          <div id="position-lon" class="muted">Longitude: --</div>
+          <div id="position-alt" class="muted">Altitude: --</div>
+        </div>
+        <div id="dashboard-position-map" class="position-map"></div>
       </article>
     </section>
 
   </main>
 
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
   <script>
     const banner = document.getElementById('banner');
     let lastStatusEpochMs = 0;
+    let lastSafetyLatched = false;
+    let lastSafetyCanClear = false;
+    let dashboardMap = null;
+    let dashboardMarker = null;
+
+    function ensureDashboardMap() {{
+      if (dashboardMap) {{
+        return dashboardMap;
+      }}
+      dashboardMap = L.map('dashboard-position-map', {{ zoomControl: true }}).setView([55.6761, 12.5683], 18);
+      L.tileLayer(
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{{z}}/{{y}}/{{x}}',
+        {{ maxZoom: 20, attribution: '&copy; Esri' }}
+      ).addTo(dashboardMap);
+      return dashboardMap;
+    }}
+
+    function updateDashboardPositionMap(position) {{
+      const map = ensureDashboardMap();
+      if (dashboardMarker) {{
+        map.removeLayer(dashboardMarker);
+        dashboardMarker = null;
+      }}
+      if (
+        !position ||
+        position.latitude === undefined ||
+        position.longitude === undefined
+      ) {{
+        return;
+      }}
+      const lat = Number(position.latitude);
+      const lon = Number(position.longitude);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) {{
+        return;
+      }}
+      dashboardMarker = L.circleMarker(
+        [lat, lon],
+        {{ radius: 7, color: '#ffffff', weight: 2, fillColor: '#1d4ed8', fillOpacity: 1 }}
+      ).addTo(map);
+      map.setView([lat, lon], Math.max(map.getZoom(), 18));
+    }}
+
+    function deriveStateFromProfile(profile) {{
+      const numericProfile = Number(profile);
+      if (!Number.isFinite(numericProfile)) {{
+        return '';
+      }}
+      if (numericProfile >= 0 && numericProfile <= 99) {{
+        return 'INITIALIZING';
+      }}
+      if (numericProfile >= 100 && numericProfile <= 199) {{
+        return 'IDLING';
+      }}
+      if (numericProfile >= 200 && numericProfile <= 299) {{
+        return 'RUNNING';
+      }}
+      if (numericProfile >= 300 && numericProfile <= 399) {{
+        return 'CHARGING';
+      }}
+      if (numericProfile >= 400 && numericProfile <= 499) {{
+        return 'FAULT';
+      }}
+      return '';
+    }}
+
+    function formatArrowValue(currentValue, nextValue) {{
+      const currentText = currentValue ?? '-';
+      const nextText = nextValue ?? '-';
+      return `${{currentText}} -> ${{nextText}}`;
+    }}
 
     function setBanner(kind, message) {{
       banner.className = `banner show ${{kind}}`;
@@ -629,7 +756,6 @@ class MissionFrontendHttpNode(MissionBackendNode):
       const battery = data.battery || {{}};
       const safety = data.safety_stop || {{}};
       const active = data.active_execution || {{}};
-      const safetyCauses = Array.isArray(safety.causes) ? safety.causes : [];
       const hasActiveMission = Boolean(
         active &&
         active.mission_id &&
@@ -643,16 +769,33 @@ class MissionFrontendHttpNode(MissionBackendNode):
       liveStatus.classList.remove('disconnected');
       document.getElementById('live-dot').classList.add('connected');
 
-      document.getElementById('fsm-state').textContent = fsm.current_state || 'Unknown';
-      document.getElementById('fsm-profile').textContent = `Profile: ${{fsm.current_profile ?? '-'}}`;
-      document.getElementById('fsm-transition').textContent = `Transition: ${{fsm.transition_status || '-'}}`;
+      const currentState = fsm.current_state || 'Unknown';
+      const currentProfile = fsm.current_profile ?? '-';
+      const targetProfile = fsm.transitioning_to_profile ?? null;
+      const transitionInProgress = fsm.transition_status === 'TRANSITIONING';
+      const targetState = deriveStateFromProfile(targetProfile) || currentState;
+
+      document.getElementById('fsm-state').textContent = transitionInProgress
+        ? formatArrowValue(currentState, targetState)
+        : currentState;
+      document.getElementById('fsm-profile').textContent = transitionInProgress
+        ? `Profile: ${{formatArrowValue(currentProfile, targetProfile ?? '-')}}`
+        : `Profile: ${{currentProfile}}`;
+
+      const transitionElement = document.getElementById('fsm-transition');
+      if (transitionInProgress) {{
+        transitionElement.innerHTML = '<span class="inline-status"><span class="spinner" aria-hidden="true"></span><span>Transition in progress</span></span>';
+      }} else {{
+        transitionElement.textContent = `Transition: ${{fsm.transition_status || '-'}}`;
+      }}
 
       document.getElementById('position-lat').textContent =
-        position.latitude !== undefined ? `Lat: ${{Number(position.latitude).toFixed(7)}}` : '--';
+        position.latitude !== undefined ? `Latitude: ${{Number(position.latitude).toFixed(7)}}` : 'Latitude: --';
       document.getElementById('position-lon').textContent =
         position.longitude !== undefined ? `Longitude: ${{Number(position.longitude).toFixed(7)}}` : 'Longitude: --';
       document.getElementById('position-alt').textContent =
         position.altitude !== undefined ? `Altitude: ${{Number(position.altitude).toFixed(2)}} m` : 'Altitude: --';
+      updateDashboardPositionMap(position);
 
       document.getElementById('battery-percent').textContent =
         battery.percentage !== null && battery.percentage !== undefined
@@ -664,28 +807,23 @@ class MissionFrontendHttpNode(MissionBackendNode):
         battery.current !== undefined ? `Current: ${{Number(battery.current).toFixed(2)}} A` : 'Current: --';
 
       const safetyCard = document.getElementById('safety-card');
+      const safetyButton = document.getElementById('safety-stop-button');
       const safetyLatched = Boolean(safety.latched);
-      document.getElementById('safety-state').textContent = safetyLatched ? 'Latched' : 'Clear';
-      document.getElementById('safety-summary').textContent = safetyLatched
-        ? `${{safety.active_sender || 'unknown_sender'}}: ${{safety.active_reason || 'stop requested'}}`
-        : 'No active safety stop.';
-      document.getElementById('clear-safety-button').disabled = !safetyLatched;
+      const safetyCanClear = Boolean(safety.can_clear);
+      const clearAvailableInSec = Number(safety.clear_available_in_sec ?? 0);
+      lastSafetyLatched = safetyLatched;
+      lastSafetyCanClear = safetyCanClear;
       safetyCard.classList.toggle('active', safetyLatched);
-
-      const safetyCauseList = document.getElementById('safety-causes');
-      safetyCauseList.innerHTML = '';
-      if (!safetyLatched || safetyCauses.length === 0) {{
-        safetyCauseList.innerHTML = '<div class="muted">No latched safety-stop causes are being reported.</div>';
+      if (safetyLatched) {{
+        safetyButton.textContent = safetyCanClear
+          ? 'CLEAR SAFETY STOP'
+          : `CLEAR SAFETY STOP (${{
+              Math.ceil(Math.max(0, clearAvailableInSec))
+            }}s)`;
+        safetyButton.disabled = !safetyCanClear;
       }} else {{
-        for (const cause of safetyCauses) {{
-          const item = document.createElement('div');
-          item.className = 'cause-item';
-          item.innerHTML = `
-            <strong>${{cause.sender || 'unknown_sender'}}</strong><br>
-            <span class="muted">${{cause.reason || 'stop requested'}}</span>
-          `;
-          safetyCauseList.appendChild(item);
-        }}
+        safetyButton.textContent = 'SAFETY STOP';
+        safetyButton.disabled = false;
       }}
 
       document.getElementById('active-mission').textContent =
@@ -717,14 +855,22 @@ class MissionFrontendHttpNode(MissionBackendNode):
       await loadStatus();
     }});
 
-    document.getElementById('clear-safety-button').addEventListener('click', async () => {{
-      const response = await fetch('/api/safety/clear', {{
+    document.getElementById('safety-stop-button').addEventListener('click', async () => {{
+      const path = lastSafetyLatched ? '/api/safety/clear' : '/api/safety/stop';
+      const payload = lastSafetyLatched ? {{}} : {{
+        sender: 'frontend_http_node',
+        reason: 'safety stop requested from dashboard'
+      }};
+      const response = await fetch(path, {{
         method: 'POST',
         headers: {{ 'Content-Type': 'application/json' }},
-        body: JSON.stringify({{}})
+        body: JSON.stringify(payload)
       }});
       const data = await response.json();
-      setBanner(data.success ? 'ok' : 'error', data.message || 'Safety clear request completed');
+      setBanner(
+        data.success ? 'ok' : 'error',
+        data.message || (lastSafetyLatched ? 'Safety clear request completed' : 'Safety stop request completed')
+      );
       await loadStatus();
     }});
 
