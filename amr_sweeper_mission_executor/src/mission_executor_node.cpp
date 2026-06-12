@@ -2008,7 +2008,10 @@ void MissionExecutorNode::handleManualMissionNavSat(const sensor_msgs::msg::NavS
   std::string actual_path_file;
   {
     std::lock_guard<std::mutex> lock(active_mission_mutex_);
-    if (!active_mission_running_ || active_actual_navsat_path_file_.empty())
+    if (
+      !active_mission_running_ ||
+      !active_mission_is_manual_mapping_ ||
+      active_actual_navsat_path_file_.empty())
     {
       return;
     }
