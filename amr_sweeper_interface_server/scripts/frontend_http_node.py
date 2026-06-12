@@ -2143,6 +2143,12 @@ class MissionFrontendHttpNode(MissionBackendNode):
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{title} - Missions</title>
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  >
   <style>
     :root {{
       --bg: #1b1e20;
@@ -2191,6 +2197,13 @@ class MissionFrontendHttpNode(MissionBackendNode):
       flex-wrap: wrap;
       margin-top: 14px;
     }}
+    .hero-actions {{
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }}
     .nav-link {{
       display: inline-block;
       text-decoration: none;
@@ -2215,10 +2228,11 @@ class MissionFrontendHttpNode(MissionBackendNode):
       border: 1px solid var(--line);
       border-radius: 16px;
       background: var(--panel);
-      display: flex;
-      align-items: center;
-      justify-content: center;
       overflow: hidden;
+    }}
+    #mission-preview-map {{
+      width: 100%;
+      min-height: 520px;
     }}
     .legend-list {{
       display: grid;
@@ -2261,6 +2275,16 @@ class MissionFrontendHttpNode(MissionBackendNode):
       display: flex;
       gap: 10px;
       flex-wrap: wrap;
+    }}
+    button.secondary {{
+      background: rgba(96, 100, 102, 0.72);
+      color: var(--ink);
+      border: 1px solid var(--line);
+    }}
+    button.selected {{
+      background: #fff3bb;
+      color: #08100a;
+      box-shadow: 0 0 0 2px rgba(253, 202, 15, 0.35);
     }}
     .legend-actions {{
       margin-top: 10px;
@@ -2307,8 +2331,11 @@ class MissionFrontendHttpNode(MissionBackendNode):
   <main>
     <section class="card">
       <h1>Missions</h1>
-      <div class="muted">Preview built or decoded mission routes from the synced mission database, and upload VDA5050 missions.</div>
       <div id="banner" class="banner"></div>
+      <div class="hero-actions">
+        <button id="start-mission-button" disabled>Start Mission</button>
+        <div id="selected-mission-label" class="muted">Selected mission: none</div>
+      </div>
       <div class="nav">
         <a class="nav-link" href="/">Dashboard</a>
         <a class="nav-link" href="/calendar">Calendar</a>
@@ -2319,7 +2346,9 @@ class MissionFrontendHttpNode(MissionBackendNode):
     </section>
     <section class="map-layout">
       <section class="card">
-        <div id="map-frame" class="map-frame">Loading mission geometry...</div>
+        <div class="map-frame">
+          <div id="mission-preview-map"></div>
+        </div>
       </section>
       <section class="card">
         <h2>Legend</h2>
@@ -2345,10 +2374,24 @@ class MissionFrontendHttpNode(MissionBackendNode):
       </div>
     </section>
   </main>
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
   <script>
     const banner = document.getElementById('banner');
     const missionList = document.getElementById('mission-list');
-    const palette = ['#fdca0f', '#f5f1df', '#d2a500', '#ff7b5c', '#9aa0a3', '#ffe06b'];
+    const startMissionButton = document.getElementById('start-mission-button');
+    const selectedMissionLabel = document.getElementById('selected-mission-label');
+    let mapDataCache = null;
+    let missionsCache = [];
+    let selectedMissionId = '';
+    let previewMap = null;
+    let previewTileLayer = null;
+    let previewRouteLayer = null;
+    let previewMarker = null;
+    let previewCrsMode = '';
 
     function setBanner(kind, message) {{
       banner.className = `banner show ${{kind}}`;
@@ -2359,146 +2402,248 @@ class MissionFrontendHttpNode(MissionBackendNode):
       }}, 5000);
     }}
 
-    function extractLineCoordinates(geojson) {{
+    function routeFrameFromGeojson(geojson) {{
+      for (const feature of geojson?.features || []) {{
+        const properties = feature?.properties || {{}};
+        const coordinateFrame = String(properties.coordinate_frame || '').trim();
+        if (coordinateFrame) {{
+          return coordinateFrame;
+        }}
+      }}
+      return '';
+    }}
+
+    function isGeoReferencedRoute(geojson) {{
+      const routeFrame = routeFrameFromGeojson(geojson).toLowerCase();
+      if (routeFrame === 'base_footprint' || routeFrame === 'odom') {{
+        return false;
+      }}
+      if (routeFrame.includes('wgs84') || routeFrame.includes('gps') || routeFrame.includes('utm')) {{
+        return true;
+      }}
+
+      const points = [];
+      for (const feature of geojson?.features || []) {{
+        const geometry = feature?.geometry || {{}};
+        if (geometry.type !== 'LineString') {{
+          continue;
+        }}
+        for (const point of geometry.coordinates || []) {{
+          if (Array.isArray(point) && point.length >= 2) {{
+            points.push(point);
+          }}
+        }}
+      }}
+      if (points.length === 0) {{
+        return false;
+      }}
+      return points.every((point) => {{
+        const x = Number(point[0]);
+        const y = Number(point[1]);
+        return Number.isFinite(x) && Number.isFinite(y) && Math.abs(x) <= 180 && Math.abs(y) <= 90;
+      }});
+    }}
+
+    function routeLines(geojson) {{
       const lines = [];
-      for (const feature of geojson.features || []) {{
-        const geometry = feature.geometry || {{}};
-        if (geometry.type === 'LineString') {{
-          lines.push(geometry.coordinates || []);
+      for (const feature of geojson?.features || []) {{
+        const geometry = feature?.geometry || {{}};
+        if (geometry.type !== 'LineString') {{
+          continue;
+        }}
+        const line = [];
+        for (const point of geometry.coordinates || []) {{
+          if (Array.isArray(point) && point.length >= 2) {{
+            const x = Number(point[0]);
+            const y = Number(point[1]);
+            if (Number.isFinite(x) && Number.isFinite(y)) {{
+              line.push([x, y]);
+            }}
+          }}
+        }}
+        if (line.length > 0) {{
+          lines.push(line);
         }}
       }}
       return lines;
     }}
 
-    function renderMap(missions, activeRoute) {{
-      const frame = document.getElementById('map-frame');
+    function ensurePreviewMap(crsMode) {{
+      if (previewMap && previewCrsMode === crsMode) {{
+        return previewMap;
+      }}
+      if (previewMap) {{
+        previewMap.remove();
+        previewMap = null;
+        previewTileLayer = null;
+        previewRouteLayer = null;
+        previewMarker = null;
+      }}
+      previewCrsMode = crsMode;
+      previewMap = L.map(
+        'mission-preview-map',
+        {{
+          zoomControl: true,
+          crs: crsMode === 'local' ? L.CRS.Simple : L.CRS.EPSG3857,
+        }}
+      ).setView(crsMode === 'local' ? [0, 0] : [55.6761, 12.5683], crsMode === 'local' ? 18 : 16);
+      if (crsMode === 'georef') {{
+        previewTileLayer = L.tileLayer(
+          'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{{z}}/{{y}}/{{x}}',
+          {{ maxZoom: 20, attribution: '&copy; Esri', opacity: 0.2 }}
+        ).addTo(previewMap);
+      }}
+      return previewMap;
+    }}
+
+    function updateSelectedMissionLabel() {{
+      selectedMissionLabel.textContent = selectedMissionId
+        ? `Selected mission: ${{selectedMissionId}}`
+        : 'Selected mission: none';
+      startMissionButton.disabled = !selectedMissionId;
+    }}
+
+    function setSelectedMission(missionId) {{
+      selectedMissionId = missionId || '';
+      updateSelectedMissionLabel();
+      renderMissionList();
+      renderSelectedMissionPreview();
+    }}
+
+    function renderSelectedMissionPreview() {{
       const legend = document.getElementById('legend-list');
       legend.innerHTML = '';
-
-      const layers = [];
-      for (const [index, mission] of missions.entries()) {{
-        if (!mission.route_geojson) {{
-          continue;
+      const selectedMission = missionsCache.find((mission) => mission.mission_id === selectedMissionId) || null;
+      if (!selectedMission) {{
+        const map = ensurePreviewMap('local');
+        if (previewRouteLayer) {{
+          map.removeLayer(previewRouteLayer);
+          previewRouteLayer = null;
         }}
-        layers.push({{
-          mission_id: mission.mission_id,
-          color: palette[index % palette.length],
-          lines: extractLineCoordinates(mission.route_geojson),
-        }});
-      }}
-      if (activeRoute) {{
-        layers.push({{
-          mission_id: 'Active Mission',
-          color: '#dc2626',
-          lines: extractLineCoordinates(activeRoute),
-        }});
-      }}
-
-      if (layers.length === 0 && missions.length === 0) {{
-        frame.textContent = 'No mission route geometry is available yet.';
-        legend.innerHTML = '<div class="muted">Built route geometry will appear here once mission artifacts are available.</div>';
+        if (previewMarker) {{
+          map.removeLayer(previewMarker);
+          previewMarker = null;
+        }}
+        legend.innerHTML = '<div class="muted">Select a mission to preview its route geometry before starting it.</div>';
+        map.setView([0, 0], 18);
         return;
       }}
 
-      if (layers.length === 0) {{
-        frame.textContent = 'No mission route geometry is available yet.';
-      }}
-
-      if (layers.length > 0) {{
-        const points = [];
-        for (const layer of layers) {{
-          for (const line of layer.lines) {{
-            for (const point of line) {{
-              if (Array.isArray(point) && point.length >= 2) {{
-                points.push(point);
-              }}
-            }}
-          }}
+      if (!selectedMission.route_geojson) {{
+        const map = ensurePreviewMap('local');
+        if (previewRouteLayer) {{
+          map.removeLayer(previewRouteLayer);
+          previewRouteLayer = null;
         }}
-        const xs = points.map((point) => Number(point[0]));
-        const ys = points.map((point) => Number(point[1]));
-        const minX = Math.min(...xs);
-        const maxX = Math.max(...xs);
-        const minY = Math.min(...ys);
-        const maxY = Math.max(...ys);
-        const width = Math.max(1, maxX - minX);
-        const height = Math.max(1, maxY - minY);
-        const padding = 40;
-        const viewWidth = 900;
-        const viewHeight = 520;
-
-        function project(point) {{
-          const x = padding + ((Number(point[0]) - minX) / width) * (viewWidth - padding * 2);
-          const y = viewHeight - padding - ((Number(point[1]) - minY) / height) * (viewHeight - padding * 2);
-          return `${{x.toFixed(2)}},${{y.toFixed(2)}}`;
+        if (previewMarker) {{
+          map.removeLayer(previewMarker);
+          previewMarker = null;
         }}
-
-        const polylines = layers.flatMap((layer) =>
-          layer.lines.map((line) =>
-            `<polyline fill="none" stroke="${{layer.color}}" stroke-width="${{layer.mission_id === 'Active Mission' ? 5 : 3}}" points="${{line.map(project).join(' ')}}" />`
-          )
-        ).join('');
-
-        frame.innerHTML = `
-          <svg viewBox="0 0 ${{viewWidth}} ${{viewHeight}}" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-            <rect x="0" y="0" width="${{viewWidth}}" height="${{viewHeight}}" fill="#2c3032" />
-            <g opacity="0.15">
-              <line x1="40" y1="40" x2="40" y2="${{viewHeight - 40}}" stroke="#eef3eb" />
-              <line x1="40" y1="${{viewHeight - 40}}" x2="${{viewWidth - 40}}" y2="${{viewHeight - 40}}" stroke="#eef3eb" />
-            </g>
-            ${{polylines}}
-          </svg>
-        `;
+        legend.innerHTML = '<div class="muted">This mission currently has no route geometry to preview.</div>';
+        map.setView([0, 0], 18);
+        return;
       }}
 
-      for (const mission of missions) {{
-        const item = document.createElement('div');
-        item.className = 'legend-item';
-        const layer = layers.find((entry) => entry.mission_id === mission.mission_id);
-        const downloadHref = `/api/missions/${{encodeURIComponent(mission.mission_id)}}/download`;
-        item.innerHTML = `
-          <div><strong>${{mission.mission_id}}</strong></div>
-          <div class="muted">
-            ${{
-              layer
-                ? `Color: <span style="color:${{layer.color}};">${{layer.color}}</span>`
-                : 'No route geometry available'
-            }}
-          </div>
-          ${{
-            downloadHref
-              ? `<div class="legend-actions"><a class="nav-link" href="${{downloadHref}}" download>Download JSON</a></div>`
-              : ''
-          }}
-        `;
-        legend.appendChild(item);
+      const georeferenced = isGeoReferencedRoute(selectedMission.route_geojson);
+      const map = ensurePreviewMap(georeferenced ? 'georef' : 'local');
+      if (previewRouteLayer) {{
+        map.removeLayer(previewRouteLayer);
+        previewRouteLayer = null;
+      }}
+      if (previewMarker) {{
+        map.removeLayer(previewMarker);
+        previewMarker = null;
       }}
 
-      if (activeRoute) {{
-        const item = document.createElement('div');
-        item.className = 'legend-item';
-        item.innerHTML = `
+      const lines = routeLines(selectedMission.route_geojson);
+      if (lines.length === 0) {{
+        legend.innerHTML = '<div class="muted">Built route geometry will appear here once mission artifacts are available.</div>';
+        return;
+      }}
+      const latLngLines = lines.map((line) =>
+        line.map((point) => georeferenced ? [point[1], point[0]] : [point[0], -point[1]])
+      );
+      previewRouteLayer = L.polyline(latLngLines, {{
+        color: georeferenced ? '#fdca0f' : '#ffe06b',
+        weight: 4,
+      }}).addTo(map);
+
+      let markerPosition = null;
+      let markerLabel = '';
+      if (georeferenced) {{
+        const livePosition = mapDataCache?.current_position || null;
+        if (
+          livePosition &&
+          livePosition.latitude !== undefined &&
+          livePosition.longitude !== undefined
+        ) {{
+          markerPosition = [Number(livePosition.latitude), Number(livePosition.longitude)];
+          markerLabel = 'Robot live position';
+        }}
+      }} else {{
+        const firstPoint = lines[0] && lines[0][0];
+        if (firstPoint) {{
+          markerPosition = [Number(firstPoint[0]), -Number(firstPoint[1])];
+          markerLabel = 'Waypoint 0';
+        }}
+      }}
+      if (markerPosition) {{
+        previewMarker = L.circleMarker(markerPosition, {{
+          radius: 5,
+          color: '#ffffff',
+          weight: 2,
+          fillColor: '#1d4ed8',
+          fillOpacity: 1,
+        }}).addTo(map);
+      }}
+
+      const bounds = previewRouteLayer.getBounds();
+      if (markerPosition) {{
+        bounds.extend(markerPosition);
+      }}
+      if (bounds.isValid()) {{
+        map.fitBounds(bounds, {{ padding: [24, 24], maxZoom: georeferenced ? 19 : 20 }});
+      }}
+
+      const downloadHref = `/api/missions/${{encodeURIComponent(selectedMission.mission_id)}}/download`;
+      const frameLabel = georeferenced ? 'North-up georeferenced preview' : 'Robot-frame preview (+X up, +Y left)';
+      const item = document.createElement('div');
+      item.className = 'legend-item';
+      item.innerHTML = `
+        <div><strong>${{selectedMission.mission_id}}</strong></div>
+        <div class="muted">${{frameLabel}}</div>
+        <div class="muted">${{markerLabel || 'No marker available'}}</div>
+        <div class="legend-actions">
+          <a class="nav-link" href="${{downloadHref}}" download>Download JSON</a>
+        </div>
+      `;
+      legend.appendChild(item);
+
+      const activeExecution = mapDataCache?.active_execution || null;
+      if (activeExecution && activeExecution.mission_id) {{
+        const activeItem = document.createElement('div');
+        activeItem.className = 'legend-item';
+        activeItem.innerHTML = `
           <div><strong>Active Mission</strong></div>
-          <div class="muted">Color: <span style="color:#dc2626;">#dc2626</span></div>
+          <div class="muted">${{activeExecution.mission_id}}</div>
         `;
-        legend.appendChild(item);
+        legend.appendChild(activeItem);
       }}
     }}
 
     async function loadMap() {{
       const response = await fetch('/api/map-data', {{ cache: 'no-store' }});
       const data = await response.json();
-      renderMap(data.missions || [], data.active_route_geojson || null);
+      mapDataCache = data;
+      renderSelectedMissionPreview();
     }}
 
-    async function loadMissions() {{
-      const response = await fetch('/api/missions', {{ cache: 'no-store' }});
-      const data = await response.json();
+    function renderMissionList() {{
       missionList.innerHTML = '';
 
       const defaultMissionOrder = ['SpotSweep', '3x3Sweep', 'Teleop'];
       const hiddenMissionIds = new Set(['RecordMap']);
-      const missions = (data.missions || []).filter((mission) => !hiddenMissionIds.has(mission.mission_id));
+      const missions = (missionsCache || []).filter((mission) => !hiddenMissionIds.has(mission.mission_id));
       const defaultMissionMap = new Map(missions.map((mission) => [mission.mission_id, mission]));
       const defaultMissions = defaultMissionOrder
         .map((missionId) => defaultMissionMap.get(missionId))
@@ -2524,17 +2669,11 @@ class MissionFrontendHttpNode(MissionBackendNode):
               <span class="muted">${{mission.is_manual ? 'Manual' : 'Autonomous'}} | Type: ${{mission.mission_type || '-'}} | Mode: ${{mission.execution_mode || '-'}} | RUNNING profile: ${{mission.running_profile_id}} | Artifacts: ${{mission.artifacts_ready ? 'ready' : 'pending build'}}</span>
             </div>
             <div class="mission-actions">
-              <button data-mission-id="${{mission.mission_id}}">Execute</button>
+              <button class="${{mission.mission_id === selectedMissionId ? 'selected' : 'secondary'}}" data-mission-id="${{mission.mission_id}}">Select</button>
             </div>
           `;
           item.querySelector('button').addEventListener('click', async () => {{
-            const executeResponse = await fetch(`/api/missions/${{encodeURIComponent(mission.mission_id)}}/execute`, {{
-              method: 'POST',
-              headers: {{ 'Content-Type': 'application/json' }},
-              body: JSON.stringify({{}})
-            }});
-            const executeData = await executeResponse.json();
-            setBanner(executeData.success ? 'ok' : 'error', executeData.message || 'Mission request completed');
+            setSelectedMission(mission.mission_id);
           }});
           group.appendChild(item);
         }}
@@ -2548,6 +2687,21 @@ class MissionFrontendHttpNode(MissionBackendNode):
       if (missionList.children.length === 0) {{
         missionList.innerHTML = '<div class="muted">No executable missions are available right now.</div>';
       }}
+    }}
+
+    async function loadMissions() {{
+      const response = await fetch('/api/missions', {{ cache: 'no-store' }});
+      const data = await response.json();
+      missionsCache = data.missions || [];
+      if (!selectedMissionId) {{
+        const firstPreviewable = missionsCache.find((mission) => mission.mission_id !== 'RecordMap') || null;
+        if (firstPreviewable) {{
+          selectedMissionId = firstPreviewable.mission_id;
+        }}
+      }}
+      renderMissionList();
+      updateSelectedMissionLabel();
+      renderSelectedMissionPreview();
     }}
 
     document.getElementById('upload-file').addEventListener('change', async (event) => {{
@@ -2578,6 +2732,21 @@ class MissionFrontendHttpNode(MissionBackendNode):
         document.getElementById('upload-mission-id').value = '';
       }}
       await loadMap();
+    }});
+
+    startMissionButton.addEventListener('click', async () => {{
+      if (!selectedMissionId) {{
+        setBanner('error', 'Select a mission before starting it.');
+        return;
+      }}
+      const executeResponse = await fetch(`/api/missions/${{encodeURIComponent(selectedMissionId)}}/execute`, {{
+        method: 'POST',
+        headers: {{ 'Content-Type': 'application/json' }},
+        body: JSON.stringify({{}})
+      }});
+      const executeData = await executeResponse.json();
+      setBanner(executeData.success ? 'ok' : 'error', executeData.message || 'Mission request completed');
+      await Promise.all([loadMap(), loadMissions()]);
     }});
 
     Promise.all([loadMap(), loadMissions()]).catch((error) => {{

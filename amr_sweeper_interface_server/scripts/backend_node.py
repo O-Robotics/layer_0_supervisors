@@ -1239,6 +1239,9 @@ class MissionBackendNode(Node):
         }
 
     def map_snapshot(self) -> dict[str, Any]:
+        with self._state_lock:
+            navsat = dict(self._latest_navsat) if self._latest_navsat is not None else None
+
         missions_directory = _resolve_path(self._missions_from_db_directory)
         missions_log_directory = _resolve_path(self._missions_log_directory)
         missions: list[dict[str, Any]] = []
@@ -1279,6 +1282,7 @@ class MissionBackendNode(Node):
             "missions": missions,
             "active_execution": active_execution,
             "active_route_geojson": active_route,
+            "current_position": navsat,
         }
 
     def mission_file_path(self, mission_id: str) -> Path:
