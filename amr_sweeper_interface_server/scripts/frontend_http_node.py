@@ -2229,10 +2229,18 @@ class MissionFrontendHttpNode(MissionBackendNode):
       border-radius: 16px;
       background: var(--panel);
       overflow: hidden;
+      position: relative;
     }}
     #mission-preview-map {{
       width: 100%;
       min-height: 520px;
+    }}
+    #mission-preview-local {{
+      width: 100%;
+      min-height: 520px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }}
     .legend-list {{
       display: grid;
@@ -2348,6 +2356,7 @@ class MissionFrontendHttpNode(MissionBackendNode):
       <section class="card">
         <div class="map-frame">
           <div id="mission-preview-map"></div>
+          <div id="mission-preview-local"></div>
         </div>
       </section>
       <section class="card">
@@ -2384,6 +2393,8 @@ class MissionFrontendHttpNode(MissionBackendNode):
     const missionList = document.getElementById('mission-list');
     const startMissionButton = document.getElementById('start-mission-button');
     const selectedMissionLabel = document.getElementById('selected-mission-label');
+    const previewMapElement = document.getElementById('mission-preview-map');
+    const previewLocalElement = document.getElementById('mission-preview-local');
     let mapDataCache = null;
     let missionsCache = [];
     let selectedMissionId = '';
@@ -2496,6 +2507,97 @@ class MissionFrontendHttpNode(MissionBackendNode):
       return previewMap;
     }}
 
+    function showGeoreferencedPreview() {{
+      previewMapElement.style.display = 'block';
+      previewLocalElement.style.display = 'none';
+    }}
+
+    function showLocalPreview() {{
+      previewMapElement.style.display = 'none';
+      previewLocalElement.style.display = 'flex';
+    }}
+
+    function clearPreviewLayers() {{
+      if (previewMap && previewRouteLayer) {{
+        previewMap.removeLayer(previewRouteLayer);
+        previewRouteLayer = null;
+      }}
+      if (previewMap && previewMarker) {{
+        previewMap.removeLayer(previewMarker);
+        previewMarker = null;
+      }}
+    }}
+
+    function renderLocalMissionPreview(lines) {{
+      showLocalPreview();
+      const projectedPoints = [];
+      for (const line of lines) {{
+        for (const point of line) {{
+          const x = Number(point[0]);
+          const y = Number(point[1]);
+          if (!Number.isFinite(x) || !Number.isFinite(y)) {{
+            continue;
+          }}
+          projectedPoints.push([-y, x]);
+        }}
+      }}
+      if (projectedPoints.length === 0) {{
+        previewLocalElement.textContent = 'Mission geometry is present but contains no plottable route points.';
+        return;
+      }}
+
+      const xs = projectedPoints.map((point) => point[0]);
+      const ys = projectedPoints.map((point) => point[1]);
+      const minX = Math.min(...xs);
+      const maxX = Math.max(...xs);
+      const minY = Math.min(...ys);
+      const maxY = Math.max(...ys);
+      const width = Math.max(1, maxX - minX);
+      const height = Math.max(1, maxY - minY);
+      const padding = 40;
+      const viewWidth = 900;
+      const viewHeight = 520;
+      const usableWidth = viewWidth - padding * 2;
+      const usableHeight = viewHeight - padding * 2;
+      const scale = Math.min(usableWidth / width, usableHeight / height);
+      const centerX = (minX + maxX) / 2;
+      const centerY = (minY + maxY) / 2;
+
+      function projectPoint(point) {{
+        const rawX = Number(point[0]);
+        const rawY = Number(point[1]);
+        const orientedX = -rawY;
+        const orientedY = rawX;
+        const x = (viewWidth / 2) + ((orientedX - centerX) * scale);
+        const y = (viewHeight / 2) - ((orientedY - centerY) * scale);
+        return [x, y];
+      }}
+
+      const polylines = lines.map((line) => {{
+        const points = line.map((point) => projectPoint(point));
+        return `<polyline fill="none" stroke="#ffe06b" stroke-width="4" points="${{points.map((point) => `${{point[0].toFixed(2)}},${{point[1].toFixed(2)}}`).join(' ')}}" />`;
+      }}).join('');
+
+      let startMarker = '';
+      const firstPoint = lines[0] && lines[0][0];
+      if (firstPoint) {{
+        const [markerX, markerY] = projectPoint(firstPoint);
+        startMarker = `<circle cx="${{markerX.toFixed(2)}}" cy="${{markerY.toFixed(2)}}" r="5" fill="#1d4ed8" stroke="#ffffff" stroke-width="2" />`;
+      }}
+
+      previewLocalElement.innerHTML = `
+        <svg viewBox="0 0 ${{viewWidth}} ${{viewHeight}}" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+          <rect x="0" y="0" width="${{viewWidth}}" height="${{viewHeight}}" fill="#2c3032" />
+          <g opacity="0.15">
+            <line x1="40" y1="40" x2="40" y2="${{viewHeight - 40}}" stroke="#eef3eb" />
+            <line x1="40" y1="${{viewHeight - 40}}" x2="${{viewWidth - 40}}" y2="${{viewHeight - 40}}" stroke="#eef3eb" />
+          </g>
+          ${{polylines}}
+          ${{startMarker}}
+        </svg>
+      `;
+    }}
+
     function updateSelectedMissionLabel() {{
       selectedMissionLabel.textContent = selectedMissionId
         ? `Selected mission: ${{selectedMissionId}}`
@@ -2510,67 +2612,56 @@ class MissionFrontendHttpNode(MissionBackendNode):
       renderSelectedMissionPreview();
     }}
 
+    function selectedMissionPreviewData() {{
+      const previewMissions = mapDataCache?.missions || [];
+      return previewMissions.find((mission) => mission.mission_id === selectedMissionId) || null;
+    }}
+
     function renderSelectedMissionPreview() {{
       const legend = document.getElementById('legend-list');
       legend.innerHTML = '';
-      const selectedMission = missionsCache.find((mission) => mission.mission_id === selectedMissionId) || null;
+      const selectedMission = selectedMissionPreviewData();
       if (!selectedMission) {{
-        const map = ensurePreviewMap('local');
-        if (previewRouteLayer) {{
-          map.removeLayer(previewRouteLayer);
-          previewRouteLayer = null;
-        }}
-        if (previewMarker) {{
-          map.removeLayer(previewMarker);
-          previewMarker = null;
-        }}
+        showLocalPreview();
+        clearPreviewLayers();
+        previewLocalElement.textContent = 'Select a mission to preview its route geometry before starting it.';
         legend.innerHTML = '<div class="muted">Select a mission to preview its route geometry before starting it.</div>';
-        map.setView([0, 0], 18);
         return;
       }}
 
       if (!selectedMission.route_geojson) {{
-        const map = ensurePreviewMap('local');
-        if (previewRouteLayer) {{
-          map.removeLayer(previewRouteLayer);
-          previewRouteLayer = null;
-        }}
-        if (previewMarker) {{
-          map.removeLayer(previewMarker);
-          previewMarker = null;
-        }}
+        showLocalPreview();
+        clearPreviewLayers();
+        previewLocalElement.textContent = 'This mission currently has no route geometry to preview.';
         legend.innerHTML = '<div class="muted">This mission currently has no route geometry to preview.</div>';
-        map.setView([0, 0], 18);
         return;
       }}
 
       const georeferenced = isGeoReferencedRoute(selectedMission.route_geojson);
-      const map = ensurePreviewMap(georeferenced ? 'georef' : 'local');
-      if (previewRouteLayer) {{
-        map.removeLayer(previewRouteLayer);
-        previewRouteLayer = null;
-      }}
-      if (previewMarker) {{
-        map.removeLayer(previewMarker);
-        previewMarker = null;
-      }}
-
       const lines = routeLines(selectedMission.route_geojson);
       if (lines.length === 0) {{
+        showLocalPreview();
+        clearPreviewLayers();
+        previewLocalElement.textContent = 'Built route geometry will appear here once mission artifacts are available.';
         legend.innerHTML = '<div class="muted">Built route geometry will appear here once mission artifacts are available.</div>';
         return;
       }}
-      const latLngLines = lines.map((line) =>
-        line.map((point) => georeferenced ? [point[1], point[0]] : [point[0], -point[1]])
-      );
-      previewRouteLayer = L.polyline(latLngLines, {{
-        color: georeferenced ? '#fdca0f' : '#ffe06b',
-        weight: 4,
-      }}).addTo(map);
 
-      let markerPosition = null;
       let markerLabel = '';
       if (georeferenced) {{
+        showGeoreferencedPreview();
+        previewLocalElement.innerHTML = '';
+        const map = ensurePreviewMap('georef');
+        clearPreviewLayers();
+        const latLngLines = lines.map((line) =>
+          line.map((point) => [point[1], point[0]])
+        );
+        previewRouteLayer = L.polyline(latLngLines, {{
+          color: '#fdca0f',
+          weight: 4,
+        }}).addTo(map);
+
+        let markerPosition = null;
         const livePosition = mapDataCache?.current_position || null;
         if (
           livePosition &&
@@ -2580,29 +2671,26 @@ class MissionFrontendHttpNode(MissionBackendNode):
           markerPosition = [Number(livePosition.latitude), Number(livePosition.longitude)];
           markerLabel = 'Robot live position';
         }}
-      }} else {{
-        const firstPoint = lines[0] && lines[0][0];
-        if (firstPoint) {{
-          markerPosition = [Number(firstPoint[0]), -Number(firstPoint[1])];
-          markerLabel = 'Waypoint 0';
+        if (markerPosition) {{
+          previewMarker = L.circleMarker(markerPosition, {{
+            radius: 5,
+            color: '#ffffff',
+            weight: 2,
+            fillColor: '#1d4ed8',
+            fillOpacity: 1,
+          }}).addTo(map);
         }}
-      }}
-      if (markerPosition) {{
-        previewMarker = L.circleMarker(markerPosition, {{
-          radius: 5,
-          color: '#ffffff',
-          weight: 2,
-          fillColor: '#1d4ed8',
-          fillOpacity: 1,
-        }}).addTo(map);
-      }}
-
-      const bounds = previewRouteLayer.getBounds();
-      if (markerPosition) {{
-        bounds.extend(markerPosition);
-      }}
-      if (bounds.isValid()) {{
-        map.fitBounds(bounds, {{ padding: [24, 24], maxZoom: georeferenced ? 19 : 20 }});
+        const bounds = previewRouteLayer.getBounds();
+        if (markerPosition) {{
+          bounds.extend(markerPosition);
+        }}
+        if (bounds.isValid()) {{
+          map.fitBounds(bounds, {{ padding: [24, 24], maxZoom: 19 }});
+        }}
+      }} else {{
+        clearPreviewLayers();
+        renderLocalMissionPreview(lines);
+        markerLabel = 'Waypoint 0';
       }}
 
       const downloadHref = `/api/missions/${{encodeURIComponent(selectedMission.mission_id)}}/download`;
@@ -2635,6 +2723,13 @@ class MissionFrontendHttpNode(MissionBackendNode):
       const response = await fetch('/api/map-data', {{ cache: 'no-store' }});
       const data = await response.json();
       mapDataCache = data;
+      if (!selectedMissionId) {{
+        const firstPreviewable = (data.missions || []).find((mission) => mission.mission_id !== 'RecordMap');
+        if (firstPreviewable) {{
+          selectedMissionId = firstPreviewable.mission_id;
+          updateSelectedMissionLabel();
+        }}
+      }}
       renderSelectedMissionPreview();
     }}
 
