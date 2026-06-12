@@ -44,6 +44,10 @@ def _resolve_path(configured_path: str) -> Path:
     return Path.cwd() / path
 
 
+def _existing_paths(candidates: list[Path]) -> list[Path]:
+    return [path for path in candidates if path.exists()]
+
+
 def _escape_ics_text(value: str) -> str:
     return (
         str(value)
@@ -1242,11 +1246,12 @@ class MissionBackendNode(Node):
         with self._state_lock:
             navsat = dict(self._latest_navsat) if self._latest_navsat is not None else None
 
-        missions_directory = _resolve_path(self._missions_from_db_directory)
+        mission_directories = [*_existing_paths([_resolve_path(self._missions_from_db_directory)]), *self._builtin_mission_directories()]
         missions_log_directory = _resolve_path(self._missions_log_directory)
         missions: list[dict[str, Any]] = []
-        mission_files = list(missions_directory.glob("*.json"))
-        mission_files.extend(missions_directory.glob("*/*.json"))
+        mission_files: list[Path] = []
+        for missions_directory in mission_directories:
+            mission_files.extend(missions_directory.rglob("*.json"))
         seen_paths: set[Path] = set()
         for mission_file in sorted(mission_files):
             if mission_file in seen_paths:
@@ -1289,15 +1294,32 @@ class MissionBackendNode(Node):
         if not mission_id:
             raise RuntimeError("mission_id is required")
 
-        missions_directory = _resolve_path(self._missions_from_db_directory)
-        candidates = [missions_directory / f"{mission_id}.json"]
-        candidates.extend(missions_directory.glob(f"*/{mission_id}.json"))
+        candidates: list[Path] = []
+        for missions_directory in [*_existing_paths([_resolve_path(self._missions_from_db_directory)]), *self._builtin_mission_directories()]:
+            candidates.append(missions_directory / f"{mission_id}.json")
+            candidates.extend(missions_directory.rglob(f"{mission_id}.json"))
 
         for candidate in candidates:
             if candidate.exists() and candidate.is_file():
                 return candidate
 
         raise RuntimeError(f"Mission file for '{mission_id}' was not found")
+
+    def _builtin_mission_directories(self) -> list[Path]:
+        workspace_root = Path.cwd()
+        candidates = [
+            workspace_root / "src" / "layer_3_navigation" / "amr_sweeper_navigation" / "missions",
+            workspace_root / "install" / "amr_sweeper_navigation" / "share" / "amr_sweeper_navigation" / "missions",
+        ]
+        existing: list[Path] = []
+        seen: set[Path] = set()
+        for candidate in candidates:
+            if candidate.exists():
+                resolved = candidate.resolve()
+                if resolved not in seen:
+                    seen.add(resolved)
+                    existing.append(candidate)
+        return existing
 
     def _call_service(self, client, request, timeout_sec: float, service_name: str):
         if not client.wait_for_service(timeout_sec=timeout_sec):

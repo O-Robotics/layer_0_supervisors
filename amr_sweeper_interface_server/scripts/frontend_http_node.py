@@ -2234,6 +2234,7 @@ class MissionFrontendHttpNode(MissionBackendNode):
     #mission-preview-map {{
       width: 100%;
       min-height: 520px;
+      display: none;
     }}
     #mission-preview-local {{
       width: 100%;
@@ -2241,6 +2242,7 @@ class MissionFrontendHttpNode(MissionBackendNode):
       display: flex;
       align-items: center;
       justify-content: center;
+      padding: 0;
     }}
     .legend-list {{
       display: grid;
@@ -2586,7 +2588,7 @@ class MissionFrontendHttpNode(MissionBackendNode):
       }}
 
       previewLocalElement.innerHTML = `
-        <svg viewBox="0 0 ${{viewWidth}} ${{viewHeight}}" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+        <svg viewBox="0 0 ${{viewWidth}} ${{viewHeight}}" width="100%" height="${{viewHeight}}" xmlns="http://www.w3.org/2000/svg">
           <rect x="0" y="0" width="${{viewWidth}}" height="${{viewHeight}}" fill="#2c3032" />
           <g opacity="0.15">
             <line x1="40" y1="40" x2="40" y2="${{viewHeight - 40}}" stroke="#eef3eb" />
