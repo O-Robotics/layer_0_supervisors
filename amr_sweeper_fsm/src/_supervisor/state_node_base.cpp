@@ -2626,9 +2626,11 @@ void StateNodeBase::stop_state_processes()
 {
   // Stop is best-effort and intentionally ignores errors (common during teardown).
   // Prefer per-profile process specs so we can honor per-process shutdown policies.
+  // Stop in reverse bring-up order so higher-level dependents exit before providers.
   if (!profile_processes_.empty()) {
     RCLCPP_INFO(get_logger(), "FSM state transition stopping proccesses");
-    for (const auto & pp : profile_processes_) {
+    for (auto it = profile_processes_.rbegin(); it != profile_processes_.rend(); ++it) {
+      const auto & pp = *it;
       const auto cmd = resolve_placeholders(pp.command);
       fsm_layer_0::ProcessManager::StopPolicy pol;
 
@@ -2648,10 +2650,10 @@ void StateNodeBase::stop_state_processes()
     return;
   }
 
-  // Backwards compatible: no profile metadata.
+  // Backwards compatible: no profile metadata. Preserve the same reverse-order shutdown.
   RCLCPP_INFO(get_logger(), "FSM state transition stopping proccesses");
-  for (const auto & raw : processes_) {
-    const auto cmd = resolve_placeholders(raw);
+  for (auto it = processes_.rbegin(); it != processes_.rend(); ++it) {
+    const auto cmd = resolve_placeholders(*it);
     std::string err;
     (void)procman_.stop(cmd, err);
   }

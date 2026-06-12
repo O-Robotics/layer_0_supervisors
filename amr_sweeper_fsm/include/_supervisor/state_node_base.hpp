@@ -99,7 +99,8 @@ struct ProfileProcess
  *    - On activation: commands are started in profile order.
  *      Critical profile processes that declare `startup.ready` requirements must
  *      satisfy them before later processes are launched.
- *    - On deactivation/cleanup/shutdown/error: all commands are stopped (best-effort).
+ *    - On deactivation/cleanup/shutdown/error: commands are stopped in reverse
+ *      profile order (best-effort), so dependents exit before lower-level providers.
  *
  * 2) **ROSOUT monitoring + fault trigger rules**
  *    - Each state can define a set of rules in `faults.rosout_triggers`.
