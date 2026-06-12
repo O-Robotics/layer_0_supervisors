@@ -2342,16 +2342,16 @@ class MissionFrontendHttpNode(MissionBackendNode):
     <section class="card">
       <h1>Missions</h1>
       <div id="banner" class="banner"></div>
-      <div class="hero-actions">
-        <button id="start-mission-button" disabled>Start Mission</button>
-        <div id="selected-mission-label" class="muted">Selected mission: none</div>
-      </div>
       <div class="nav">
         <a class="nav-link" href="/">Dashboard</a>
         <a class="nav-link" href="/calendar">Calendar</a>
         <a class="nav-link" href="/map">Missions</a>
         <a class="nav-link" href="/record-map">Record Map</a>
         <a class="nav-link" href="/developer">Developer</a>
+      </div>
+      <div class="hero-actions">
+        <button id="start-mission-button" disabled>Start Mission</button>
+        <div id="selected-mission-label" class="muted">Selected mission: none</div>
       </div>
     </section>
     <section class="map-layout">
