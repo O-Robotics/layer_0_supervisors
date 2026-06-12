@@ -2049,6 +2049,12 @@ void StateNodeBase::on_rosout(const rcl_interfaces::msg::Log::SharedPtr msg)
     return;
   }
 
+  // Ignore rosout triggers outside ACTIVE so shutdown/configure chatter from
+  // child processes cannot escalate a state that is already leaving service.
+  if (this->get_current_state().id() != lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE) {
+    return;
+  }
+
   // Evaluate rules in order; first match wins.
   for (auto & t : rosout_triggers_) {
     // 1) Level gate.
