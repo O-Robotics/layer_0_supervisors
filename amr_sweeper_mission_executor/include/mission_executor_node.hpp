@@ -167,9 +167,9 @@ private:
   double routed_mission_pose_max_age_seconds_{2.0};
   std::uint16_t idling_profile_id_{101U};
   std::uint16_t scheduled_running_profile_id_{201U};
-  std::uint16_t manual_mapping_profile_id_{202U};
-  std::uint16_t manual_routed_profile_id_{203U};
-  std::uint16_t manual_teleop_profile_id_{204U};
+  std::uint16_t manual_mapping_profile_id_{225U};
+  std::uint16_t manual_routed_profile_id_{210U};
+  std::uint16_t manual_teleop_profile_id_{220U};
   std::uint8_t default_activation_priority_{200U};
   rclcpp::CallbackGroup::SharedPtr client_callback_group_;
   rclcpp::AsyncParametersClient::SharedPtr mission_parser_parameter_client_;

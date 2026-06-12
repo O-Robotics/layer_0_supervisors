@@ -1440,11 +1440,11 @@ MissionExecutorNode::MissionExecutorNode(const rclcpp::NodeOptions & options)
   scheduled_running_profile_id_ = static_cast<std::uint16_t>(
     declare_parameter<int>("scheduled_running_profile_id", 201));
   manual_mapping_profile_id_ = static_cast<std::uint16_t>(
-    declare_parameter<int>("manual_mapping_profile_id", 202));
+    declare_parameter<int>("manual_mapping_profile_id", 225));
   manual_routed_profile_id_ = static_cast<std::uint16_t>(
-    declare_parameter<int>("manual_routed_profile_id", 203));
+    declare_parameter<int>("manual_routed_profile_id", 210));
   manual_teleop_profile_id_ = static_cast<std::uint16_t>(
-    declare_parameter<int>("manual_teleop_profile_id", 204));
+    declare_parameter<int>("manual_teleop_profile_id", 220));
   default_activation_priority_ = static_cast<std::uint8_t>(
     declare_parameter<int>("default_activation_priority", 200));
 

@@ -132,10 +132,11 @@ The shipped profile catalog is currently:
 - `110`: IDLING test profile for `fsm_tester_node`
 - `200`: RUNNING bridge profile with no processes; auto-requests `300`
 - `201`: default RUNNING mission execution profile
-- `202`: RUNNING manual mapping profile
-- `203`: RUNNING manual routed-mission profile
-- `204`: RUNNING manual teleoperation profile
-- `205`: RUNNING manual RecordMap profile with localization/SLAM
+- `210`: RUNNING built-in local-missions profile
+- `211`: RUNNING auto-start `3x3Sweep` profile
+- `212`: RUNNING auto-start `SpotSweep` profile
+- `220`: RUNNING manual teleoperation profile
+- `225`: RUNNING manual RecordMap profile with localization/SLAM
 - `300`: CHARGING bridge profile with no processes; auto-requests `400`
 - `301`: default CHARGING profile
 - `400`: default FAULT profile with no processes and no further transition
@@ -239,4 +240,4 @@ source install/setup.bash
 
 - The supervisor tick period is configurable via `tick_period_ms` in the launch file (default: 100 ms).
 - Publish periods are configured via `publish.rules` in `config/state_parameters.yaml` and are decoupled from the supervisor tick.
-- RUNNING profiles `201`, `202`, and `203` pass `runtime.mission_execution_directory` into layer 3 bringup via the `{mission_execution_directory}` placeholder when a request provides it.
+- RUNNING profiles `201`, `210`, and `225` pass `runtime.mission_execution_directory` into layer 3 bringup via the `{mission_execution_directory}` placeholder when a request provides it. Profiles `211` and `212` can also self-start their built-in missions directly via explicit mission launch arguments.

@@ -17,9 +17,9 @@ HTTP operator UI:
 
 Profile routing:
 - scheduled VDA5050 missions -> RUNNING profile `201`
-- `builtin_manual_mapping` or `execution_mode: "manual_mapping"` -> RUNNING profile `202`
-- `builtin_local_pattern` -> RUNNING profile `203`
-- `builtin_teleop` or `execution_mode: "teleoperation"` -> RUNNING profile `204`
+- `builtin_manual_mapping` or `execution_mode: "manual_mapping"` -> RUNNING profile `225`
+- `builtin_local_pattern` -> RUNNING profile `210`
+- `builtin_teleop` or `execution_mode: "teleoperation"` -> RUNNING profile `220`
 
 The node can accept scheduler-prepared execution folders, or prepare built-in manual missions on
 its own before requesting the FSM transition to `RUNNING`.

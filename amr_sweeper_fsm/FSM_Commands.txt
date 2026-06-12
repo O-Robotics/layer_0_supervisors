@@ -103,10 +103,11 @@ Profile 201 runtime wiring:
   - passes mission_execution_directory into layer 3 bringup
 
 Other shipped RUNNING profiles:
-  - 202: manual mapping
-  - 203: manual routed missions
-  - 204: manual teleoperation
-  - 205: manual teleoperation with localization and SLAM
+  - 210: built-in local missions
+  - 211: auto-run 3x3Sweep
+  - 212: auto-run SpotSweep
+  - 220: manual teleoperation
+  - 225: manual RecordMap with localization and SLAM
 
 
 Example: request CHARGING default but keep lifecycle node Inactive (staging)

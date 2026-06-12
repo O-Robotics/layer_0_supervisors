@@ -30,7 +30,7 @@ Profile ID bands (100-wide band of profiles per FSM-state)
 ---------------------------------------------
   INITIALIZING : 000 - 099   (bridge 000, default 001, alternate 002, debug 003)
   IDLING       : 100 - 199   (bridge 100, default 101, testing 110)
-  RUNNING      : 200 - 299   (bridge 200, default 201, mapping 202, routed 203, teleop 204)
+  RUNNING      : 200 - 299   (bridge 200, default 201, mission 210-219, teleop 220-229)
   CHARGING     : 300 - 399   (bridge 300, default 301)
   FAULT        : 400 - 499   (default 400, empty 401)
 
@@ -81,10 +81,11 @@ IDLING
 RUNNING
   - RUNNING is profile-driven rather than a single mode.
   - Profile 201 is the default mission execution stack.
-  - Profile 202 is manual mapping.
-  - Profile 203 is manual routed missions.
-  - Profile 204 is manual teleoperation.
-  - Profile 205 is manual teleoperation with localization kept active for operator awareness.
+  - Profile 210 is the generic built-in local-missions profile.
+  - Profile 211 auto-runs `3x3Sweep`.
+  - Profile 212 auto-runs `SpotSweep`.
+  - Profile 220 is manual teleoperation.
+  - Profile 225 is manual RecordMap with localization and SLAM kept active for operator awareness.
   - Profiles that use mission execution directories pass them into layer 3 bringup through the
     `runtime.mission_execution_directory` parameter placeholder.
 
