@@ -18,6 +18,8 @@ from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 import rclpy
+import yaml
+from ament_index_python.packages import PackageNotFoundError, get_package_share_directory
 from amr_sweeper_fsm.msg import FSMState, FSMStatus
 from amr_sweeper_fsm.srv import RequestState
 from amr_sweeper_mission_executor.srv import (
@@ -35,6 +37,55 @@ from rcl_interfaces.msg import Log
 from sensor_msgs.msg import BatteryState, NavSatFix
 from std_msgs.msg import String
 from std_srvs.srv import Trigger
+
+
+MISSION_LAYER_OVERRIDE_KEYS = (
+    "use_amr_sweeper_ros2_control",
+    "use_amr_sweeper_battery",
+    "use_amr_sweeper_system_info",
+    "use_amr_sweeper_usb_cameras",
+    "use_amr_sweeper_depth_camera",
+    "use_amr_sweeper_imu",
+    "use_amr_sweeper_gnss",
+    "use_ntrip_client",
+    "use_amr_sweeper_drive_controller",
+    "use_amr_sweeper_tool_controller",
+    "use_amr_sweeper_joystick",
+    "use_amr_sweeper_sweeping_controller",
+    "use_amr_sweeper_attitude_controller",
+    "use_amr_sweeper_collision_detector",
+    "use_amr_sweeper_safety_controller",
+    "use_joy_node",
+    "use_amr_sweeper_visual_odometry",
+    "use_amr_sweeper_localization",
+    "use_amr_sweeper_mapping",
+    "use_amr_sweeper_navigation",
+    "auto_start_mission",
+)
+
+MISSION_LAYER_OVERRIDE_FALLBACKS = {
+    "use_amr_sweeper_ros2_control": True,
+    "use_amr_sweeper_battery": True,
+    "use_amr_sweeper_system_info": True,
+    "use_amr_sweeper_usb_cameras": True,
+    "use_amr_sweeper_depth_camera": True,
+    "use_amr_sweeper_imu": True,
+    "use_amr_sweeper_gnss": True,
+    "use_ntrip_client": True,
+    "use_amr_sweeper_drive_controller": True,
+    "use_amr_sweeper_tool_controller": True,
+    "use_amr_sweeper_joystick": True,
+    "use_amr_sweeper_sweeping_controller": True,
+    "use_amr_sweeper_attitude_controller": True,
+    "use_amr_sweeper_collision_detector": True,
+    "use_amr_sweeper_safety_controller": True,
+    "use_joy_node": False,
+    "use_amr_sweeper_visual_odometry": False,
+    "use_amr_sweeper_localization": True,
+    "use_amr_sweeper_mapping": False,
+    "use_amr_sweeper_navigation": True,
+    "auto_start_mission": True,
+}
 
 
 def _resolve_path(configured_path: str) -> Path:
@@ -66,6 +117,101 @@ def _unescape_ics_text(value: str) -> str:
         .replace("\\;", ";")
         .replace("\\\\", "\\")
     )
+
+
+def _coerce_bool_value(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"true", "1", "yes", "on"}:
+            return True
+        if lowered in {"false", "0", "no", "off"}:
+            return False
+    return None
+
+
+def _parse_transition_completion_message(message: str) -> tuple[str, int] | None:
+    prefix = "FSM state transition completed, now running:"
+    if not isinstance(message, str) or prefix not in message:
+        return None
+    remainder = message.split(prefix, 1)[1].strip()
+    if not remainder or "(" not in remainder or ")" not in remainder:
+        return None
+    state_part, profile_part = remainder.rsplit("(", 1)
+    state = state_part.strip()
+    profile_text = profile_part.split(")", 1)[0].strip()
+    try:
+        profile = int(profile_text)
+    except (TypeError, ValueError):
+        return None
+    if not state:
+        return None
+    return state, profile
+
+
+def _transition_progress_message_from_log(message: str) -> str | None:
+    if not isinstance(message, str):
+        return None
+    normalized = message.strip()
+    if normalized == "Critical profile process ready: amr_sweeper_layer_1_hardware_bringup":
+        return "Hardware ready"
+    if normalized == "Critical profile process ready: amr_sweeper_layer_2_controllers_bringup":
+        return "Controllers ready"
+    return None
+
+
+def _running_profiles_yaml_path() -> Path:
+    candidates: list[Path] = []
+    try:
+        candidates.append(
+            Path(get_package_share_directory("amr_sweeper_fsm")) / "config" / "profiles" / "running_profiles.yaml"
+        )
+    except PackageNotFoundError:
+        pass
+    candidates.append(
+        Path.cwd() / "src" / "layer_0_supervisors" / "amr_sweeper_fsm" / "config" / "profiles" / "running_profiles.yaml"
+    )
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[-1]
+
+
+def _load_running_profile_default_overrides() -> dict[int, dict[str, bool]]:
+    path = _running_profiles_yaml_path()
+    if not path.exists():
+        return {}
+    try:
+        document = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return {}
+    if not isinstance(document, dict):
+        return {}
+
+    overrides_by_profile: dict[int, dict[str, bool]] = {}
+    for entry in document.get("profiles", []):
+        profile = entry.get("profile", {}) if isinstance(entry, dict) else {}
+        try:
+            profile_id = int(profile.get("id"))
+        except (TypeError, ValueError):
+            continue
+        profile_overrides: dict[str, bool] = {}
+        for process in profile.get("processes", []):
+            startup = process.get("startup", {}) if isinstance(process, dict) else {}
+            for argument in startup.get("args", []):
+                if not isinstance(argument, str) or ":=" not in argument:
+                    continue
+                key, raw_value = argument.split(":=", 1)
+                if key not in MISSION_LAYER_OVERRIDE_KEYS:
+                    continue
+                parsed = _coerce_bool_value(raw_value)
+                if parsed is None:
+                    continue
+                profile_overrides[key] = parsed
+        if profile_overrides:
+            overrides_by_profile[profile_id] = profile_overrides
+    return overrides_by_profile
 
 
 
@@ -179,6 +325,11 @@ class MissionBackendNode(Node):
         self._latest_battery: dict[str, Any] | None = None
         self._latest_safety_status: dict[str, Any] | None = None
         self._recent_logs: deque[dict[str, Any]] = deque(maxlen=max(1, self._max_log_entries))
+        self._last_cleared_running_profile: int | None = None
+        self._display_fsm_state: str | None = None
+        self._display_fsm_profile: int | None = None
+        self._display_transition_active = False
+        self._display_transition_progress = ""
 
         self.create_subscription(FSMState, self._fsm_state_topic, self._handle_fsm_state, 10)
         self.create_subscription(FSMStatus, self._fsm_status_topic, self._handle_fsm_status, 10)
@@ -196,8 +347,13 @@ class MissionBackendNode(Node):
                 "current_state": message.current_state,
                 "current_profile": int(message.current_profile),
             }
+            if self._display_fsm_state is None:
+                self._display_fsm_state = message.current_state
+            if self._display_fsm_profile is None:
+                self._display_fsm_profile = int(message.current_profile)
 
     def _handle_fsm_status(self, message: FSMStatus) -> None:
+        should_clear_recent_logs = False
         with self._state_lock:
             self._latest_fsm_status = {
                 "stamp": self._time_to_dict(message.stamp),
@@ -212,6 +368,35 @@ class MissionBackendNode(Node):
                 "priority_age_sec": float(message.priority_age_sec),
                 "last_message": message.last_message,
             }
+            current_state = str(message.current_state).strip().upper()
+            transition_status = str(message.transition_status).strip().upper()
+            current_profile = int(message.current_profile)
+            target_profile = int(message.transitioning_to_profile)
+            if transition_status == "TRANSITIONING":
+                self._display_transition_active = True
+                if not self._display_transition_progress:
+                    self._display_transition_progress = "Transition in progress"
+            else:
+                if self._display_fsm_state is None:
+                    self._display_fsm_state = message.current_state
+                if self._display_fsm_profile is None:
+                    self._display_fsm_profile = current_profile
+                if not self._display_transition_active:
+                    self._display_fsm_state = message.current_state
+                    self._display_fsm_profile = current_profile
+                    self._display_transition_progress = ""
+            if transition_status == "TRANSITIONING" and target_profile == current_profile:
+                self._display_transition_progress = "Transition in progress"
+            if current_state != "RUNNING":
+                self._last_cleared_running_profile = None
+            elif (
+                transition_status == "STABLE" and
+                self._last_cleared_running_profile != current_profile
+            ):
+                self._last_cleared_running_profile = current_profile
+                should_clear_recent_logs = True
+        if should_clear_recent_logs:
+            self._clear_recent_logs()
 
     def _handle_navsat(self, message: NavSatFix) -> None:
         with self._state_lock:
@@ -243,6 +428,17 @@ class MissionBackendNode(Node):
             }
 
     def _handle_rosout(self, message: Log) -> None:
+        completion = _parse_transition_completion_message(message.msg)
+        progress = _transition_progress_message_from_log(message.msg)
+        with self._state_lock:
+            if progress and self._display_transition_active:
+                self._display_transition_progress = progress
+            if completion is not None:
+                completed_state, completed_profile = completion
+                self._display_fsm_state = completed_state
+                self._display_fsm_profile = completed_profile
+                self._display_transition_active = False
+                self._display_transition_progress = ""
         if int(message.level) < int(Log.WARN):
             return
         with self._state_lock:
@@ -269,6 +465,10 @@ class MissionBackendNode(Node):
         with self._state_lock:
             self._latest_safety_status = decoded
 
+    def _clear_recent_logs(self) -> None:
+        with self._state_lock:
+            self._recent_logs.clear()
+
     def list_executable_missions(self) -> dict[str, Any]:
         response = self._call_service(
             self._list_missions_client,
@@ -276,6 +476,7 @@ class MissionBackendNode(Node):
             timeout_sec=5.0,
             service_name=self._list_missions_service,
         )
+        running_profile_defaults = _load_running_profile_default_overrides()
         missions = []
         for mission_id, mission_type, execution_mode, running_profile_id, is_manual, artifacts_ready in zip(
             response.mission_ids,
@@ -291,6 +492,10 @@ class MissionBackendNode(Node):
                     "mission_type": mission_type,
                     "execution_mode": execution_mode,
                     "running_profile_id": int(running_profile_id),
+                    "profile_default_overrides": {
+                        **MISSION_LAYER_OVERRIDE_FALLBACKS,
+                        **running_profile_defaults.get(int(running_profile_id), {}),
+                    },
                     "is_manual": bool(is_manual),
                     "artifacts_ready": bool(artifacts_ready),
                 }
@@ -318,6 +523,11 @@ class MissionBackendNode(Node):
             timeout_sec=15.0,
             service_name=self._execute_mission_service,
         )
+        if bool(response.success):
+            self._apply_layer_overrides_to_execution_context(
+                response.execution_context_file,
+                payload.get("layer_overrides", {}),
+            )
         return {
             "success": bool(response.success),
             "message": response.message,
@@ -326,6 +536,42 @@ class MissionBackendNode(Node):
             "execution_context_file": response.execution_context_file,
             "running_profile_id": int(response.running_profile_id),
         }
+
+    def _apply_layer_overrides_to_execution_context(
+        self,
+        execution_context_file: str,
+        raw_overrides: Any,
+    ) -> None:
+        if not execution_context_file or not isinstance(raw_overrides, dict):
+            return
+
+        normalized_overrides: dict[str, bool] = {}
+        for key, value in raw_overrides.items():
+            if key not in MISSION_LAYER_OVERRIDE_KEYS:
+                continue
+            parsed = _coerce_bool_value(value)
+            if parsed is None:
+                continue
+            normalized_overrides[key] = parsed
+
+        if not normalized_overrides:
+            return
+
+        context_path = Path(execution_context_file)
+        if not context_path.exists():
+            return
+        try:
+            context_document = json.loads(context_path.read_text(encoding="utf-8"))
+        except Exception:
+            return
+        if not isinstance(context_document, dict):
+            return
+
+        context_document["layer_overrides"] = normalized_overrides
+        try:
+            context_path.write_text(json.dumps(context_document, indent=2), encoding="utf-8")
+        except Exception:
+            return
 
     def upload_vda5050_mission(self, payload: dict[str, Any]) -> dict[str, Any]:
         request = UploadVda5050Mission.Request()
@@ -425,6 +671,8 @@ class MissionBackendNode(Node):
             timeout_sec=15.0,
             service_name=self._fsm_request_service,
         )
+        if bool(response.accepted):
+            self._clear_recent_logs()
         return {
             "success": bool(response.accepted),
             "message": response.message,
@@ -472,6 +720,12 @@ class MissionBackendNode(Node):
             battery = dict(self._latest_battery) if self._latest_battery is not None else None
             safety_status = dict(self._latest_safety_status) if self._latest_safety_status is not None else None
             recent_logs = list(self._recent_logs)
+            display_fsm = {
+                "current_state": self._display_fsm_state,
+                "current_profile": self._display_fsm_profile,
+                "transition_active": self._display_transition_active,
+                "transition_progress": self._display_transition_progress,
+            }
 
         active_execution = self._discover_active_execution()
         safety_clear_remaining_sec = self._safety_clear_delay_remaining_seconds(safety_status)
@@ -493,6 +747,7 @@ class MissionBackendNode(Node):
             },
             "fsm_state": fsm_state,
             "fsm_status": fsm_status,
+            "fsm_display": display_fsm,
             "position": navsat,
             "battery": battery,
             "safety_stop": safety_status,

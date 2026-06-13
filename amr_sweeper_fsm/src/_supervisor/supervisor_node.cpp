@@ -2,9 +2,12 @@
 #include <cmath>
 
 #include <chrono>
+#include <filesystem>
+#include <fstream>
 #include <memory>
 #include <algorithm>
 #include <cctype>
+#include <string>
 #include <vector>
 
 #include <mutex>
@@ -13,6 +16,7 @@
 #include <ament_index_cpp/get_packages_with_prefixes.hpp>
 #include <ament_index_cpp/get_package_share_directory.hpp>
 
+#include <nlohmann/json.hpp>
 #include <yaml-cpp/yaml.h>
 
 #include "rclcpp/parameter_client.hpp"
@@ -152,6 +156,72 @@ static bool load_profile_ids_from_yaml(const std::string & path, std::vector<uin
   std::sort(out.begin(), out.end());
   out.erase(std::unique(out.begin(), out.end()), out.end());
   return true;
+}
+
+static const std::vector<std::string> kMissionLayerOverrideKeys{
+  "use_amr_sweeper_ros2_control",
+  "use_amr_sweeper_battery",
+  "use_amr_sweeper_system_info",
+  "use_amr_sweeper_usb_cameras",
+  "use_amr_sweeper_depth_camera",
+  "use_amr_sweeper_imu",
+  "use_amr_sweeper_gnss",
+  "use_ntrip_client",
+  "use_amr_sweeper_drive_controller",
+  "use_amr_sweeper_tool_controller",
+  "use_amr_sweeper_joystick",
+  "use_amr_sweeper_sweeping_controller",
+  "use_amr_sweeper_attitude_controller",
+  "use_amr_sweeper_collision_detector",
+  "use_amr_sweeper_safety_controller",
+  "use_joy_node",
+  "use_amr_sweeper_visual_odometry",
+  "use_amr_sweeper_localization",
+  "use_amr_sweeper_mapping",
+  "use_amr_sweeper_navigation",
+  "auto_start_mission",
+};
+
+static std::unordered_map<std::string, std::string> load_mission_layer_overrides(
+  const std::string & mission_execution_directory)
+{
+  std::unordered_map<std::string, std::string> overrides;
+  if (mission_execution_directory.empty()) {
+    return overrides;
+  }
+
+  const std::filesystem::path context_path =
+    std::filesystem::path(mission_execution_directory) / "execution_context.json";
+  if (!std::filesystem::exists(context_path)) {
+    return overrides;
+  }
+
+  try {
+    std::ifstream input_stream(context_path);
+    if (!input_stream.is_open()) {
+      return overrides;
+    }
+    nlohmann::json document;
+    input_stream >> document;
+    if (!document.is_object()) {
+      return overrides;
+    }
+    const auto it = document.find("layer_overrides");
+    if (it == document.end() || !it->is_object()) {
+      return overrides;
+    }
+    for (const auto & key : kMissionLayerOverrideKeys) {
+      const auto value_it = it->find(key);
+      if (value_it == it->end() || !value_it->is_boolean()) {
+        continue;
+      }
+      overrides[key] = value_it->get<bool>() ? "true" : "false";
+    }
+  } catch (const std::exception &) {
+    return {};
+  }
+
+  return overrides;
 }
 
 static bool profile_exists_in_state_yaml(int8_t state_id, uint16_t profile_id, std::string & reason)
@@ -736,6 +806,28 @@ void SupervisorNode::drive()
           std::vector<rclcpp::Parameter> parameters_to_set{
             rclcpp::Parameter("profiles.active_profile_id", static_cast<int>(op_target_profile_)),
             rclcpp::Parameter("runtime.mission_execution_directory", op_mission_execution_directory_)};
+          for (const auto & key : kMissionLayerOverrideKeys) {
+            std::string value;
+            if (this->get_parameter("runtime." + key, value)) {
+              parameters_to_set.emplace_back("runtime." + key, value);
+            }
+          }
+          const auto mission_layer_overrides =
+            load_mission_layer_overrides(op_mission_execution_directory_);
+          for (const auto & [key, value] : mission_layer_overrides) {
+            const std::string parameter_name = "runtime." + key;
+            auto existing = std::find_if(
+              parameters_to_set.begin(),
+              parameters_to_set.end(),
+              [&parameter_name](const rclcpp::Parameter & parameter) {
+                return parameter.get_name() == parameter_name;
+              });
+            if (existing != parameters_to_set.end()) {
+              *existing = rclcpp::Parameter(parameter_name, value);
+            } else {
+              parameters_to_set.emplace_back(parameter_name, value);
+            }
+          }
           const auto results = pc.set_parameters(parameters_to_set);
           for (std::size_t index = 0; index < results.size(); ++index) {
             if (!results[index].successful) {

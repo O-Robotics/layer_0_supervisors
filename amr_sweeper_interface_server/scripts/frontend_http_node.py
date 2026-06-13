@@ -763,6 +763,7 @@ class MissionFrontendHttpNode(MissionBackendNode):
       const response = await fetch('/api/status', {{ cache: 'no-store' }});
       const data = await response.json();
       const fsm = data.fsm_status || data.fsm_state || {{}};
+      const fsmDisplay = data.fsm_display || {{}};
       const position = data.position || {{}};
       const battery = data.battery || {{}};
       const safety = data.safety_stop || {{}};
@@ -780,11 +781,17 @@ class MissionFrontendHttpNode(MissionBackendNode):
       liveStatus.classList.remove('disconnected');
       document.getElementById('live-dot').classList.add('connected');
 
-      const currentState = fsm.current_state || 'Unknown';
-      const currentProfile = formatProfileValue(fsm.current_profile);
+      const rawCurrentState = fsm.current_state || 'Unknown';
+      const rawCurrentProfile = formatProfileValue(fsm.current_profile);
+      const currentState = fsmDisplay.current_state || rawCurrentState;
+      const currentProfile = formatProfileValue(
+        fsmDisplay.current_profile !== undefined && fsmDisplay.current_profile !== null
+          ? fsmDisplay.current_profile
+          : fsm.current_profile
+      );
       const targetProfile = fsm.transitioning_to_profile ?? null;
-      const transitionInProgress = fsm.transition_status === 'TRANSITIONING';
-      const targetState = deriveStateFromProfile(targetProfile) || currentState;
+      const transitionInProgress = Boolean(fsmDisplay.transition_active);
+      const targetState = deriveStateFromProfile(targetProfile) || rawCurrentState;
       const formattedTargetProfile = formatProfileValue(targetProfile);
 
       document.getElementById('fsm-state').textContent = transitionInProgress
@@ -796,7 +803,8 @@ class MissionFrontendHttpNode(MissionBackendNode):
 
       const transitionElement = document.getElementById('fsm-transition');
       if (transitionInProgress) {{
-        transitionElement.innerHTML = '<span class="inline-status"><span class="spinner" aria-hidden="true"></span><span>Transition in progress</span></span>';
+        const progressLabel = fsmDisplay.transition_progress || 'Transition in progress';
+        transitionElement.innerHTML = `<span class="inline-status"><span class="spinner" aria-hidden="true"></span><span>${{progressLabel}}</span></span>`;
       }} else {{
         transitionElement.textContent = `Transition: ${{fsm.transition_status || '-'}}`;
       }}
@@ -2405,6 +2413,52 @@ class MissionFrontendHttpNode(MissionBackendNode):
     let previewRouteLayer = null;
     let previewMarker = null;
     let previewCrsMode = '';
+    const layerToggleDefinitions = [
+      ['use_amr_sweeper_ros2_control', 'ROS2 Control'],
+      ['use_amr_sweeper_battery', 'Battery'],
+      ['use_amr_sweeper_system_info', 'System Info'],
+      ['use_amr_sweeper_usb_cameras', 'USB Cameras'],
+      ['use_amr_sweeper_depth_camera', 'Depth Camera'],
+      ['use_amr_sweeper_imu', 'IMU'],
+      ['use_amr_sweeper_gnss', 'GNSS'],
+      ['use_ntrip_client', 'NTRIP Client'],
+      ['use_amr_sweeper_drive_controller', 'Drive Controller'],
+      ['use_amr_sweeper_tool_controller', 'Tool Controller'],
+      ['use_amr_sweeper_joystick', 'Joystick'],
+      ['use_amr_sweeper_sweeping_controller', 'Sweeping Controller'],
+      ['use_amr_sweeper_attitude_controller', 'Attitude Controller'],
+      ['use_amr_sweeper_collision_detector', 'Collision Detector'],
+      ['use_amr_sweeper_safety_controller', 'Safety Controller'],
+      ['use_joy_node', 'Joy Node'],
+      ['use_amr_sweeper_visual_odometry', 'Visual Odometry'],
+      ['use_amr_sweeper_localization', 'Localization'],
+      ['use_amr_sweeper_mapping', 'Mapping'],
+      ['use_amr_sweeper_navigation', 'Navigation'],
+      ['auto_start_mission', 'Auto Start Mission'],
+    ];
+    const fallbackLayerOverrides = {
+      use_amr_sweeper_ros2_control: true,
+      use_amr_sweeper_battery: true,
+      use_amr_sweeper_system_info: true,
+      use_amr_sweeper_usb_cameras: true,
+      use_amr_sweeper_depth_camera: true,
+      use_amr_sweeper_imu: true,
+      use_amr_sweeper_gnss: true,
+      use_ntrip_client: true,
+      use_amr_sweeper_drive_controller: true,
+      use_amr_sweeper_tool_controller: true,
+      use_amr_sweeper_joystick: true,
+      use_amr_sweeper_sweeping_controller: true,
+      use_amr_sweeper_attitude_controller: true,
+      use_amr_sweeper_collision_detector: true,
+      use_amr_sweeper_safety_controller: true,
+      use_joy_node: false,
+      use_amr_sweeper_visual_odometry: false,
+      use_amr_sweeper_localization: true,
+      use_amr_sweeper_mapping: false,
+      use_amr_sweeper_navigation: true,
+      auto_start_mission: true,
+    };
 
     function setBanner(kind, message) {{
       banner.className = `banner show ${{kind}}`;
@@ -2424,6 +2478,40 @@ class MissionFrontendHttpNode(MissionBackendNode):
         }}
       }}
       return '';
+    }}
+
+    function missionSelectionStorageKey() {{
+      return 'amr_sweeper_selected_mission_id';
+    }}
+
+    function missionLayerOverridesStorageKey(missionId) {{
+      return `amr_sweeper_layer_overrides_${{missionId}}`;
+    }}
+
+    function defaultLayerOverridesForMission(mission) {{
+      return {{
+        ...fallbackLayerOverrides,
+        ...(mission?.profile_default_overrides || {{}}),
+      }};
+    }}
+
+    function layerOverridesForMission(mission) {{
+      if (!mission?.mission_id) {{
+        return defaultLayerOverridesForMission(mission);
+      }}
+      const stored = window.localStorage.getItem(missionLayerOverridesStorageKey(mission.mission_id));
+      if (!stored) {{
+        return defaultLayerOverridesForMission(mission);
+      }}
+      try {{
+        const parsed = JSON.parse(stored);
+        return {{
+          ...defaultLayerOverridesForMission(mission),
+          ...parsed,
+        }};
+      }} catch (_error) {{
+        return defaultLayerOverridesForMission(mission);
+      }}
     }}
 
     function isGeoReferencedRoute(geojson) {{
@@ -2609,6 +2697,9 @@ class MissionFrontendHttpNode(MissionBackendNode):
 
     function setSelectedMission(missionId) {{
       selectedMissionId = missionId || '';
+      if (selectedMissionId) {{
+        window.localStorage.setItem(missionSelectionStorageKey(), selectedMissionId);
+      }}
       updateSelectedMissionLabel();
       renderMissionList();
       renderSelectedMissionPreview();
@@ -2791,6 +2882,9 @@ class MissionFrontendHttpNode(MissionBackendNode):
       const data = await response.json();
       missionsCache = data.missions || [];
       if (!selectedMissionId) {{
+        selectedMissionId = window.localStorage.getItem(missionSelectionStorageKey()) || '';
+      }}
+      if (!selectedMissionId) {{
         const firstPreviewable = missionsCache.find((mission) => mission.mission_id !== 'RecordMap') || null;
         if (firstPreviewable) {{
           selectedMissionId = firstPreviewable.mission_id;
@@ -2839,7 +2933,11 @@ class MissionFrontendHttpNode(MissionBackendNode):
       const executeResponse = await fetch(`/api/missions/${{encodeURIComponent(selectedMissionId)}}/execute`, {{
         method: 'POST',
         headers: {{ 'Content-Type': 'application/json' }},
-        body: JSON.stringify({{}})
+        body: JSON.stringify({{
+          layer_overrides: layerOverridesForMission(
+            missionsCache.find((mission) => mission.mission_id === selectedMissionId) || {{}}
+          )
+        }})
       }});
       const executeData = await executeResponse.json();
       setBanner(executeData.success ? 'ok' : 'error', executeData.message || 'Mission request completed');
@@ -2924,6 +3022,38 @@ class MissionFrontendHttpNode(MissionBackendNode):
       gap: 12px;
       margin-top: 14px;
     }}
+    .toggle-list {{
+      display: grid;
+      gap: 10px;
+      margin-top: 14px;
+    }}
+    .toggle-item {{
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px;
+      background: var(--panel);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }}
+    .toggle-button {{
+      appearance: none;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 10px 14px;
+      background: rgba(96, 100, 102, 0.72);
+      color: var(--ink);
+      cursor: pointer;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }}
+    .toggle-button.enabled {{
+      background: #fdca0f;
+      color: #08100a;
+    }}
     .log-entry {{
       border: 1px solid var(--line);
       border-radius: 14px;
@@ -2972,6 +3102,12 @@ class MissionFrontendHttpNode(MissionBackendNode):
     </section>
 
     <section class="card" style="margin-top: 18px;">
+      <h2>Layer Toggles</h2>
+      <div id="developer-selected-mission" class="muted">Selected mission: none</div>
+      <div id="layer-toggle-list" class="toggle-list"></div>
+    </section>
+
+    <section class="card" style="margin-top: 18px;">
       <h2>Raw Status</h2>
       <pre id="raw-status">{{}}</pre>
     </section>
@@ -2980,6 +3116,144 @@ class MissionFrontendHttpNode(MissionBackendNode):
   <script>
     const logList = document.getElementById('log-list');
     const rawStatus = document.getElementById('raw-status');
+    const selectedMissionElement = document.getElementById('developer-selected-mission');
+    const layerToggleList = document.getElementById('layer-toggle-list');
+    const layerToggleDefinitions = [
+      ['use_amr_sweeper_ros2_control', 'ROS2 Control'],
+      ['use_amr_sweeper_battery', 'Battery'],
+      ['use_amr_sweeper_system_info', 'System Info'],
+      ['use_amr_sweeper_usb_cameras', 'USB Cameras'],
+      ['use_amr_sweeper_depth_camera', 'Depth Camera'],
+      ['use_amr_sweeper_imu', 'IMU'],
+      ['use_amr_sweeper_gnss', 'GNSS'],
+      ['use_ntrip_client', 'NTRIP Client'],
+      ['use_amr_sweeper_drive_controller', 'Drive Controller'],
+      ['use_amr_sweeper_tool_controller', 'Tool Controller'],
+      ['use_amr_sweeper_joystick', 'Joystick'],
+      ['use_amr_sweeper_sweeping_controller', 'Sweeping Controller'],
+      ['use_amr_sweeper_attitude_controller', 'Attitude Controller'],
+      ['use_amr_sweeper_collision_detector', 'Collision Detector'],
+      ['use_amr_sweeper_safety_controller', 'Safety Controller'],
+      ['use_joy_node', 'Joy Node'],
+      ['use_amr_sweeper_visual_odometry', 'Visual Odometry'],
+      ['use_amr_sweeper_localization', 'Localization'],
+      ['use_amr_sweeper_mapping', 'Mapping'],
+      ['use_amr_sweeper_navigation', 'Navigation'],
+      ['auto_start_mission', 'Auto Start Mission'],
+    ];
+    const fallbackLayerOverrides = {
+      use_amr_sweeper_ros2_control: true,
+      use_amr_sweeper_battery: true,
+      use_amr_sweeper_system_info: true,
+      use_amr_sweeper_usb_cameras: true,
+      use_amr_sweeper_depth_camera: true,
+      use_amr_sweeper_imu: true,
+      use_amr_sweeper_gnss: true,
+      use_ntrip_client: true,
+      use_amr_sweeper_drive_controller: true,
+      use_amr_sweeper_tool_controller: true,
+      use_amr_sweeper_joystick: true,
+      use_amr_sweeper_sweeping_controller: true,
+      use_amr_sweeper_attitude_controller: true,
+      use_amr_sweeper_collision_detector: true,
+      use_amr_sweeper_safety_controller: true,
+      use_joy_node: false,
+      use_amr_sweeper_visual_odometry: false,
+      use_amr_sweeper_localization: true,
+      use_amr_sweeper_mapping: false,
+      use_amr_sweeper_navigation: true,
+      auto_start_mission: true,
+    };
+    let executableMissions = [];
+
+    function missionSelectionStorageKey() {{
+      return 'amr_sweeper_selected_mission_id';
+    }}
+
+    function missionLayerOverridesStorageKey(missionId) {{
+      return `amr_sweeper_layer_overrides_${{missionId}}`;
+    }}
+
+    function defaultLayerOverridesForMission(mission) {{
+      return {{
+        ...fallbackLayerOverrides,
+        ...(mission?.profile_default_overrides || {{}}),
+      }};
+    }}
+
+    function selectedMission() {{
+      const selectedMissionId = window.localStorage.getItem(missionSelectionStorageKey()) || '';
+      return executableMissions.find((mission) => mission.mission_id === selectedMissionId) || null;
+    }}
+
+    function layerOverridesForMission(mission) {{
+      if (!mission?.mission_id) {{
+        return defaultLayerOverridesForMission(mission);
+      }}
+      const stored = window.localStorage.getItem(missionLayerOverridesStorageKey(mission.mission_id));
+      if (!stored) {{
+        return defaultLayerOverridesForMission(mission);
+      }}
+      try {{
+        const parsed = JSON.parse(stored);
+        return {{
+          ...defaultLayerOverridesForMission(mission),
+          ...parsed,
+        }};
+      }} catch (_error) {{
+        return defaultLayerOverridesForMission(mission);
+      }}
+    }}
+
+    function saveLayerOverrides(missionId, overrides) {{
+      window.localStorage.setItem(
+        missionLayerOverridesStorageKey(missionId),
+        JSON.stringify(overrides)
+      );
+    }}
+
+    function renderLayerToggles() {{
+      const mission = selectedMission();
+      layerToggleList.innerHTML = '';
+      if (!mission) {{
+        selectedMissionElement.textContent = 'Selected mission: none';
+        layerToggleList.innerHTML = '<div class="muted">Select a mission on the Missions page to edit its layer defaults here.</div>';
+        return;
+      }}
+
+      selectedMissionElement.textContent = `Selected mission: ${{mission.mission_id}}`;
+      const overrides = layerOverridesForMission(mission);
+      for (const [key, label] of layerToggleDefinitions) {{
+        const item = document.createElement('div');
+        item.className = 'toggle-item';
+        const enabled = Boolean(overrides[key]);
+        item.innerHTML = `
+          <div>
+            <strong>${{label}}</strong><br>
+            <span class="muted">${{enabled ? 'Enabled' : 'Disabled'}}</span>
+          </div>
+          <button class="toggle-button ${{enabled ? 'enabled' : ''}}" type="button">
+            ${{enabled ? 'On' : 'Off'}}
+          </button>
+        `;
+        item.querySelector('button').addEventListener('click', () => {{
+          const nextOverrides = {{
+            ...overrides,
+            [key]: !enabled,
+          }};
+          saveLayerOverrides(mission.mission_id, nextOverrides);
+          renderLayerToggles();
+        }});
+        layerToggleList.appendChild(item);
+      }}
+    }}
+
+    async function loadMissions() {{
+      const response = await fetch('/api/missions', {{ cache: 'no-store' }});
+      const data = await response.json();
+      executableMissions = data.missions || [];
+      renderLayerToggles();
+    }}
 
     async function loadStatus() {{
       const response = await fetch('/api/status', {{ cache: 'no-store' }});
@@ -3004,8 +3278,11 @@ class MissionFrontendHttpNode(MissionBackendNode):
       rawStatus.textContent = JSON.stringify(data, null, 2);
     }}
 
-    loadStatus();
+    Promise.all([loadStatus(), loadMissions()]).catch(() => null);
     setInterval(loadStatus, 2000);
+    window.addEventListener('storage', () => {{
+      renderLayerToggles();
+    }});
   </script>
 </body>
 </html>
