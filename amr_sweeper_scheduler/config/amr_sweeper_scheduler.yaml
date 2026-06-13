@@ -34,4 +34,4 @@
     # -- FSM monitoring output ------------------------------------------------
     emit_rosout_triggers:               true                # Emit scheduler status logs on rosout.
     emit_trigger_topic:                 true                # Publish scheduler status messages on a topic in addition to rosout.
-    trigger_topic_name:                 scheduler/triggers  # Topic name for scheduler status messages.
+    trigger_topic_name:                 scheduler_node/triggers  # Topic name for scheduler status messages.

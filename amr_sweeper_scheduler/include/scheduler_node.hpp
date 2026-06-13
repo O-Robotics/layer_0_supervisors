@@ -168,7 +168,7 @@ private:
   bool reload_on_every_poll_{false};
   bool emit_rosout_triggers_{true};
   bool emit_trigger_topic_{true};
-  std::string trigger_topic_name_{"scheduler/triggers"};
+  std::string trigger_topic_name_{"scheduler_node/triggers"};
   std::string last_trigger_message_;
   std::string last_planned_windows_payload_;
   bool running_request_in_flight_{false};

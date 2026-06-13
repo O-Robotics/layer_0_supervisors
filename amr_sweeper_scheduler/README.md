@@ -54,7 +54,7 @@ The scheduler is intended to run as a lightweight ROS 2 node launched by FSM sta
 - If mission artifacts are missing or stale, the scheduler asks `amr_sweeper_vda5050_parser` to rebuild the mission before requesting `RUNNING`.
 - Scheduled execution requests are forwarded to `amr_sweeper_mission_executor/execute_mission`.
 - Manual preparation remains available through `prepare_mission_execution`, which forwards to `amr_sweeper_mission_executor/prepare_manual_mission`.
-- Planned windows are published on `scheduler/planned_windows` as JSON in `std_msgs/String`.
+- Planned windows are published on `scheduler_node/planned_windows` as JSON in `std_msgs/String`.
 - Scheduler status messages are emitted through rosout and, optionally, on `<trigger_topic_name>` as `std_msgs/String`.
 - The scheduler exposes `reload_schedule` as a `std_srvs/Trigger` service.
 - The node retries schedule setup automatically on each poll cycle and escalates repeated failures from warning to error to fatal.

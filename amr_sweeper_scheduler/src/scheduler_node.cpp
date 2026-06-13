@@ -736,7 +736,7 @@ SchedulerNode::SchedulerNode(const rclcpp::NodeOptions & options)
   emit_trigger_topic_ = declare_parameter<bool>("emit_trigger_topic", true);
   trigger_topic_name_ = declare_parameter<std::string>(
     "trigger_topic_name",
-    "scheduler/triggers");
+    "scheduler_node/triggers");
   if (retry_attempts_before_error_ < 1) {
     retry_attempts_before_error_ = 1;
   }
@@ -747,7 +747,7 @@ SchedulerNode::SchedulerNode(const rclcpp::NodeOptions & options)
     fatal_after_consecutive_errors_ = retry_attempts_before_error_;
   }
 
-  planned_pub_ = create_publisher<std_msgs::msg::String>("scheduler/planned_windows", 10);
+  planned_pub_ = create_publisher<std_msgs::msg::String>("scheduler_node/planned_windows", 10);
   if (emit_trigger_topic_) {
     trigger_pub_ = create_publisher<std_msgs::msg::String>(trigger_topic_name_, 10);
   }
