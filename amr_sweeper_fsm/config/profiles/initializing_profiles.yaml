@@ -298,18 +298,6 @@ profiles:
               - type: "lifecycle"
                 target: "slam_toolbox"
                 required: true
-              - type: "lifecycle"
-                target: "controller_server"
-                required: true
-              - type: "lifecycle"
-                target: "planner_server"
-                required: true
-              - type: "lifecycle"
-                target: "bt_navigator"
-                required: true
-              - type: "lifecycle"
-                target: "waypoint_follower"
-                required: true
               - type: "service"
                 target: "amr_sweeper_slam_node/get_parameters"
                 required: true
@@ -729,18 +717,6 @@ profiles:
                 required: true
               - type: "lifecycle"
                 target: "slam_toolbox"
-                required: true
-              - type: "lifecycle"
-                target: "controller_server"
-                required: true
-              - type: "lifecycle"
-                target: "planner_server"
-                required: true
-              - type: "lifecycle"
-                target: "bt_navigator"
-                required: true
-              - type: "lifecycle"
-                target: "waypoint_follower"
                 required: true
               - type: "service"
                 target: "amr_sweeper_slam_node/get_parameters"
