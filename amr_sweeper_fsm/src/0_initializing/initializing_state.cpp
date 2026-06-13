@@ -7,7 +7,7 @@ namespace fsm_layer_0::states::initializing
 {
 
 InitializingNode::InitializingNode(const rclcpp::NodeOptions & options)
-: fsm_layer_0::StateNodeBase("initializing_state", options)
+: fsm_layer_0::StateNodeBase("INITIALIZING_node", options)
 {
   // No additional construction-time work.
 }

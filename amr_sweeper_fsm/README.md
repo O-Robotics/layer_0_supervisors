@@ -8,11 +8,11 @@ ros2 launch amr_sweeper_fsm amr_sweeper_fsm.launch.py
 
 - a non-lifecycle **supervisor** node (`supervisor_node`), and
 - one **LifecycleNode** per FSM state:
-  - `initializing_state_node`
-  - `idling_state_node`
-  - `running_state_node`
-  - `charging_state_node`
-  - `fault_state_node`
+  - `INITIALIZING_node`
+  - `IDLING_node`
+  - `RUNNING_node`
+  - `CHARGING_node`
+  - `FAULT_node`
 
 The supervisor accepts state-change requests (with priority metadata), drives ROS 2 lifecycle transitions for the state nodes, and publishes FSM status topics based on configurable publish rules.
 
@@ -92,18 +92,18 @@ ros2 launch amr_sweeper_fsm amr_sweeper_fsm.launch.py \
 
 This single ROS parameters file configures:
 
-- **Supervisor publish rules** under `/**/supervisor.ros__parameters.publish.rules`.
+- **Supervisor publish rules** under `/**/supervisor_node.ros__parameters.publish.rules`.
 
   In the provided default config, the supervisor publishes:
-  - `fsm_state` (`amr_sweeper_fsm/msg/FSMState`)
-  - `fsm_status` (`amr_sweeper_fsm/msg/FSMStatus`)
+  - `fsm/supervisor/fsm_state` (`amr_sweeper_fsm/msg/FSMState`)
+  - `fsm/supervisor/fsm_status` (`amr_sweeper_fsm/msg/FSMStatus`)
 
   (These are *relative* names; with the default namespace they become:
-  `/amr_sweeper/fsm_state` and `/amr_sweeper/fsm_status`.)
+  `/amr_sweeper/fsm/supervisor/fsm_state` and `/amr_sweeper/fsm/supervisor/fsm_status`.)
 
-- **Per-state fault handling**, under each `/**/<state>_state.ros__parameters.faults`.
+- **Per-state fault handling**, under each `/**/<STATE>_node.ros__parameters.faults`.
 
-- **Per-state profile file path**, under each `/**/<state>_state.ros__parameters.profiles.file`.
+- **Per-state profile file path**, under each `/**/<STATE>_node.ros__parameters.profiles.file`.
 
   The per-state profile file paths in `state_parameters.yaml` are provided as **paths relative to the package share directory**
   (e.g. `config/profiles/running_profiles.yaml`). The launch file passes only `state_parameters.yaml`; the state nodes load
@@ -169,7 +169,7 @@ Message definitions live in `msg/`:
   - `last_requester`, `last_request_priority`, `effective_priority_gate`, `priority_age_sec`
   - `last_message`
 
-The default config publishes them on `fsm_state` and `fsm_status` once per second.
+The default config publishes them on `fsm/supervisor/fsm_state` and `fsm/supervisor/fsm_status` once per second.
 
 ### Service: request a state/profile
 
@@ -213,14 +213,14 @@ With default namespace (`amr_sweeper`):
 
 ```bash
 # Supervisor status streams (per config/state_parameters.yaml)
-ros2 topic echo /amr_sweeper/fsm_state
-ros2 topic echo /amr_sweeper/fsm_status
+ros2 topic echo /amr_sweeper/fsm/supervisor/fsm_state
+ros2 topic echo /amr_sweeper/fsm/supervisor/fsm_status
 
 # See current desired profile parameter (supervisor)
-ros2 param get /amr_sweeper/supervisor desired_profile
+ros2 param get /amr_sweeper/supervisor_node desired_profile
 
 # Lifecycle state of a specific FSM state node
-ros2 lifecycle get /amr_sweeper/initializing_state
+ros2 lifecycle get /amr_sweeper/INITIALIZING_node
 ```
 
 ---

@@ -68,7 +68,7 @@ profiles:
             sigkill_timeout_ms: 1000
 
         # Logic block: scheduler (critical)
-        - name: "amr_sweeper_scheduler"
+        - name: "scheduler_node"
           importance: "critical"
           startup:
             exec: "ros2 launch amr_sweeper_scheduler amr_sweeper_scheduler.launch.py"
@@ -83,7 +83,7 @@ profiles:
                 required: true
             window_ms: 8000
           rosout_triggers:
-            - "node=amr_sweeper_scheduler;level>=ERROR;action=FAULT"
+            - "node=scheduler_node;level>=ERROR;action=FAULT"
           errors:
             on_readiness_fail: "FAULT"
             on_unexpected_exit: "FAULT"
@@ -165,10 +165,10 @@ profiles:
                 target: "gnss/gnss_node/get_parameters"
                 required: true
               - type: "service"
-                target: "gnss/ntrip_client/get_parameters"
+                target: "gnss/ntrip_client_node/get_parameters"
                 required: true
               - type: "topic"
-                target: "joint_states"
+                target: "attitude_controller/joint_states"
                 required: true
               - type: "hardware"
                 target: "odrive_ros2_control"
@@ -214,20 +214,20 @@ profiles:
               - "use_sim_time:=false"
               - "use_amr_sweeper_drive_controller:=true"
               - "use_amr_sweeper_tool_controller:=true"
-              - "use_amr_sweeper_joystick:=false"
+              - "use_amr_sweeper_teleop:=false"
               - "use_amr_sweeper_sweeping_controller:=true"
               - "use_amr_sweeper_attitude_controller:=true"
               - "use_amr_sweeper_collision_detector:=true"
               - "use_amr_sweeper_safety_controller:=true"
             ready:
               - type: "topic"
-                target: "cmd_vel_drive"
+                target: "sweeping_controller/cmd_vel_drive"
                 required: true
               - type: "topic"
-                target: "cmd_vel_tools"
+                target: "sweeping_controller/cmd_vel_tools"
                 required: true
               - type: "topic"
-                target: "attitude/roll_pitch"
+                target: "attitude_controller/roll_pitch"
                 required: true
               - type: "topic"
                 target: "drive_controller/odom"
@@ -287,10 +287,10 @@ profiles:
               - "test_output_directory:={test_output_directory}"
             ready:
               - type: "topic"
-                target: "odometry/fused"
+                target: "localization/odometry_fused"
                 required: true
               - type: "topic"
-                target: "pose"
+                target: "localization/pose"
                 required: true
               - type: "lifecycle"
                 target: "fusioncore"
@@ -314,10 +314,10 @@ profiles:
                 target: "amr_sweeper_slam_node/get_parameters"
                 required: true
               - type: "service"
-                target: "amr_sweeper_gaussian_node/get_parameters"
+                target: "gaussian_node/get_parameters"
                 required: true
               - type: "service"
-                target: "amr_sweeper_mapping_node/get_parameters"
+                target: "mapping_node/get_parameters"
                 required: true
             window_ms: 45000
           rosout_triggers:
@@ -416,10 +416,10 @@ profiles:
                 target: "gnss/gnss_node/get_parameters"
                 required: true
               - type: "service"
-                target: "gnss/ntrip_client/get_parameters"
+                target: "gnss/ntrip_client_node/get_parameters"
                 required: true
               - type: "topic"
-                target: "joint_states"
+                target: "attitude_controller/joint_states"
                 required: true
               - type: "hardware"
                 target: "odrive_ros2_control"
@@ -503,7 +503,7 @@ profiles:
             sigkill_timeout_ms: 1000
 
         # Logic block: scheduler (critical)
-        - name: "amr_sweeper_scheduler"
+        - name: "scheduler_node"
           importance: "critical"
           startup:
             exec: "ros2 launch amr_sweeper_scheduler amr_sweeper_scheduler.launch.py"
@@ -518,7 +518,7 @@ profiles:
                 required: true
             window_ms: 8000
           rosout_triggers:
-            - "node=amr_sweeper_scheduler;level>=ERROR;action=FAULT"
+            - "node=scheduler_node;level>=ERROR;action=FAULT"
           errors:
             on_readiness_fail: "FAULT"
             on_unexpected_exit: "FAULT"
@@ -600,10 +600,10 @@ profiles:
                 target: "gnss/gnss_node/get_parameters"
                 required: true
               - type: "service"
-                target: "gnss/ntrip_client/get_parameters"
+                target: "gnss/ntrip_client_node/get_parameters"
                 required: true
               - type: "topic"
-                target: "joint_states"
+                target: "attitude_controller/joint_states"
                 required: true
               - type: "hardware"
                 target: "odrive_ros2_control"
@@ -649,20 +649,20 @@ profiles:
               - "use_sim_time:=false"
               - "use_amr_sweeper_drive_controller:=true"
               - "use_amr_sweeper_tool_controller:=true"
-              - "use_amr_sweeper_joystick:=false"
+              - "use_amr_sweeper_teleop:=false"
               - "use_amr_sweeper_sweeping_controller:=true"
               - "use_amr_sweeper_attitude_controller:=true"
               - "use_amr_sweeper_collision_detector:=true"
               - "use_amr_sweeper_safety_controller:=true"
             ready:
               - type: "topic"
-                target: "cmd_vel_drive"
+                target: "sweeping_controller/cmd_vel_drive"
                 required: true
               - type: "topic"
-                target: "cmd_vel_tools"
+                target: "sweeping_controller/cmd_vel_tools"
                 required: true
               - type: "topic"
-                target: "attitude/roll_pitch"
+                target: "attitude_controller/roll_pitch"
                 required: true
               - type: "topic"
                 target: "drive_controller/odom"
@@ -722,10 +722,10 @@ profiles:
               - "test_output_directory:={test_output_directory}"
             ready:
               - type: "topic"
-                target: "odometry/fused"
+                target: "localization/odometry_fused"
                 required: true
               - type: "topic"
-                target: "pose"
+                target: "localization/pose"
                 required: true
               - type: "lifecycle"
                 target: "fusioncore"
@@ -749,10 +749,10 @@ profiles:
                 target: "amr_sweeper_slam_node/get_parameters"
                 required: true
               - type: "service"
-                target: "amr_sweeper_gaussian_node/get_parameters"
+                target: "gaussian_node/get_parameters"
                 required: true
               - type: "service"
-                target: "amr_sweeper_mapping_node/get_parameters"
+                target: "mapping_node/get_parameters"
                 required: true
             window_ms: 45000
           rosout_triggers:

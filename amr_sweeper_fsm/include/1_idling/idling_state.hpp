@@ -8,7 +8,7 @@ class IdlingNode : public fsm_layer_0::StateNodeBase
 {
 public:
   explicit IdlingNode(const rclcpp::NodeOptions & options)
-  : fsm_layer_0::StateNodeBase("idling_state", options) {}
+  : fsm_layer_0::StateNodeBase("IDLING_node", options) {}
 };
 
 }  // namespace fsm_layer_0::states::idling

@@ -13,12 +13,12 @@ This document describes the workflow of the AMR-Sweeper's FSM in fsm_layer_0 (am
 Architecture at a glance
 ------------------------
 Nodes (default namespace: /amr_sweeper):
-  - supervisor                     (rclcpp::Node)
-  - initializing_state             (LifecycleNode)
-  - idling_state                   (LifecycleNode)
-  - running_state                  (LifecycleNode)
-  - charging_state                 (LifecycleNode)
-  - fault_state                    (LifecycleNode)
+  - supervisor_node                (rclcpp::Node)
+  - INITIALIZING_node              (LifecycleNode)
+  - IDLING_node                    (LifecycleNode)
+  - RUNNING_node                   (LifecycleNode)
+  - CHARGING_node                  (LifecycleNode)
+  - FAULT_node                     (LifecycleNode)
 
 Only ONE lifecycle state node is to be ACTIVE at a time.
 All other lifecycle state nodes are typically INACTIVE (or UNCONFIGURED) but alive (running).

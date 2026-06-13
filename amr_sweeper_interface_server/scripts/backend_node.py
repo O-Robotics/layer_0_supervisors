@@ -50,7 +50,7 @@ MISSION_LAYER_OVERRIDE_KEYS = (
     "use_ntrip_client",
     "use_amr_sweeper_drive_controller",
     "use_amr_sweeper_tool_controller",
-    "use_amr_sweeper_joystick",
+    "use_amr_sweeper_teleop",
     "use_amr_sweeper_sweeping_controller",
     "use_amr_sweeper_attitude_controller",
     "use_amr_sweeper_collision_detector",
@@ -78,7 +78,7 @@ MISSION_LAYER_OVERRIDE_FALLBACKS = {
     "use_ntrip_client": True,
     "use_amr_sweeper_drive_controller": True,
     "use_amr_sweeper_tool_controller": True,
-    "use_amr_sweeper_joystick": True,
+    "use_amr_sweeper_teleop": True,
     "use_amr_sweeper_sweeping_controller": True,
     "use_amr_sweeper_attitude_controller": True,
     "use_amr_sweeper_collision_detector": True,
@@ -307,8 +307,10 @@ class MissionBackendNode(Node):
             "fsm_request_service",
             "request_state",
         ).value
-        self._fsm_state_topic = self.declare_parameter("fsm_state_topic", "fsm_state").value
-        self._fsm_status_topic = self.declare_parameter("fsm_status_topic", "fsm_status").value
+        self._fsm_state_topic = self.declare_parameter(
+            "fsm_state_topic", "fsm/supervisor/fsm_state").value
+        self._fsm_status_topic = self.declare_parameter(
+            "fsm_status_topic", "fsm/supervisor/fsm_status").value
         self._gnss_topic = self.declare_parameter("gnss_topic", "gnss/navsat").value
         self._battery_topic = self.declare_parameter(
             "battery_topic", "battery/battery_state").value

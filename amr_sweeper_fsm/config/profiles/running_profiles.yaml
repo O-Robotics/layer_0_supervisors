@@ -63,7 +63,7 @@ profiles:
                 target: "gnss/navsat"
                 required: true
               - type: "topic"
-                target: "robot_description"
+                target: "description/robot_description"
                 required: true
               - type: "topic"
                 target: "usb_cameras/rear_left_camera/image_raw/compressed"
@@ -96,7 +96,7 @@ profiles:
                 target: "gnss/gnss_node/get_parameters"
                 required: true
               - type: "topic"
-                target: "joint_states"
+                target: "attitude_controller/joint_states"
                 required: true
               - type: "hardware"
                 target: "odrive_ros2_control"
@@ -142,7 +142,7 @@ profiles:
               - "use_sim_time:=false"
               - "use_amr_sweeper_drive_controller:=true"
               - "use_amr_sweeper_tool_controller:=true"
-              - "use_amr_sweeper_joystick:=false"
+              - "use_amr_sweeper_teleop:=false"
               - "use_amr_sweeper_sweeping_controller:=true"
               - "use_amr_sweeper_attitude_controller:=true"
               - "use_amr_sweeper_collision_detector:=true"
@@ -150,13 +150,13 @@ profiles:
               - "use_sweeping_mode:=cmd_vel_sweeping"
             ready:
               - type: "topic"
-                target: "cmd_vel_drive"
+                target: "sweeping_controller/cmd_vel_drive"
                 required: true
               - type: "topic"
-                target: "cmd_vel_tools"
+                target: "sweeping_controller/cmd_vel_tools"
                 required: true
               - type: "topic"
-                target: "attitude/roll_pitch"
+                target: "attitude_controller/roll_pitch"
                 required: true
               - type: "topic"
                 target: "drive_controller/odom"
@@ -217,10 +217,10 @@ profiles:
               - "test_output_directory:={test_output_directory}"
             ready:
               - type: "topic"
-                target: "odometry/fused"
+                target: "localization/odometry_fused"
                 required: true
               - type: "topic"
-                target: "pose"
+                target: "localization/pose"
                 required: true
               - type: "lifecycle"
                 target: "fusioncore"
@@ -244,10 +244,10 @@ profiles:
                 target: "amr_sweeper_slam_node/get_parameters"
                 required: true
               - type: "service"
-                target: "amr_sweeper_gaussian_node/get_parameters"
+                target: "gaussian_node/get_parameters"
                 required: true
               - type: "service"
-                target: "amr_sweeper_mapping_node/get_parameters"
+                target: "mapping_node/get_parameters"
                 required: true
             window_ms: 45000
           rosout_triggers:
@@ -266,11 +266,11 @@ profiles:
             sigterm_timeout_ms: 2000
             sigkill_timeout_ms: 2000
 
-        # Logic block: joystick (optional)
-        - name: "joystick"
+        # Logic block: teleop (optional)
+        - name: "teleop"
           importance: "optional"
           startup:
-            exec: "ros2 launch amr_sweeper_joystick joystick.launch.py"
+            exec: "ros2 launch amr_sweeper_teleop teleop.launch.py"
             args:
               - "namespace:={ns}"
               - "joy_dev:=/dev/input/js0"
@@ -339,7 +339,7 @@ profiles:
                 target: "gnss/navsat"
                 required: true
               - type: "topic"
-                target: "robot_description"
+                target: "description/robot_description"
                 required: true
               - type: "topic"
                 target: "usb_cameras/rear_left_camera/image_raw/compressed"
@@ -372,10 +372,10 @@ profiles:
                 target: "gnss/gnss_node/get_parameters"
                 required: true
               - type: "service"
-                target: "gnss/ntrip_client/get_parameters"
+                target: "gnss/ntrip_client_node/get_parameters"
                 required: true
               - type: "topic"
-                target: "joint_states"
+                target: "attitude_controller/joint_states"
                 required: true
               - type: "hardware"
                 target: "odrive_ros2_control"
@@ -420,7 +420,7 @@ profiles:
               - "use_sim_time:=false"
               - "use_amr_sweeper_drive_controller:=true"
               - "use_amr_sweeper_tool_controller:=true"
-              - "use_amr_sweeper_joystick:=false"
+              - "use_amr_sweeper_teleop:=false"
               - "use_amr_sweeper_sweeping_controller:=true"
               - "use_amr_sweeper_attitude_controller:=true"
               - "use_amr_sweeper_collision_detector:=true"
@@ -428,13 +428,13 @@ profiles:
               - "use_sweeping_mode:=cmd_vel_sweeping"
             ready:
               - type: "topic"
-                target: "cmd_vel_drive"
+                target: "sweeping_controller/cmd_vel_drive"
                 required: true
               - type: "topic"
-                target: "cmd_vel_tools"
+                target: "sweeping_controller/cmd_vel_tools"
                 required: true
               - type: "topic"
-                target: "attitude/roll_pitch"
+                target: "attitude_controller/roll_pitch"
                 required: true
               - type: "topic"
                 target: "drive_controller/odom"
@@ -494,10 +494,10 @@ profiles:
               - "test_output_directory:={test_output_directory}"
             ready:
               - type: "topic"
-                target: "odometry/fused"
+                target: "localization/odometry_fused"
                 required: true
               - type: "topic"
-                target: "pose"
+                target: "localization/pose"
                 required: true
               - type: "lifecycle"
                 target: "fusioncore"
@@ -518,7 +518,7 @@ profiles:
                 target: "velocity_smoother"
                 required: true
               - type: "service"
-                target: "amr_sweeper_mapping_node/get_parameters"
+                target: "mapping_node/get_parameters"
                 required: true
               - type: "topic"
                 target: "mapping/status"
@@ -540,10 +540,10 @@ profiles:
             sigterm_timeout_ms: 2000
             sigkill_timeout_ms: 2000
 
-        - name: "joystick"
+        - name: "teleop"
           importance: "optional"
           startup:
-            exec: "ros2 launch amr_sweeper_joystick joystick.launch.py"
+            exec: "ros2 launch amr_sweeper_teleop teleop.launch.py"
             args:
               - "namespace:={ns}"
               - "joy_dev:=/dev/input/js0"
@@ -612,7 +612,7 @@ profiles:
                 target: "gnss/navsat"
                 required: true
               - type: "topic"
-                target: "robot_description"
+                target: "description/robot_description"
                 required: true
               - type: "topic"
                 target: "usb_cameras/rear_left_camera/image_raw/compressed"
@@ -645,10 +645,10 @@ profiles:
                 target: "gnss/gnss_node/get_parameters"
                 required: true
               - type: "service"
-                target: "gnss/ntrip_client/get_parameters"
+                target: "gnss/ntrip_client_node/get_parameters"
                 required: true
               - type: "topic"
-                target: "joint_states"
+                target: "attitude_controller/joint_states"
                 required: true
               - type: "hardware"
                 target: "odrive_ros2_control"
@@ -693,7 +693,7 @@ profiles:
               - "use_sim_time:=false"
               - "use_amr_sweeper_drive_controller:=true"
               - "use_amr_sweeper_tool_controller:=true"
-              - "use_amr_sweeper_joystick:=false"
+              - "use_amr_sweeper_teleop:=false"
               - "use_amr_sweeper_sweeping_controller:=true"
               - "use_amr_sweeper_attitude_controller:=true"
               - "use_amr_sweeper_collision_detector:=true"
@@ -701,13 +701,13 @@ profiles:
               - "use_sweeping_mode:=cmd_vel_sweeping"
             ready:
               - type: "topic"
-                target: "cmd_vel_drive"
+                target: "sweeping_controller/cmd_vel_drive"
                 required: true
               - type: "topic"
-                target: "cmd_vel_tools"
+                target: "sweeping_controller/cmd_vel_tools"
                 required: true
               - type: "topic"
-                target: "attitude/roll_pitch"
+                target: "attitude_controller/roll_pitch"
                 required: true
               - type: "topic"
                 target: "drive_controller/odom"
@@ -770,10 +770,10 @@ profiles:
               - "test_output_directory:={test_output_directory}"
             ready:
               - type: "topic"
-                target: "odometry/fused"
+                target: "localization/odometry_fused"
                 required: true
               - type: "topic"
-                target: "pose"
+                target: "localization/pose"
                 required: true
               - type: "lifecycle"
                 target: "fusioncore"
@@ -794,7 +794,7 @@ profiles:
                 target: "velocity_smoother"
                 required: true
               - type: "service"
-                target: "amr_sweeper_mapping_node/get_parameters"
+                target: "mapping_node/get_parameters"
                 required: true
               - type: "topic"
                 target: "mapping/status"
@@ -816,10 +816,10 @@ profiles:
             sigterm_timeout_ms: 2000
             sigkill_timeout_ms: 2000
 
-        - name: "joystick"
+        - name: "teleop"
           importance: "optional"
           startup:
-            exec: "ros2 launch amr_sweeper_joystick joystick.launch.py"
+            exec: "ros2 launch amr_sweeper_teleop teleop.launch.py"
             args:
               - "namespace:={ns}"
               - "joy_dev:=/dev/input/js0"
@@ -888,7 +888,7 @@ profiles:
                 target: "gnss/navsat"
                 required: true
               - type: "topic"
-                target: "robot_description"
+                target: "description/robot_description"
                 required: true
               - type: "topic"
                 target: "usb_cameras/rear_left_camera/image_raw/compressed"
@@ -921,10 +921,10 @@ profiles:
                 target: "gnss/gnss_node/get_parameters"
                 required: true
               - type: "service"
-                target: "gnss/ntrip_client/get_parameters"
+                target: "gnss/ntrip_client_node/get_parameters"
                 required: true
               - type: "topic"
-                target: "joint_states"
+                target: "attitude_controller/joint_states"
                 required: true
               - type: "hardware"
                 target: "odrive_ros2_control"
@@ -969,7 +969,7 @@ profiles:
               - "use_sim_time:=false"
               - "use_amr_sweeper_drive_controller:=true"
               - "use_amr_sweeper_tool_controller:=true"
-              - "use_amr_sweeper_joystick:=false"
+              - "use_amr_sweeper_teleop:=false"
               - "use_amr_sweeper_sweeping_controller:=true"
               - "use_amr_sweeper_attitude_controller:=true"
               - "use_amr_sweeper_collision_detector:=true"
@@ -977,13 +977,13 @@ profiles:
               - "use_sweeping_mode:=cmd_vel_sweeping"
             ready:
               - type: "topic"
-                target: "cmd_vel_drive"
+                target: "sweeping_controller/cmd_vel_drive"
                 required: true
               - type: "topic"
-                target: "cmd_vel_tools"
+                target: "sweeping_controller/cmd_vel_tools"
                 required: true
               - type: "topic"
-                target: "attitude/roll_pitch"
+                target: "attitude_controller/roll_pitch"
                 required: true
               - type: "topic"
                 target: "drive_controller/odom"
@@ -1046,10 +1046,10 @@ profiles:
               - "test_output_directory:={test_output_directory}"
             ready:
               - type: "topic"
-                target: "odometry/fused"
+                target: "localization/odometry_fused"
                 required: true
               - type: "topic"
-                target: "pose"
+                target: "localization/pose"
                 required: true
               - type: "lifecycle"
                 target: "fusioncore"
@@ -1070,7 +1070,7 @@ profiles:
                 target: "velocity_smoother"
                 required: true
               - type: "service"
-                target: "amr_sweeper_mapping_node/get_parameters"
+                target: "mapping_node/get_parameters"
                 required: true
               - type: "topic"
                 target: "mapping/status"
@@ -1092,10 +1092,10 @@ profiles:
             sigterm_timeout_ms: 2000
             sigkill_timeout_ms: 2000
 
-        - name: "joystick"
+        - name: "teleop"
           importance: "optional"
           startup:
-            exec: "ros2 launch amr_sweeper_joystick joystick.launch.py"
+            exec: "ros2 launch amr_sweeper_teleop teleop.launch.py"
             args:
               - "namespace:={ns}"
               - "joy_dev:=/dev/input/js0"
@@ -1164,7 +1164,7 @@ profiles:
                 target: "gnss/navsat"
                 required: true
               - type: "topic"
-                target: "robot_description"
+                target: "description/robot_description"
                 required: true
               - type: "topic"
                 target: "usb_cameras/rear_left_camera/image_raw/compressed"
@@ -1197,10 +1197,10 @@ profiles:
                 target: "gnss/gnss_node/get_parameters"
                 required: true
               - type: "service"
-                target: "gnss/ntrip_client/get_parameters"
+                target: "gnss/ntrip_client_node/get_parameters"
                 required: true
               - type: "topic"
-                target: "joint_states"
+                target: "attitude_controller/joint_states"
                 required: true
               - type: "hardware"
                 target: "odrive_ros2_control"
@@ -1245,7 +1245,7 @@ profiles:
               - "use_sim_time:=false"
               - "use_amr_sweeper_drive_controller:=true"
               - "use_amr_sweeper_tool_controller:=true"
-              - "use_amr_sweeper_joystick:=true"
+              - "use_amr_sweeper_teleop:=true"
               - "use_joy_node:=true"
               - "use_amr_sweeper_sweeping_controller:=true"
               - "use_amr_sweeper_attitude_controller:=true"
@@ -1254,13 +1254,13 @@ profiles:
               - "use_sweeping_mode:=cmd_vel_sweeping"
             ready:
               - type: "topic"
-                target: "cmd_vel_drive"
+                target: "sweeping_controller/cmd_vel_drive"
                 required: true
               - type: "topic"
-                target: "cmd_vel_tools"
+                target: "sweeping_controller/cmd_vel_tools"
                 required: true
               - type: "topic"
-                target: "attitude/roll_pitch"
+                target: "attitude_controller/roll_pitch"
                 required: true
               - type: "topic"
                 target: "drive_controller/odom"
@@ -1347,7 +1347,7 @@ profiles:
                 target: "gnss/navsat"
                 required: true
               - type: "topic"
-                target: "robot_description"
+                target: "description/robot_description"
                 required: true
               - type: "topic"
                 target: "usb_cameras/rear_left_camera/image_raw/compressed"
@@ -1380,7 +1380,7 @@ profiles:
                 target: "gnss/gnss_node/get_parameters"
                 required: true
               - type: "topic"
-                target: "joint_states"
+                target: "attitude_controller/joint_states"
                 required: true
               - type: "hardware"
                 target: "odrive_ros2_control"
@@ -1425,7 +1425,7 @@ profiles:
               - "use_sim_time:=false"
               - "use_amr_sweeper_drive_controller:=true"
               - "use_amr_sweeper_tool_controller:=true"
-              - "use_amr_sweeper_joystick:=true"
+              - "use_amr_sweeper_teleop:=true"
               - "use_joy_node:=true"
               - "use_amr_sweeper_sweeping_controller:=true"
               - "use_amr_sweeper_attitude_controller:=true"
@@ -1434,13 +1434,13 @@ profiles:
               - "use_sweeping_mode:=cmd_vel_sweeping"
             ready:
               - type: "topic"
-                target: "cmd_vel_drive"
+                target: "sweeping_controller/cmd_vel_drive"
                 required: true
               - type: "topic"
-                target: "cmd_vel_tools"
+                target: "sweeping_controller/cmd_vel_tools"
                 required: true
               - type: "topic"
-                target: "attitude/roll_pitch"
+                target: "attitude_controller/roll_pitch"
                 required: true
               - type: "topic"
                 target: "drive_controller/odom"
@@ -1501,10 +1501,10 @@ profiles:
               - "test_output_directory:={test_output_directory}"
             ready:
               - type: "topic"
-                target: "odometry/fused"
+                target: "localization/odometry_fused"
                 required: true
               - type: "topic"
-                target: "pose"
+                target: "localization/pose"
                 required: true
               - type: "lifecycle"
                 target: "fusioncore"
@@ -1516,13 +1516,13 @@ profiles:
                 target: "amr_sweeper_slam_node/get_parameters"
                 required: true
               - type: "service"
-                target: "amr_sweeper_gaussian_node/get_parameters"
+                target: "gaussian_node/get_parameters"
                 required: true
               - type: "service"
-                target: "amr_sweeper_mapping_node/get_parameters"
+                target: "mapping_node/get_parameters"
                 required: true
               - type: "topic"
-                target: "mapping/map"
+                target: "mapping/occupancy_grid"
                 required: true
             window_ms: 45000
           rosout_triggers:

@@ -169,7 +169,7 @@ static const std::vector<std::string> kMissionLayerOverrideKeys{
   "use_ntrip_client",
   "use_amr_sweeper_drive_controller",
   "use_amr_sweeper_tool_controller",
-  "use_amr_sweeper_joystick",
+  "use_amr_sweeper_teleop",
   "use_amr_sweeper_sweeping_controller",
   "use_amr_sweeper_attitude_controller",
   "use_amr_sweeper_collision_detector",
@@ -316,13 +316,13 @@ static void log_packages_with_prefix(const rclcpp::Logger & logger, const std::s
 }
 
 SupervisorNode::SupervisorNode()
-: rclcpp::Node("supervisor")
+: rclcpp::Node("supervisor_node")
 {
   ns_ = this->get_namespace();  // includes '/'
 
   // Dedicated helper node for synchronous parameter service calls.
   // IMPORTANT: do NOT add this node to an executor when using SyncParametersClient.
-  // This process is launched with global remaps (e.g. "-r __node:=supervisor").
+  // This process is launched with global remaps (e.g. "-r __node:=supervisor_node").
   // If we let those global arguments apply here, this helper node will be remapped
   // to the *same* name as the supervisor node, causing duplicate node names and
   // rosout publisher warnings. Disable global arguments for the helper node.
@@ -385,11 +385,11 @@ void SupervisorNode::init_clients()
 {
   endpoints_.clear();
 
-  endpoints_[INITIALIZING].node_name = "initializing_state";
-  endpoints_[IDLING].node_name = "idling_state";
-  endpoints_[RUNNING].node_name = "running_state";
-  endpoints_[CHARGING].node_name = "charging_state";
-  endpoints_[FAULT].node_name = "fault_state";
+  endpoints_[INITIALIZING].node_name = "INITIALIZING_node";
+  endpoints_[IDLING].node_name = "IDLING_node";
+  endpoints_[RUNNING].node_name = "RUNNING_node";
+  endpoints_[CHARGING].node_name = "CHARGING_node";
+  endpoints_[FAULT].node_name = "FAULT_node";
 
   for (auto & kv : endpoints_) {
     auto & ep = kv.second;

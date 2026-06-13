@@ -739,7 +739,7 @@ MissionParserNode::MissionParserNode(const rclcpp::NodeOptions & options)
   watch_for_updates_ = declare_parameter<bool>("watch_for_updates", true);
 
   mission_parser_ = std::make_unique<Vda5050MissionParser>();
-  status_publisher_ = create_publisher<std_msgs::msg::String>("mission_parser/status", 10);
+  status_publisher_ = create_publisher<std_msgs::msg::String>("vda5050_parser/status", 10);
   build_current_mission_service_ = create_service<std_srvs::srv::Trigger>(
     "build_current_mission",
     std::bind(

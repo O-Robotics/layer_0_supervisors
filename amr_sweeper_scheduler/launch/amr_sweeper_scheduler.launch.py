@@ -35,7 +35,7 @@ def generate_launch_description():
         Node(
             package="amr_sweeper_scheduler",
             executable="scheduler_node",
-            name="amr_sweeper_scheduler",
+            name="scheduler_node",
             namespace=namespace,
             output="screen",
             parameters=[

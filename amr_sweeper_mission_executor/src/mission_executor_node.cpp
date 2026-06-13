@@ -1408,13 +1408,13 @@ MissionExecutorNode::MissionExecutorNode(const rclcpp::NodeOptions & options)
   teleop_odometry_topic_ = declare_parameter<std::string>("teleop_odometry_topic", "drive_controller/odom");
   manual_mapping_odometry_topic_ = declare_parameter<std::string>(
     "manual_mapping_odometry_topic",
-    "odometry/fused");
+    "localization/odometry_fused");
   manual_mapping_navsat_topic_ = declare_parameter<std::string>(
     "manual_mapping_navsat_topic",
     "gnss/navsat");
   routed_mission_odometry_topic_ = declare_parameter<std::string>(
     "routed_mission_odometry_topic",
-    "odometry/fused");
+    "localization/odometry_fused");
   mission_parser_node_name_ = declare_parameter<std::string>(
     "mission_parser_node_name",
     "vda5050_parser_node");

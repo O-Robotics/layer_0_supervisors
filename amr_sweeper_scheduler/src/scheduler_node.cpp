@@ -685,7 +685,7 @@ std::vector<TimeWindow> apply_blackout_overlay(const std::vector<TimeWindow> & w
 }
 
 SchedulerNode::SchedulerNode(const rclcpp::NodeOptions & options)
-: rclcpp::Node("amr_sweeper_scheduler", options)
+: rclcpp::Node("scheduler_node", options)
 {
   schedule_ics_path_ = declare_parameter<std::string>("schedule_ics_path", "");
   missions_directory_ = declare_parameter<std::string>("missions_directory", "missions/database");
@@ -736,7 +736,7 @@ SchedulerNode::SchedulerNode(const rclcpp::NodeOptions & options)
   emit_trigger_topic_ = declare_parameter<bool>("emit_trigger_topic", true);
   trigger_topic_name_ = declare_parameter<std::string>(
     "trigger_topic_name",
-    "scheduler_triggers");
+    "scheduler/triggers");
   if (retry_attempts_before_error_ < 1) {
     retry_attempts_before_error_ = 1;
   }
@@ -747,7 +747,7 @@ SchedulerNode::SchedulerNode(const rclcpp::NodeOptions & options)
     fatal_after_consecutive_errors_ = retry_attempts_before_error_;
   }
 
-  planned_pub_ = create_publisher<std_msgs::msg::String>("planned_windows", 10);
+  planned_pub_ = create_publisher<std_msgs::msg::String>("scheduler/planned_windows", 10);
   if (emit_trigger_topic_) {
     trigger_pub_ = create_publisher<std_msgs::msg::String>(trigger_topic_name_, 10);
   }
@@ -1225,7 +1225,7 @@ void SchedulerNode::request_mission_execution(const TimeWindow & window)
   request->mission_execution_directory = "";
   request->mission_window_start = window.start_local;
   request->mission_window_end = window.end_local;
-  request->requester = "amr_sweeper_scheduler";
+  request->requester = "scheduler_node";
   request->priority = 210;
   request->force = false;
   request->reason =

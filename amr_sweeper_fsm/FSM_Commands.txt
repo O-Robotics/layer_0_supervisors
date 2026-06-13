@@ -5,8 +5,8 @@ Assumptions
 -----------
 - Package: amr_sweeper_fsm  (folder: /layer_0_supervisors/amr_sweeper_fsm)
 - Default namespace in launch: /amr_sweeper
-- Supervisor node name: supervisor (within namespace)
-- State nodes (LifecycleNodes): initializing_state, idling_state, running_state, charging_state, fault_state
+- Supervisor node name: supervisor_node (within namespace)
+- State nodes (LifecycleNodes): INITIALIZING_node, IDLING_node, RUNNING_node, CHARGING_node, FAULT_node
 
 If you launch with a different namespace, replace '/amr_sweeper' accordingly.
 
@@ -140,35 +140,35 @@ Validation rules
 
 Topic 1: fsm_state
   Type: amr_sweeper_fsm/msg/FSMState
-  Default fully-qualified: /amr_sweeper/fsm_state
+  Default fully-qualified: /amr_sweeper/fsm/supervisor/fsm_state
 
-  ros2 topic echo /amr_sweeper/fsm_state
+  ros2 topic echo /amr_sweeper/fsm/supervisor/fsm_state
 
 
 Topic 2: fsm_status
   Type: amr_sweeper_fsm/msg/FSMStatus
-  Default fully-qualified: /amr_sweeper/fsm_status
+  Default fully-qualified: /amr_sweeper/fsm/supervisor/fsm_status
 
-  ros2 topic echo /amr_sweeper/fsm_status
+  ros2 topic echo /amr_sweeper/fsm/supervisor/fsm_status
 
 
 5) Lifecycle services (state nodes)
 -----------------------------------
 
 Each state node is a ROS2 LifecycleNode and exposes standard lifecycle services, e.g.:
-  /amr_sweeper/running_state/get_state
-  /amr_sweeper/running_state/change_state
-  /amr_sweeper/running_state/get_available_transitions
+  /amr_sweeper/RUNNING_node/get_state
+  /amr_sweeper/RUNNING_node/change_state
+  /amr_sweeper/RUNNING_node/get_available_transitions
   ...
 
 Debug lifecycle state (do not use as primary control path):
-  ros2 lifecycle get /amr_sweeper/running_state
-  ros2 lifecycle get /amr_sweeper/idling_state
+  ros2 lifecycle get /amr_sweeper/RUNNING_node
+  ros2 lifecycle get /amr_sweeper/IDLING_node
 
 
 Force a lifecycle transition directly (debug only; bypasses supervisor arbitration):
-  ros2 lifecycle set /amr_sweeper/running_state configure
-  ros2 lifecycle set /amr_sweeper/running_state activate
+  ros2 lifecycle set /amr_sweeper/RUNNING_node configure
+  ros2 lifecycle set /amr_sweeper/RUNNING_node activate
 
 7) Troubleshooting
 ------------------

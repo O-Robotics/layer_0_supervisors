@@ -8,7 +8,7 @@ class FaultNode : public fsm_layer_0::StateNodeBase
 {
 public:
   explicit FaultNode(const rclcpp::NodeOptions & options)
-  : fsm_layer_0::StateNodeBase("fault_state", options) {}
+  : fsm_layer_0::StateNodeBase("FAULT_node", options) {}
 };
 
 }  // namespace fsm_layer_0::states::fault

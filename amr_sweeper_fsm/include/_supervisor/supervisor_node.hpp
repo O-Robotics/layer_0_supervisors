@@ -36,8 +36,8 @@ namespace fsm_layer_0
  *  - service_wait_ms: max wait for lifecycle services to become ready
  *  - op_timeout_ms: operation timeout (enter/switch) in milliseconds
  *  - publish.rules: list of rule strings, e.g.
- *      "topic=fsm_state;type=amr_sweeper_fsm/msg/FSMState;period_ms=1000;source=state"
- *      "topic=fsm_status;type=amr_sweeper_fsm/msg/FSMStatus;period_ms=1000;source=status"
+ *      "topic=fsm/supervisor/fsm_state;type=amr_sweeper_fsm/msg/FSMState;period_ms=1000;source=state"
+ *      "topic=fsm/supervisor/fsm_status;type=amr_sweeper_fsm/msg/FSMStatus;period_ms=1000;source=status"
  */
 class SupervisorNode : public rclcpp::Node
 {
@@ -246,9 +246,9 @@ private:
   int service_wait_ms_{500};
   int op_timeout_ms_{1500};
   int tick_period_ms_{100};
-  std::string safety_stop_topic_{"cmd_vel_safety_stop"};
-  std::string wheel_stop_topic_{"cmd_vel_drive"};
-  std::string tool_stop_topic_{"cmd_vel_tools"};
+  std::string safety_stop_topic_{"safety_controller/cmd_vel_safety_stop"};
+  std::string wheel_stop_topic_{"sweeping_controller/cmd_vel_drive"};
+  std::string tool_stop_topic_{"sweeping_controller/cmd_vel_tools"};
 };
 
 }  // namespace fsm_layer_0

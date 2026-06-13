@@ -37,7 +37,7 @@ namespace {
     "use_ntrip_client",
     "use_amr_sweeper_drive_controller",
     "use_amr_sweeper_tool_controller",
-    "use_amr_sweeper_joystick",
+    "use_amr_sweeper_teleop",
     "use_amr_sweeper_sweeping_controller",
     "use_sweeping_mode",
     "use_amr_sweeper_attitude_controller",
@@ -68,7 +68,7 @@ namespace {
     "use_sim_time",
     "use_amr_sweeper_drive_controller",
     "use_amr_sweeper_tool_controller",
-    "use_amr_sweeper_joystick",
+    "use_amr_sweeper_teleop",
     "use_amr_sweeper_sweeping_controller",
     "use_sweeping_mode",
     "use_amr_sweeper_attitude_controller",
@@ -250,7 +250,7 @@ namespace {
       {
         return launch_arg_enabled(args, "use_amr_sweeper_gnss", true);
       }
-      if (target_matches_pattern(target, "gnss/ntrip_client")) {
+      if (target_matches_pattern(target, "gnss/ntrip_client_node")) {
         return launch_arg_enabled(args, "use_ntrip_client", true);
       }
       if (target_matches_pattern(target, "usb_cameras/")) {
@@ -289,7 +289,7 @@ namespace {
         return launch_arg_enabled(args, "use_amr_sweeper_tool_controller", true);
       }
       if (
-        target_matches_pattern(target, "attitude/roll_pitch") ||
+        target_matches_pattern(target, "attitude_controller/roll_pitch") ||
         target_matches_pattern(target, "amr_sweeper_attitude_controller/enable_attitude_estimation"))
       {
         return launch_arg_enabled(args, "use_amr_sweeper_attitude_controller", true);
@@ -310,8 +310,8 @@ namespace {
 
     if (resolved_command.find("ros2 launch amr_sweeper_layer_3_navigation_bringup ") != std::string::npos) {
       if (
-        target_matches_pattern(target, "odometry/fused") ||
-        target_matches_pattern(target, "pose") ||
+        target_matches_pattern(target, "localization/odometry_fused") ||
+        target_matches_pattern(target, "localization/pose") ||
         target_matches_pattern(target, "fusioncore"))
       {
         return launch_arg_enabled(args, "use_amr_sweeper_localization", true);
@@ -319,8 +319,8 @@ namespace {
       if (
         target_matches_pattern(target, "slam_toolbox") ||
         target_matches_pattern(target, "amr_sweeper_slam_node") ||
-        target_matches_pattern(target, "amr_sweeper_gaussian_node") ||
-        target_matches_pattern(target, "amr_sweeper_mapping_node"))
+        target_matches_pattern(target, "gaussian_node") ||
+        target_matches_pattern(target, "mapping_node"))
       {
         return launch_arg_enabled(args, "use_amr_sweeper_mapping", true);
       }

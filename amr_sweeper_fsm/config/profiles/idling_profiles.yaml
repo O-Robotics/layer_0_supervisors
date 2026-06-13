@@ -62,7 +62,7 @@ profiles:
             sigterm_timeout_ms: 1000
             sigkill_timeout_ms: 1000
 
-        - name: "amr_sweeper_scheduler"
+        - name: "scheduler_node"
           importance: "degraded"
           startup:
             exec: "ros2 launch amr_sweeper_scheduler amr_sweeper_scheduler.launch.py"
@@ -76,7 +76,7 @@ profiles:
                 required: true
             window_ms: 6000
           rosout_triggers:
-            - "node=amr_sweeper_scheduler;level>=ERROR;action=DEGRADED"
+            - "node=scheduler_node;level>=ERROR;action=DEGRADED"
           errors:
             on_readiness_fail: "DEGRADED"
             on_unexpected_exit: "DEGRADED"
@@ -116,7 +116,7 @@ profiles:
                 target: "battery/battery_state"
                 required: true
               - type: "topic"
-                target: "robot_description"
+                target: "description/robot_description"
                 required: true
               - type: "service"
                 target: "robot_state_publisher/get_parameters"
@@ -192,7 +192,7 @@ profiles:
             sigterm_timeout_ms: 1000
             sigkill_timeout_ms: 1000
 
-        - name: "amr_sweeper_scheduler"
+        - name: "scheduler_node"
           importance: "degraded"
           startup:
             exec: "ros2 launch amr_sweeper_scheduler amr_sweeper_scheduler.launch.py"
@@ -206,7 +206,7 @@ profiles:
                 required: true
             window_ms: 6000
           rosout_triggers:
-            - "node=amr_sweeper_scheduler;level>=ERROR;action=DEGRADED"
+            - "node=scheduler_node;level>=ERROR;action=DEGRADED"
           errors:
             on_readiness_fail: "DEGRADED"
             on_unexpected_exit: "DEGRADED"
@@ -243,7 +243,7 @@ profiles:
                 target: "gnss/navsat"
                 required: true
               - type: "topic"
-                target: "robot_description"
+                target: "description/robot_description"
                 required: true
               - type: "service"
                 target: "robot_state_publisher/get_parameters"

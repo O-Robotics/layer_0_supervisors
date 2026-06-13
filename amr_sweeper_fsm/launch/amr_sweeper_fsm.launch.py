@@ -24,7 +24,7 @@ def generate_launch_description():
         "use_ntrip_client",
         "use_amr_sweeper_drive_controller",
         "use_amr_sweeper_tool_controller",
-        "use_amr_sweeper_joystick",
+        "use_amr_sweeper_teleop",
         "use_amr_sweeper_sweeping_controller",
         "use_amr_sweeper_attitude_controller",
         "use_amr_sweeper_collision_detector",
@@ -141,7 +141,7 @@ def generate_launch_description():
         package="amr_sweeper_fsm",
         executable="supervisor_node",
         namespace=namespace,
-        name="supervisor",
+        name="supervisor_node",
         output="screen",
         parameters=[
             state_params_file,
@@ -159,7 +159,7 @@ def generate_launch_description():
         package="amr_sweeper_fsm",
         executable="initializing_state_node",
         namespace=namespace,
-        name="initializing_state",
+        name="INITIALIZING_node",
         output="screen",
         parameters=[
             state_params_file,
@@ -174,7 +174,7 @@ def generate_launch_description():
         package="amr_sweeper_fsm",
         executable="idling_state_node",
         namespace=namespace,
-        name="idling_state",
+        name="IDLING_node",
         output="screen",
         parameters=[
             state_params_file,
@@ -189,7 +189,7 @@ def generate_launch_description():
         package="amr_sweeper_fsm",
         executable="running_state_node",
         namespace=namespace,
-        name="running_state",
+        name="RUNNING_node",
         output="screen",
         parameters=[
             state_params_file,
@@ -204,7 +204,7 @@ def generate_launch_description():
         package="amr_sweeper_fsm",
         executable="charging_state_node",
         namespace=namespace,
-        name="charging_state",
+        name="CHARGING_node",
         output="screen",
         parameters=[
             state_params_file,
@@ -219,7 +219,7 @@ def generate_launch_description():
         package="amr_sweeper_fsm",
         executable="fault_state_node",
         namespace=namespace,
-        name="fault_state",
+        name="FAULT_node",
         output="screen",
         parameters=[
             state_params_file,

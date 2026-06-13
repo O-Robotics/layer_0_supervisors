@@ -7,16 +7,16 @@
 #   - Defines FSM-state profile file 
 ###############################################################################
 
-/**/supervisor:
+/**/supervisor_node:
   ros__parameters:
     publish:
       rules:
-        - "topic=fsm_state;type=amr_sweeper_fsm/msg/FSMState;period_ms=1000;source=state"
-        - "topic=fsm_status;type=amr_sweeper_fsm/msg/FSMStatus;period_ms=1000;source=status"
+        - "topic=fsm/supervisor/fsm_state;type=amr_sweeper_fsm/msg/FSMState;period_ms=1000;source=state"
+        - "topic=fsm/supervisor/fsm_status;type=amr_sweeper_fsm/msg/FSMStatus;period_ms=1000;source=status"
 
 
 #################################### INITIALIZING ####################################
-/**/initializing_state:
+/**/INITIALIZING_node:
   ros__parameters:
     ready:
       controller_query_timeout_ms: 5000   # Timeout for each controller_manager hardware/controller probe during startup.
@@ -28,7 +28,7 @@
       fault_force: true
       rosout_triggers:
         - "level>=FATAL;action=FAULT"
-        - "node=initializing_state;level>=ERROR;action=FAULT"
+        - "node=INITIALIZING_node;level>=ERROR;action=FAULT"
 
     # Valid profile range: 000 - 099
     profiles:
@@ -37,7 +37,7 @@
 
 
 ###################################### IDLING ########################################
-/**/idling_state:
+/**/IDLING_node:
   ros__parameters:
     ready:
       controller_query_timeout_ms: 5000   # Timeout for each controller_manager hardware/controller probe during startup.
@@ -49,7 +49,7 @@
       fault_force: true
       rosout_triggers:
         - "level>=FATAL;action=FAULT"
-        - "node=idling_state;level>=ERROR;action=FAULT"
+        - "node=IDLING_node;level>=ERROR;action=FAULT"
 
     # Valid profile range: 100 - 199
     profiles:
@@ -58,7 +58,7 @@
 
 
 ##################################### RUNNING ########################################
-/**/running_state:
+/**/RUNNING_node:
   ros__parameters:
     ready:
       controller_query_timeout_ms: 5000   # Timeout for each controller_manager hardware/controller probe during startup.
@@ -70,7 +70,7 @@
       fault_force: true
       rosout_triggers:
         - "level>=FATAL;action=FAULT"
-        - "node=running_state;level>=ERROR;action=FAULT"
+        - "node=RUNNING_node;level>=ERROR;action=FAULT"
 
     # Valid profile range: 200 - 299
     profiles:
@@ -79,7 +79,7 @@
 
 
 ##################################### CHARGING #######################################
-/**/charging_state:
+/**/CHARGING_node:
   ros__parameters:
     ready:
       controller_query_timeout_ms: 5000   # Timeout for each controller_manager hardware/controller probe during startup.
@@ -91,7 +91,7 @@
       fault_force: true
       rosout_triggers:
         - "level>=FATAL;action=FAULT"
-        - "node=charging_state;level>=ERROR;action=FAULT"
+        - "node=CHARGING_node;level>=ERROR;action=FAULT"
 
     # Valid profile range: 300 - 399
     profiles:
@@ -100,7 +100,7 @@
 
 
 ###################################### FAULT #########################################
-/**/fault_state:
+/**/FAULT_node:
   ros__parameters:
     ready:
       controller_query_timeout_ms: 5000   # Timeout for each controller_manager hardware/controller probe during startup.
