@@ -568,6 +568,7 @@ class MissionBackendNode(Node):
         request.requester = str(payload.get("requester", self.get_name()))
         request.priority = int(payload.get("priority", 200))
         request.force = bool(payload.get("force", False))
+        request.record_rosbag = bool(payload.get("record_rosbag", False))
         request.reason = str(payload.get("reason", "manual mission requested from HTTP UI"))
 
         response = self._call_service(

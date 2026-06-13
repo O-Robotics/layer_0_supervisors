@@ -5,6 +5,7 @@ string mission_window_end
 string requester
 uint8 priority
 bool force
+bool record_rosbag
 string reason
 ---
 bool success

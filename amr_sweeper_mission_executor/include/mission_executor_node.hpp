@@ -5,6 +5,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <sys/types.h>
 #include <vector>
 
 #include <geometry_msgs/msg/point.hpp>
@@ -136,6 +137,15 @@ private:
     const PreparedMissionContext & context,
     const srv::ExecuteMission::Request & request,
     std::string & message) const;
+  void writeMissionExecutionPreferences(
+    const std::filesystem::path & context_path,
+    bool record_rosbag) const;
+  [[nodiscard]] std::vector<std::string> loadRosbagTopics() const;
+  [[nodiscard]] bool startMissionRosbagRecording(
+    const PreparedMissionContext & context,
+    bool record_rosbag_requested,
+    std::string & warning_message);
+  void stopMissionRosbagRecording();
   [[nodiscard]] std::filesystem::path resolveScheduleSourcePath() const;
   [[nodiscard]] std::filesystem::path ensureScheduleLogPath(
     const std::filesystem::path & schedule_source_path) const;
@@ -157,6 +167,7 @@ private:
   std::string manual_mapping_odometry_topic_;
   std::string manual_mapping_navsat_topic_;
   std::string routed_mission_odometry_topic_;
+  std::string rosbag_topics_file_;
   std::string mission_parser_node_name_;
   std::string mission_parser_build_service_;
   std::string fsm_request_service_;
@@ -190,6 +201,7 @@ private:
   rclcpp::TimerBase::SharedPtr manual_mission_watchdog_timer_;
   mutable std::mutex active_mission_mutex_;
   mutable std::mutex routed_mission_pose_mutex_;
+  mutable std::mutex rosbag_process_mutex_;
   bool active_mission_running_{false};
   bool active_mission_is_teleop_{false};
   bool active_mission_is_manual_mapping_{false};
@@ -202,6 +214,8 @@ private:
   rclcpp::Time last_manual_mission_motion_time_;
   std::vector<geometry_msgs::msg::Point> teleop_traveled_path_points_;
   std::vector<geometry_msgs::msg::Point> manual_mapping_navsat_points_;
+  pid_t rosbag_recording_pid_{-1};
+  std::string active_rosbag_output_directory_;
   bool routed_mission_pose_ready_{false};
   geometry_msgs::msg::Point routed_mission_position_;
   geometry_msgs::msg::Quaternion routed_mission_orientation_;

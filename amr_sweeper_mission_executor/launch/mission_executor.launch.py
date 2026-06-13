@@ -17,6 +17,7 @@ def generate_launch_description():
     safety_stop_topic = LaunchConfiguration("safety_stop_topic")
     teleop_odometry_topic = LaunchConfiguration("teleop_odometry_topic")
     manual_mapping_odometry_topic = LaunchConfiguration("manual_mapping_odometry_topic")
+    rosbag_topics_file = LaunchConfiguration("rosbag_topics_file")
     manual_mission_inactivity_timeout_seconds = LaunchConfiguration("manual_mission_inactivity_timeout_seconds")
     idling_profile_id = LaunchConfiguration("idling_profile_id")
     mission_parser_node_name = LaunchConfiguration("mission_parser_node_name")
@@ -38,6 +39,12 @@ def generate_launch_description():
         DeclareLaunchArgument("safety_stop_topic", default_value="safety_msgs/stop"),
         DeclareLaunchArgument("teleop_odometry_topic", default_value="drive_controller/odom"),
         DeclareLaunchArgument("manual_mapping_odometry_topic", default_value="localization/odometry_fused"),
+        DeclareLaunchArgument(
+            "rosbag_topics_file",
+            default_value=PathJoinSubstitution(
+                [FindPackageShare("amr_sweeper_mission_executor"), "config", "record_rosbag.yaml"]
+            ),
+        ),
         DeclareLaunchArgument("manual_mission_inactivity_timeout_seconds", default_value="300.0"),
         DeclareLaunchArgument("idling_profile_id", default_value="101"),
         DeclareLaunchArgument("mission_parser_node_name", default_value="vda5050_parser_node"),
@@ -58,6 +65,7 @@ def generate_launch_description():
                 "safety_stop_topic": safety_stop_topic,
                 "teleop_odometry_topic": teleop_odometry_topic,
                 "manual_mapping_odometry_topic": manual_mapping_odometry_topic,
+                "rosbag_topics_file": rosbag_topics_file,
                 "manual_mission_inactivity_timeout_seconds": manual_mission_inactivity_timeout_seconds,
                 "idling_profile_id": idling_profile_id,
                 "mission_parser_node_name": mission_parser_node_name,

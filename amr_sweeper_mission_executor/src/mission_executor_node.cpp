@@ -2,7 +2,12 @@
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
 
+#include <signal.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <chrono>
 #include <cstddef>
@@ -159,6 +164,20 @@ void writeJsonDocumentAtomic(
 std::string defaultIfEmpty(const std::string & value, const std::string & fallback)
 {
   return value.empty() ? fallback : value;
+}
+
+std::string trimCopy(std::string value)
+{
+  const auto not_space = [](const unsigned char character) {
+      return !std::isspace(character);
+    };
+  value.erase(
+    value.begin(),
+    std::find_if(value.begin(), value.end(), not_space));
+  value.erase(
+    std::find_if(value.rbegin(), value.rend(), not_space).base(),
+    value.end());
+  return value;
 }
 
 std::string sanitizeUidToken(std::string value);
@@ -1415,6 +1434,9 @@ MissionExecutorNode::MissionExecutorNode(const rclcpp::NodeOptions & options)
   routed_mission_odometry_topic_ = declare_parameter<std::string>(
     "routed_mission_odometry_topic",
     "localization/odometry_fused");
+  rosbag_topics_file_ = declare_parameter<std::string>(
+    "rosbag_topics_file",
+    "");
   mission_parser_node_name_ = declare_parameter<std::string>(
     "mission_parser_node_name",
     "vda5050_parser_node");
@@ -1838,6 +1860,7 @@ void MissionExecutorNode::handleExecuteMission(
         request->mission_window_start,
         request->mission_window_end);
     }
+    writeMissionExecutionPreferences(context.execution_context_file, request->record_rosbag);
     rewriteBuiltinLocalPatternArtifacts(resolved_mission, context);
     std::string message;
     if (!requestRunningState(context, *request, message)) {
@@ -1849,6 +1872,12 @@ void MissionExecutorNode::handleExecuteMission(
       return;
     }
     recordMissionExecutionStart(resolved_mission, context, *request);
+    std::string rosbag_warning;
+    if (!startMissionRosbagRecording(context, request->record_rosbag, rosbag_warning) &&
+      !rosbag_warning.empty())
+    {
+      message += " (" + rosbag_warning + ")";
+    }
     auto context_document = loadJsonDocument(context.execution_context_file);
     context_document["execution_context_file"] = context.execution_context_file;
     refreshActiveMissionState(context_document);
@@ -2663,6 +2692,7 @@ bool MissionExecutorNode::finalizeMissionExecution(
   refreshLocalPathGeoReferenceFromArtifacts(*context_document);
   writeLatestRecordedMapSnapshot(*context_document);
   recordMissionExecutionEnd(*context_document, request);
+  stopMissionRosbagRecording();
   clearActiveMissionState();
 
   if (!requestIdlingState(request, message)) {
@@ -3494,6 +3524,207 @@ bool MissionExecutorNode::requestRunningState(
   }
   message = stream.str();
   return true;
+}
+
+void MissionExecutorNode::writeMissionExecutionPreferences(
+  const std::filesystem::path & context_path,
+  const bool record_rosbag) const
+{
+  if (context_path.empty()) {
+    return;
+  }
+
+  auto context_document = loadJsonDocument(context_path);
+  context_document["record_rosbag"] = record_rosbag;
+  if (!context_document.contains("rosbag_output_directory")) {
+    context_document["rosbag_output_directory"] = "";
+  }
+  if (!context_document.contains("rosbag_recording_started")) {
+    context_document["rosbag_recording_started"] = false;
+  }
+  writeJsonDocumentAtomic(context_path, context_document);
+}
+
+std::vector<std::string> MissionExecutorNode::loadRosbagTopics() const
+{
+  const auto topics_path = resolvePath(rosbag_topics_file_);
+  if (topics_path.empty() || !std::filesystem::exists(topics_path)) {
+    return {};
+  }
+
+  std::ifstream input_stream(topics_path);
+  if (!input_stream.is_open()) {
+    throw std::runtime_error("Failed to open rosbag topics file: " + topics_path.string());
+  }
+
+  std::vector<std::string> topics;
+  std::string line;
+  while (std::getline(input_stream, line)) {
+    const std::string trimmed = trimCopy(line);
+    if (trimmed.empty() || trimmed[0] == '#') {
+      continue;
+    }
+    if (trimmed == "topics:" || trimmed.rfind("topics:", 0U) == 0U) {
+      continue;
+    }
+    if (trimmed.rfind("- ", 0U) != 0U) {
+      continue;
+    }
+    const std::string topic = trimCopy(trimmed.substr(2));
+    if (!topic.empty() && topic[0] == '/') {
+      topics.push_back(topic);
+    }
+  }
+
+  return topics;
+}
+
+bool MissionExecutorNode::startMissionRosbagRecording(
+  const PreparedMissionContext & context,
+  const bool record_rosbag_requested,
+  std::string & warning_message)
+{
+  warning_message.clear();
+  stopMissionRosbagRecording();
+
+  const std::filesystem::path context_path(context.execution_context_file);
+  auto context_document = loadJsonDocument(context_path);
+  context_document["record_rosbag"] = record_rosbag_requested;
+  context_document["rosbag_recording_started"] = false;
+  context_document["rosbag_output_directory"] = "";
+  context_document["rosbag_topics_file"] = rosbag_topics_file_;
+
+  if (!record_rosbag_requested) {
+    writeJsonDocumentAtomic(context_path, context_document);
+    return true;
+  }
+
+  std::filesystem::path artifacts_directory(
+    context_document.value("collected_artifacts_directory", std::string{}));
+  if (artifacts_directory.empty()) {
+    artifacts_directory = std::filesystem::path(context.mission_execution_directory) / "artifacts";
+  }
+  std::filesystem::create_directories(artifacts_directory);
+  const std::filesystem::path rosbag_output_directory = artifacts_directory / "rosbag";
+
+  const auto topics = loadRosbagTopics();
+  if (topics.empty()) {
+    warning_message = "Record rosbag requested but no topics are configured";
+    writeJsonDocumentAtomic(context_path, context_document);
+    RCLCPP_WARN(get_logger(), "%s", warning_message.c_str());
+    return false;
+  }
+
+  std::vector<std::string> escaped_topics;
+  escaped_topics.reserve(topics.size());
+  for (const auto & topic : topics) {
+    escaped_topics.push_back(topic);
+  }
+  std::ostringstream regex_stream;
+  regex_stream << "^(";
+  for (std::size_t index = 0; index < escaped_topics.size(); ++index) {
+    if (index > 0U) {
+      regex_stream << "|";
+    }
+    for (const char character : escaped_topics[index]) {
+      switch (character) {
+        case '.':
+        case '^':
+        case '$':
+        case '|':
+        case '(':
+        case ')':
+        case '[':
+        case ']':
+        case '{':
+        case '}':
+        case '*':
+        case '+':
+        case '?':
+        case '\\':
+          regex_stream << '\\';
+          break;
+        default:
+          break;
+      }
+      regex_stream << character;
+    }
+  }
+  regex_stream << ")$";
+
+  const std::string rosbag_output_string = rosbag_output_directory.string();
+  const std::string rosbag_regex = regex_stream.str();
+  const pid_t child_pid = fork();
+  if (child_pid < 0) {
+    warning_message = "Failed to start rosbag recorder process";
+    writeJsonDocumentAtomic(context_path, context_document);
+    RCLCPP_WARN(get_logger(), "%s", warning_message.c_str());
+    return false;
+  }
+
+  if (child_pid == 0) {
+    ::setsid();
+    std::array<char *, 8> arguments{
+      const_cast<char *>("ros2"),
+      const_cast<char *>("bag"),
+      const_cast<char *>("record"),
+      const_cast<char *>("--regex"),
+      const_cast<char *>(rosbag_regex.c_str()),
+      const_cast<char *>("-o"),
+      const_cast<char *>(rosbag_output_string.c_str()),
+      nullptr};
+    ::execvp("ros2", arguments.data());
+    _exit(127);
+  }
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(200));
+  int status = 0;
+  if (::waitpid(child_pid, &status, WNOHANG) == child_pid) {
+    warning_message = "Rosbag recorder exited immediately";
+    writeJsonDocumentAtomic(context_path, context_document);
+    RCLCPP_WARN(get_logger(), "%s", warning_message.c_str());
+    return false;
+  }
+
+  {
+    std::lock_guard<std::mutex> lock(rosbag_process_mutex_);
+    rosbag_recording_pid_ = child_pid;
+    active_rosbag_output_directory_ = rosbag_output_string;
+  }
+
+  context_document["rosbag_recording_started"] = true;
+  context_document["rosbag_output_directory"] = rosbag_output_string;
+  writeJsonDocumentAtomic(context_path, context_document);
+  RCLCPP_INFO(get_logger(), "Started rosbag recording under %s", rosbag_output_string.c_str());
+  return true;
+}
+
+void MissionExecutorNode::stopMissionRosbagRecording()
+{
+  pid_t child_pid = -1;
+  {
+    std::lock_guard<std::mutex> lock(rosbag_process_mutex_);
+    child_pid = rosbag_recording_pid_;
+    rosbag_recording_pid_ = -1;
+    active_rosbag_output_directory_.clear();
+  }
+
+  if (child_pid <= 0) {
+    return;
+  }
+
+  ::kill(-child_pid, SIGINT);
+  for (int attempt = 0; attempt < 50; ++attempt) {
+    int status = 0;
+    const pid_t result = ::waitpid(child_pid, &status, WNOHANG);
+    if (result == child_pid) {
+      return;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  }
+
+  ::kill(-child_pid, SIGTERM);
+  (void)::waitpid(child_pid, nullptr, 0);
 }
 
 std::string MissionExecutorNode::formatUtcTimestamp(

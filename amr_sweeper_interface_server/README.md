@@ -35,4 +35,4 @@ Notes:
 - operators connect through the router's Wi-Fi network; the Jetson itself is expected to be wired to the router over Ethernet
 - this assumes the robot uplink and router LAN use the `192.168.2.0/24` subnet
 - the Missions page stores the selected mission and its launch preferences in browser local storage, so toggles such as `Record rosbag` persist per mission on that client
-- when `Record rosbag` is enabled for a started mission, the backend writes `record_rosbag=true` into that run's `execution_context.json`; the layer 3 bringup then records the configured rosbag topics into `<mission_run_directory>/artifacts/rosbag`
+- when `Record rosbag` is enabled for a started mission, the backend passes that flag into `amr_sweeper_mission_executor`, which records the configured rosbag topics into `<mission_run_directory>/artifacts/rosbag`
