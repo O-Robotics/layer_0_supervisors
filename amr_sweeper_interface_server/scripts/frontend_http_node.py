@@ -3199,7 +3199,7 @@ class MissionFrontendHttpNode(MissionBackendNode):
       ['use_amr_sweeper_navigation', 'Navigation'],
       ['auto_start_mission', 'Auto Start Mission'],
     ];
-    const fallbackLayerOverrides = {
+    const fallbackLayerOverrides = {{
       use_amr_sweeper_ros2_control: true,
       use_amr_sweeper_battery: true,
       use_amr_sweeper_system_info: true,
@@ -3221,7 +3221,7 @@ class MissionFrontendHttpNode(MissionBackendNode):
       use_amr_sweeper_mapping: false,
       use_amr_sweeper_navigation: true,
       auto_start_mission: true,
-    };
+    }};
     let executableMissions = [];
 
     function missionSelectionStorageKey() {{
