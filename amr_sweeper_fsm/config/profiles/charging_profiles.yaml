@@ -58,9 +58,6 @@ profiles:
               - type: "topic"
                 target: "battery/battery_state"
                 required: true
-              - type: "topic"
-                target: "description/robot_description"
-                required: true
               - type: "service"
                 target: "robot_state_publisher/get_parameters"
                 required: true
