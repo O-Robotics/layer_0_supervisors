@@ -384,7 +384,10 @@ class MissionBackendNode(Node):
         self.create_subscription(FSMState, self._fsm_state_topic, self._handle_fsm_state, 10)
         self.create_subscription(FSMStatus, self._fsm_status_topic, self._handle_fsm_status, 10)
         self.create_subscription(NavSatFix, self._gnss_topic, self._handle_navsat, 10)
-        self.create_subscription(BatteryState, self._battery_topic, self._handle_battery, 10)
+        battery_qos = QoSProfile(depth=10)
+        battery_qos.reliability = ReliabilityPolicy.RELIABLE
+        battery_qos.durability = DurabilityPolicy.TRANSIENT_LOCAL
+        self.create_subscription(BatteryState, self._battery_topic, self._handle_battery, battery_qos)
         self.create_subscription(Log, self._rosout_topic, self._handle_rosout, 100)
         self.create_subscription(String, self._safety_web_status_topic, self._handle_safety_web_status, 10)
 

@@ -1511,7 +1511,7 @@ MissionExecutorNode::MissionExecutorNode(const rclcpp::NodeOptions & options)
       std::placeholders::_2));
   safety_stop_subscription_ = create_subscription<amr_sweeper_safety_msgs::msg::SafetyStop>(
     safety_stop_topic_,
-    rclcpp::SystemDefaultsQoS(),
+    rclcpp::QoS(10).reliable().transient_local(),
     std::bind(&MissionExecutorNode::handleSafetyStop, this, std::placeholders::_1));
   teleop_odometry_subscription_ = create_subscription<nav_msgs::msg::Odometry>(
     teleop_odometry_topic_,
