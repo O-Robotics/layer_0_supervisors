@@ -290,6 +290,7 @@ namespace {
       }
       if (
         target_matches_pattern(target, "attitude_controller/roll_pitch") ||
+        target_matches_pattern(target, "attitude_controller/joint_states") ||
         target_matches_pattern(target, "amr_sweeper_attitude_controller/enable_attitude_estimation"))
       {
         return launch_arg_enabled(args, "use_amr_sweeper_attitude_controller", true);

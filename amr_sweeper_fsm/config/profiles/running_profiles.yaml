@@ -95,9 +95,6 @@ profiles:
               - type: "service"
                 target: "gnss/gnss_node/get_parameters"
                 required: true
-              - type: "topic"
-                target: "attitude_controller/joint_states"
-                required: true
               - type: "hardware"
                 target: "odrive_ros2_control"
                 state: "active"
@@ -157,6 +154,9 @@ profiles:
                 required: true
               - type: "topic"
                 target: "attitude_controller/roll_pitch"
+                required: true
+              - type: "topic"
+                target: "attitude_controller/joint_states"
                 required: true
               - type: "topic"
                 target: "drive_controller/odom"
@@ -374,9 +374,6 @@ profiles:
               - type: "service"
                 target: "gnss/ntrip_client_node/get_parameters"
                 required: true
-              - type: "topic"
-                target: "attitude_controller/joint_states"
-                required: true
               - type: "hardware"
                 target: "odrive_ros2_control"
                 state: "active"
@@ -435,6 +432,9 @@ profiles:
                 required: true
               - type: "topic"
                 target: "attitude_controller/roll_pitch"
+                required: true
+              - type: "topic"
+                target: "attitude_controller/joint_states"
                 required: true
               - type: "topic"
                 target: "drive_controller/odom"
@@ -647,9 +647,6 @@ profiles:
               - type: "service"
                 target: "gnss/ntrip_client_node/get_parameters"
                 required: true
-              - type: "topic"
-                target: "attitude_controller/joint_states"
-                required: true
               - type: "hardware"
                 target: "odrive_ros2_control"
                 state: "active"
@@ -708,6 +705,9 @@ profiles:
                 required: true
               - type: "topic"
                 target: "attitude_controller/roll_pitch"
+                required: true
+              - type: "topic"
+                target: "attitude_controller/joint_states"
                 required: true
               - type: "topic"
                 target: "drive_controller/odom"
@@ -923,9 +923,6 @@ profiles:
               - type: "service"
                 target: "gnss/ntrip_client_node/get_parameters"
                 required: true
-              - type: "topic"
-                target: "attitude_controller/joint_states"
-                required: true
               - type: "hardware"
                 target: "odrive_ros2_control"
                 state: "active"
@@ -984,6 +981,9 @@ profiles:
                 required: true
               - type: "topic"
                 target: "attitude_controller/roll_pitch"
+                required: true
+              - type: "topic"
+                target: "attitude_controller/joint_states"
                 required: true
               - type: "topic"
                 target: "drive_controller/odom"
@@ -1199,9 +1199,6 @@ profiles:
               - type: "service"
                 target: "gnss/ntrip_client_node/get_parameters"
                 required: true
-              - type: "topic"
-                target: "attitude_controller/joint_states"
-                required: true
               - type: "hardware"
                 target: "odrive_ros2_control"
                 state: "active"
@@ -1261,6 +1258,9 @@ profiles:
                 required: true
               - type: "topic"
                 target: "attitude_controller/roll_pitch"
+                required: true
+              - type: "topic"
+                target: "attitude_controller/joint_states"
                 required: true
               - type: "topic"
                 target: "drive_controller/odom"
@@ -1379,9 +1379,6 @@ profiles:
               - type: "service"
                 target: "gnss/gnss_node/get_parameters"
                 required: true
-              - type: "topic"
-                target: "attitude_controller/joint_states"
-                required: true
               - type: "hardware"
                 target: "odrive_ros2_control"
                 state: "active"
@@ -1441,6 +1438,9 @@ profiles:
                 required: true
               - type: "topic"
                 target: "attitude_controller/roll_pitch"
+                required: true
+              - type: "topic"
+                target: "attitude_controller/joint_states"
                 required: true
               - type: "topic"
                 target: "drive_controller/odom"
