@@ -95,11 +95,11 @@ This single ROS parameters file configures:
 - **Supervisor publish rules** under `/**/supervisor_node.ros__parameters.publish.rules`.
 
   In the provided default config, the supervisor publishes:
-  - `fsm/supervisor/fsm_state` (`amr_sweeper_fsm/msg/FSMState`)
-  - `fsm/supervisor/fsm_status` (`amr_sweeper_fsm/msg/FSMStatus`)
+  - `fsm/supervisor_node/fsm_state` (`amr_sweeper_fsm/msg/FSMState`)
+  - `fsm/supervisor_node/fsm_status` (`amr_sweeper_fsm/msg/FSMStatus`)
 
   (These are *relative* names; with the default namespace they become:
-  `/amr_sweeper/fsm/supervisor/fsm_state` and `/amr_sweeper/fsm/supervisor/fsm_status`.)
+  `/amr_sweeper/fsm/supervisor_node/fsm_state` and `/amr_sweeper/fsm/supervisor_node/fsm_status`.)
 
 - **Per-state fault handling**, under each `/**/<STATE>_node.ros__parameters.faults`.
 
@@ -169,7 +169,7 @@ Message definitions live in `msg/`:
   - `last_requester`, `last_request_priority`, `effective_priority_gate`, `priority_age_sec`
   - `last_message`
 
-The default config publishes them on `fsm/supervisor/fsm_state` and `fsm/supervisor/fsm_status` once per second.
+The default config publishes them on `fsm/supervisor_node/fsm_state` and `fsm/supervisor_node/fsm_status` once per second.
 
 ### Service: request a state/profile
 
@@ -213,8 +213,8 @@ With default namespace (`amr_sweeper`):
 
 ```bash
 # Supervisor status streams (per config/state_parameters.yaml)
-ros2 topic echo /amr_sweeper/fsm/supervisor/fsm_state
-ros2 topic echo /amr_sweeper/fsm/supervisor/fsm_status
+ros2 topic echo /amr_sweeper/fsm/supervisor_node/fsm_state
+ros2 topic echo /amr_sweeper/fsm/supervisor_node/fsm_status
 
 # See current desired profile parameter (supervisor)
 ros2 param get /amr_sweeper/supervisor_node desired_profile

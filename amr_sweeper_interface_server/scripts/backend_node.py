@@ -308,9 +308,9 @@ class MissionBackendNode(Node):
             "request_state",
         ).value
         self._fsm_state_topic = self.declare_parameter(
-            "fsm_state_topic", "fsm/supervisor/fsm_state").value
+            "fsm_state_topic", "fsm/supervisor_node/fsm_state").value
         self._fsm_status_topic = self.declare_parameter(
-            "fsm_status_topic", "fsm/supervisor/fsm_status").value
+            "fsm_status_topic", "fsm/supervisor_node/fsm_status").value
         self._gnss_topic = self.declare_parameter("gnss_topic", "gnss/navsat").value
         self._battery_topic = self.declare_parameter(
             "battery_topic", "battery/battery_state").value

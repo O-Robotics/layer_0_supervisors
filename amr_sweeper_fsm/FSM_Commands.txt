@@ -140,16 +140,16 @@ Validation rules
 
 Topic 1: fsm_state
   Type: amr_sweeper_fsm/msg/FSMState
-  Default fully-qualified: /amr_sweeper/fsm/supervisor/fsm_state
+  Default fully-qualified: /amr_sweeper/fsm/supervisor_node/fsm_state
 
-  ros2 topic echo /amr_sweeper/fsm/supervisor/fsm_state
+  ros2 topic echo /amr_sweeper/fsm/supervisor_node/fsm_state
 
 
 Topic 2: fsm_status
   Type: amr_sweeper_fsm/msg/FSMStatus
-  Default fully-qualified: /amr_sweeper/fsm/supervisor/fsm_status
+  Default fully-qualified: /amr_sweeper/fsm/supervisor_node/fsm_status
 
-  ros2 topic echo /amr_sweeper/fsm/supervisor/fsm_status
+  ros2 topic echo /amr_sweeper/fsm/supervisor_node/fsm_status
 
 
 5) Lifecycle services (state nodes)
