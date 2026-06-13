@@ -63,6 +63,10 @@ MISSION_LAYER_OVERRIDE_KEYS = (
     "auto_start_mission",
 )
 
+MISSION_EXECUTION_BOOLEAN_KEYS = (
+    "record_rosbag",
+)
+
 MISSION_LAYER_OVERRIDE_FALLBACKS = {
     "use_amr_sweeper_ros2_control": True,
     "use_amr_sweeper_battery": True,
@@ -159,6 +163,50 @@ def _transition_progress_message_from_log(message: str) -> str | None:
     if normalized == "Critical profile process ready: amr_sweeper_layer_2_controllers_bringup":
         return "Controllers ready"
     return None
+
+
+def _write_execution_context_preferences(
+    execution_context_file: str,
+    layer_overrides: Any,
+    boolean_preferences: dict[str, Any],
+) -> None:
+    if not execution_context_file:
+        return
+
+    context_path = Path(execution_context_file)
+    if not context_path.exists():
+        return
+    try:
+        context_document = json.loads(context_path.read_text(encoding="utf-8"))
+    except Exception:
+        return
+    if not isinstance(context_document, dict):
+        return
+
+    normalized_overrides: dict[str, bool] = {}
+    if isinstance(layer_overrides, dict):
+        for key, value in layer_overrides.items():
+            if key not in MISSION_LAYER_OVERRIDE_KEYS:
+                continue
+            parsed = _coerce_bool_value(value)
+            if parsed is None:
+                continue
+            normalized_overrides[key] = parsed
+    if normalized_overrides:
+        context_document["layer_overrides"] = normalized_overrides
+
+    for key in MISSION_EXECUTION_BOOLEAN_KEYS:
+        if key not in boolean_preferences:
+            continue
+        parsed = _coerce_bool_value(boolean_preferences.get(key))
+        if parsed is None:
+            continue
+        context_document[key] = parsed
+
+    try:
+        context_path.write_text(json.dumps(context_document, indent=2), encoding="utf-8")
+    except Exception:
+        return
 
 
 def _running_profiles_yaml_path() -> Path:
@@ -524,9 +572,12 @@ class MissionBackendNode(Node):
             service_name=self._execute_mission_service,
         )
         if bool(response.success):
-            self._apply_layer_overrides_to_execution_context(
+            _write_execution_context_preferences(
                 response.execution_context_file,
                 payload.get("layer_overrides", {}),
+                {
+                    "record_rosbag": payload.get("record_rosbag"),
+                },
             )
         return {
             "success": bool(response.success),
@@ -536,42 +587,6 @@ class MissionBackendNode(Node):
             "execution_context_file": response.execution_context_file,
             "running_profile_id": int(response.running_profile_id),
         }
-
-    def _apply_layer_overrides_to_execution_context(
-        self,
-        execution_context_file: str,
-        raw_overrides: Any,
-    ) -> None:
-        if not execution_context_file or not isinstance(raw_overrides, dict):
-            return
-
-        normalized_overrides: dict[str, bool] = {}
-        for key, value in raw_overrides.items():
-            if key not in MISSION_LAYER_OVERRIDE_KEYS:
-                continue
-            parsed = _coerce_bool_value(value)
-            if parsed is None:
-                continue
-            normalized_overrides[key] = parsed
-
-        if not normalized_overrides:
-            return
-
-        context_path = Path(execution_context_file)
-        if not context_path.exists():
-            return
-        try:
-            context_document = json.loads(context_path.read_text(encoding="utf-8"))
-        except Exception:
-            return
-        if not isinstance(context_document, dict):
-            return
-
-        context_document["layer_overrides"] = normalized_overrides
-        try:
-            context_path.write_text(json.dumps(context_document, indent=2), encoding="utf-8")
-        except Exception:
-            return
 
     def upload_vda5050_mission(self, payload: dict[str, Any]) -> dict[str, Any]:
         request = UploadVda5050Mission.Request()

@@ -2212,6 +2212,24 @@ class MissionFrontendHttpNode(MissionBackendNode):
       flex-wrap: wrap;
       margin-top: 12px;
     }}
+    .mission-option-toggle {{
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(52, 53, 53, 0.72);
+      color: var(--ink);
+      font-size: 0.92rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      user-select: none;
+    }}
+    .mission-option-toggle input {{
+      accent-color: var(--accent);
+    }}
     .nav-link {{
       display: inline-block;
       text-decoration: none;
@@ -2360,6 +2378,10 @@ class MissionFrontendHttpNode(MissionBackendNode):
       <div class="hero-actions">
         <button id="start-mission-button" disabled>Start Mission</button>
         <div id="selected-mission-label" class="muted">Selected mission: none</div>
+        <label class="mission-option-toggle">
+          <input id="record-rosbag-toggle" type="checkbox">
+          <span>Record rosbag</span>
+        </label>
       </div>
     </section>
     <section class="map-layout">
@@ -2403,6 +2425,7 @@ class MissionFrontendHttpNode(MissionBackendNode):
     const missionList = document.getElementById('mission-list');
     const startMissionButton = document.getElementById('start-mission-button');
     const selectedMissionLabel = document.getElementById('selected-mission-label');
+    const recordRosbagToggle = document.getElementById('record-rosbag-toggle');
     const previewMapElement = document.getElementById('mission-preview-map');
     const previewLocalElement = document.getElementById('mission-preview-local');
     let mapDataCache = null;
@@ -2488,6 +2511,10 @@ class MissionFrontendHttpNode(MissionBackendNode):
       return `amr_sweeper_layer_overrides_${{missionId}}`;
     }}
 
+    function missionRecordRosbagStorageKey(missionId) {{
+      return `amr_sweeper_record_rosbag_${{missionId}}`;
+    }}
+
     function defaultLayerOverridesForMission(mission) {{
       return {{
         ...fallbackLayerOverrides,
@@ -2512,6 +2539,24 @@ class MissionFrontendHttpNode(MissionBackendNode):
       }} catch (_error) {{
         return defaultLayerOverridesForMission(mission);
       }}
+    }}
+
+    function recordRosbagForMission(mission) {{
+      if (!mission?.mission_id) {{
+        return false;
+      }}
+      const stored = window.localStorage.getItem(missionRecordRosbagStorageKey(mission.mission_id));
+      if (!stored) {{
+        return false;
+      }}
+      return stored === 'true';
+    }}
+
+    function saveRecordRosbagPreference(missionId, enabled) {{
+      window.localStorage.setItem(
+        missionRecordRosbagStorageKey(missionId),
+        enabled ? 'true' : 'false'
+      );
     }}
 
     function isGeoReferencedRoute(geojson) {{
@@ -2693,6 +2738,10 @@ class MissionFrontendHttpNode(MissionBackendNode):
         ? `Selected mission: ${{selectedMissionId}}`
         : 'Selected mission: none';
       startMissionButton.disabled = !selectedMissionId;
+      recordRosbagToggle.disabled = !selectedMissionId;
+      recordRosbagToggle.checked = selectedMissionId
+        ? recordRosbagForMission(missionsCache.find((mission) => mission.mission_id === selectedMissionId) || {{ mission_id: selectedMissionId }})
+        : false;
     }}
 
     function setSelectedMission(missionId) {{
@@ -2925,6 +2974,14 @@ class MissionFrontendHttpNode(MissionBackendNode):
       await loadMap();
     }});
 
+    recordRosbagToggle.addEventListener('change', () => {{
+      if (!selectedMissionId) {{
+        recordRosbagToggle.checked = false;
+        return;
+      }}
+      saveRecordRosbagPreference(selectedMissionId, recordRosbagToggle.checked);
+    }});
+
     startMissionButton.addEventListener('click', async () => {{
       if (!selectedMissionId) {{
         setBanner('error', 'Select a mission before starting it.');
@@ -2934,6 +2991,7 @@ class MissionFrontendHttpNode(MissionBackendNode):
         method: 'POST',
         headers: {{ 'Content-Type': 'application/json' }},
         body: JSON.stringify({{
+          record_rosbag: recordRosbagToggle.checked,
           layer_overrides: layerOverridesForMission(
             missionsCache.find((mission) => mission.mission_id === selectedMissionId) || {{}}
           )

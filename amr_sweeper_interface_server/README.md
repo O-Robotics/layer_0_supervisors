@@ -13,6 +13,7 @@ Responsibilities:
 - stop the active mission through `amr_sweeper_mission_executor`
 - upload a VDA5050 mission JSON payload into `/missions/database` so it becomes executable
 - provide a dedicated `/record-map` workflow page for starting `RecordMap`, previewing the latest GNSS overlay on satellite imagery, and saving named autonomous missions from the latest recorded map
+- let operators select a mission on the Missions page, preview its geometry before start, and choose per-mission launch preferences such as `Record rosbag`
 
 Default operator URL:
 - `http://192.168.2.1:8080`
@@ -33,3 +34,5 @@ Notes:
 - the default public URL assumes the Jetson uses the Ethernet address `192.168.2.1`
 - operators connect through the router's Wi-Fi network; the Jetson itself is expected to be wired to the router over Ethernet
 - this assumes the robot uplink and router LAN use the `192.168.2.0/24` subnet
+- the Missions page stores the selected mission and its launch preferences in browser local storage, so toggles such as `Record rosbag` persist per mission on that client
+- when `Record rosbag` is enabled for a started mission, the backend writes `record_rosbag=true` into that run's `execution_context.json`; the layer 3 bringup then records the configured rosbag topics into `<mission_run_directory>/artifacts/rosbag`
