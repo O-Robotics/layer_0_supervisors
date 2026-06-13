@@ -218,7 +218,7 @@ class MissionFrontendHttpNode(MissionBackendNode):
                 self._send_json(HTTPStatus.NOT_FOUND, {"success": False, "message": "Not found"})
 
             def log_message(self, format: str, *args: Any) -> None:
-                node.get_logger().info(f"HTTP {self.address_string()} - {format % args}")
+                node.get_logger().debug(f"HTTP {self.address_string()} - {format % args}")
 
             def _read_json_body(self) -> dict[str, Any]:
                 length = int(self.headers.get("Content-Length", "0"))
@@ -2459,7 +2459,7 @@ class MissionFrontendHttpNode(MissionBackendNode):
       ['use_amr_sweeper_navigation', 'Navigation'],
       ['auto_start_mission', 'Auto Start Mission'],
     ];
-    const fallbackLayerOverrides = {
+    const fallbackLayerOverrides = {{
       use_amr_sweeper_ros2_control: true,
       use_amr_sweeper_battery: true,
       use_amr_sweeper_system_info: true,
@@ -2481,7 +2481,7 @@ class MissionFrontendHttpNode(MissionBackendNode):
       use_amr_sweeper_mapping: false,
       use_amr_sweeper_navigation: true,
       auto_start_mission: true,
-    };
+    }};
 
     function setBanner(kind, message) {{
       banner.className = `banner show ${{kind}}`;
