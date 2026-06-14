@@ -2545,18 +2545,12 @@ class MissionFrontendHttpNode(MissionBackendNode):
       if (!mission?.mission_id) {{
         return false;
       }}
-      const stored = window.localStorage.getItem(missionRecordRosbagStorageKey(mission.mission_id));
-      if (!stored) {{
-        return false;
-      }}
-      return stored === 'true';
+      window.localStorage.removeItem(missionRecordRosbagStorageKey(mission.mission_id));
+      return false;
     }}
 
     function saveRecordRosbagPreference(missionId, enabled) {{
-      window.localStorage.setItem(
-        missionRecordRosbagStorageKey(missionId),
-        enabled ? 'true' : 'false'
-      );
+      window.localStorage.removeItem(missionRecordRosbagStorageKey(missionId));
     }}
 
     function isGeoReferencedRoute(geojson) {{
