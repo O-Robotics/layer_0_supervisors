@@ -2244,7 +2244,7 @@ std::optional<ManualMissionInfo> MissionExecutorNode::findManualMission(
     missions.end(),
     [&mission_id](const ManualMissionInfo & mission) {return mission.mission_id == mission_id;});
   if (it == missions.end()) {
-    return std::nullopt;
+    return findStagedScheduledMission(mission_id);
   }
   return *it;
 }
@@ -2351,6 +2351,62 @@ std::vector<std::filesystem::path> MissionExecutorNode::executionContextFiles() 
     }
   }
   return results;
+}
+
+std::optional<ManualMissionInfo> MissionExecutorNode::findStagedScheduledMission(
+  const std::string & mission_id) const
+{
+  const std::filesystem::path missions_log_directory = resolveMissionsLogDirectory();
+  std::error_code error;
+  if (!std::filesystem::exists(missions_log_directory, error) ||
+    !std::filesystem::is_directory(missions_log_directory, error))
+  {
+    return std::nullopt;
+  }
+
+  std::optional<std::filesystem::path> best_path;
+  std::string best_stem;
+  for (const auto & entry : std::filesystem::directory_iterator(missions_log_directory, error)) {
+    if (error) {
+      error.clear();
+      continue;
+    }
+    if (!entry.is_directory(error)) {
+      error.clear();
+      continue;
+    }
+
+    const std::string stem = entry.path().filename().string();
+    if (stem != mission_id && !has_timestamp_suffix(stem, mission_id)) {
+      continue;
+    }
+
+    const std::filesystem::path candidate = entry.path() / (stem + mission_file_extension_);
+    if (!std::filesystem::exists(candidate, error) || !std::filesystem::is_regular_file(candidate, error)) {
+      error.clear();
+      continue;
+    }
+
+    if (!best_path || stem > best_stem) {
+      best_path = candidate;
+      best_stem = stem;
+    }
+  }
+
+  if (!best_path) {
+    return std::nullopt;
+  }
+
+  try {
+    return classifyMissionFile(*best_path);
+  } catch (const std::exception & exception) {
+    RCLCPP_WARN(
+      get_logger(),
+      "Failed to classify staged scheduled mission %s: %s",
+      best_path->string().c_str(),
+      exception.what());
+    return std::nullopt;
+  }
 }
 
 std::filesystem::path MissionExecutorNode::missionFolderPath(

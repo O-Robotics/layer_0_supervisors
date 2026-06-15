@@ -93,6 +93,8 @@ private:
   [[nodiscard]] std::filesystem::path resolveMissionsLogDirectory() const;
   [[nodiscard]] std::filesystem::path resolveManualMissionsDirectory() const;
   [[nodiscard]] std::vector<std::filesystem::path> executionContextFiles() const;
+  [[nodiscard]] std::optional<ManualMissionInfo> findStagedScheduledMission(
+    const std::string & mission_id) const;
   [[nodiscard]] std::filesystem::path missionFolderPath(const std::filesystem::path & mission_path) const;
   [[nodiscard]] std::filesystem::path artifactsDirectoryForMission(const ManualMissionInfo & mission) const;
   [[nodiscard]] std::string missionStemForPath(const std::filesystem::path & mission_path) const;
