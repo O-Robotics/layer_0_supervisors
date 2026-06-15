@@ -47,6 +47,7 @@ constexpr char kTeleopInactivityEndReason[] = "teleop mission auto-ended after 5
 constexpr char kManualMappingInactivityEndReason[] =
   "manual mapping mission auto-ended after 5 minutes without motion";
 constexpr char kScheduledMissionType[] = "vda5050_scheduled_mission";
+constexpr char kLocalScheduledMissionType[] = "vda5050_scheduled_mission_local";
 constexpr char kZigzagSweepPattern[] = "zigzag";
 constexpr char kRandomSweepPattern[] = "random";
 constexpr char kSpiralSweepPattern[] = "spiral";
@@ -2549,11 +2550,29 @@ std::optional<ManualMissionInfo> MissionExecutorNode::classifyMissionFile(
   }
 
   const std::string lowered_mission_type = toLower(mission.mission_type);
+  const bool scheduled_local_frame =
+    lowered_mission_type == kScheduledMissionType &&
+    document.contains("missionReference") &&
+    document.at("missionReference").is_object() &&
+    document.at("missionReference").contains("coordinateFrame") &&
+    document.at("missionReference").at("coordinateFrame").is_string() &&
+    [] (std::string value) {
+      value = toLower(std::move(value));
+      return value == "odom" || value == "local";
+    }(document.at("missionReference").at("coordinateFrame").get<std::string>());
+  if (scheduled_local_frame) {
+    mission.mission_type = kLocalScheduledMissionType;
+  }
+
+  const std::string effective_mission_type = toLower(mission.mission_type);
   if (mission.execution_mode == kManualMappingExecutionMode) {
     mission.running_profile_id = manual_mapping_profile_id_;
   } else if (mission.execution_mode == kTeleoperationExecutionMode) {
     mission.running_profile_id = manual_teleop_profile_id_;
-  } else if (lowered_mission_type == kBuiltinLocalPatternMissionType) {
+  } else if (
+    effective_mission_type == kBuiltinLocalPatternMissionType ||
+    effective_mission_type == kLocalScheduledMissionType)
+  {
     mission.running_profile_id = manual_routed_profile_id_;
   } else {
     mission.running_profile_id = scheduled_running_profile_id_;
@@ -2561,8 +2580,8 @@ std::optional<ManualMissionInfo> MissionExecutorNode::classifyMissionFile(
   mission.is_manual =
     mission.execution_mode == kManualMappingExecutionMode ||
     mission.execution_mode == kTeleoperationExecutionMode ||
-    lowered_mission_type == kBuiltinManualMappingMissionType ||
-    lowered_mission_type == kBuiltinTeleopMissionType;
+    effective_mission_type == kBuiltinManualMappingMissionType ||
+    effective_mission_type == kBuiltinTeleopMissionType;
   mission.artifacts_ready = missionArtifactsReady(mission);
   return mission;
 }
