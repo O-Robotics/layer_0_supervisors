@@ -1198,7 +1198,7 @@ void SchedulerNode::maybe_promote_mission(const std::vector<TimeWindow> & window
 
   const auto now = std::chrono::system_clock::now();
   for (const auto & window : windows) {
-    if (window.type != ScheduleType::WORK || !window.mission_path) {
+    if (window.type != ScheduleType::WORK) {
       continue;
     }
 
@@ -1206,6 +1206,15 @@ void SchedulerNode::maybe_promote_mission(const std::vector<TimeWindow> & window
     const auto end = to_time_point(window.end_local);
     if (now < start || now > end) {
       continue;
+    }
+
+    if (!window.mission_path) {
+      trigger_warn(
+        "SCHED_ACTIVE_WINDOW_BLOCKED",
+        "mission_id=" + window.mission_id.value_or(std::string("unknown")) +
+        "; uid=" + window.uid +
+        "; reason=mission_not_resolved");
+      return;
     }
 
     if (
