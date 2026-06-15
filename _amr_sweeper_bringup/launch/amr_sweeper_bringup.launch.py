@@ -1,9 +1,19 @@
 """Launch the AMR Sweeper layer 0 supervisor stack from one bringup entrypoint."""
 
+import os
+import re
 import tempfile
+from datetime import datetime, timezone
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, SetEnvironmentVariable
+from launch.actions import (
+    DeclareLaunchArgument,
+    ExecuteProcess,
+    IncludeLaunchDescription,
+    LogInfo,
+    OpaqueFunction,
+    SetEnvironmentVariable,
+)
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
@@ -16,6 +26,87 @@ def _launch_file(package_name: str, launch_file_name: str):
         "launch",
         launch_file_name,
     ])
+
+
+def _resolve_workspace_path(configured_path: str) -> str:
+    if os.path.isabs(configured_path):
+        return configured_path
+
+    workspace_relative = os.path.join(os.getcwd(), configured_path)
+    if os.path.exists(workspace_relative):
+        return workspace_relative
+    return configured_path
+
+
+def _load_rosbag_topics(topics_file: str) -> list[str]:
+    resolved_topics_file = _resolve_workspace_path(topics_file)
+    if not os.path.exists(resolved_topics_file):
+        raise FileNotFoundError(f"Rosbag topics file does not exist: {resolved_topics_file}")
+
+    topics: list[str] = []
+    with open(resolved_topics_file, encoding="utf-8") as stream:
+        for raw_line in stream:
+            trimmed = raw_line.strip()
+            if not trimmed or trimmed.startswith("#"):
+                continue
+            if trimmed == "topics:" or trimmed.startswith("topics:"):
+                continue
+            if not trimmed.startswith("- "):
+                continue
+            topic = trimmed[2:].strip()
+            if topic.startswith("/"):
+                topics.append(topic)
+    return topics
+
+
+def _build_rosbag_regex(topics: list[str]) -> str:
+    escaped_topics = [re.escape(topic) for topic in topics]
+    return "^(" + "|".join(escaped_topics) + ")$"
+
+
+def _start_bringup_rosbag(context, *args, **kwargs):
+    del args, kwargs
+
+    record_rosbag = LaunchConfiguration("record_rosbag").perform(context).strip().lower()
+    if record_rosbag != "true":
+        return []
+
+    missions_log_directory = _resolve_workspace_path(
+        LaunchConfiguration("missions_log_directory").perform(context)
+    )
+    use_profile = LaunchConfiguration("use_profile").perform(context)
+    rosbag_topics_file = LaunchConfiguration("rosbag_topics_file").perform(context)
+
+    mission_id = f"amr_sweeper_bringup_profile_{use_profile}"
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    rosbag_output_directory = os.path.join(
+        missions_log_directory,
+        mission_id,
+        timestamp,
+        "artifacts",
+        "rosbag",
+    )
+    os.makedirs(rosbag_output_directory, exist_ok=True)
+
+    topics = _load_rosbag_topics(rosbag_topics_file)
+    if not topics:
+        return [
+            LogInfo(
+                msg=(
+                    "[amr_sweeper_bringup] record_rosbag requested but no topics were "
+                    f"loaded from {rosbag_topics_file}"
+                )
+            )
+        ]
+
+    rosbag_regex = _build_rosbag_regex(topics)
+    return [
+        LogInfo(msg=f"[amr_sweeper_bringup] Recording rosbag under {rosbag_output_directory}"),
+        ExecuteProcess(
+            cmd=["ros2", "bag", "record", "--regex", rosbag_regex, "-o", rosbag_output_directory],
+            output="screen",
+        ),
+    ]
 
 
 def generate_launch_description():
@@ -67,6 +158,8 @@ def generate_launch_description():
     default_schedule_filename = LaunchConfiguration("default_schedule_filename")
     use_test = LaunchConfiguration("use_test")
     test_schedule_ics_path = LaunchConfiguration("test_schedule_ics_path")
+    record_rosbag = LaunchConfiguration("record_rosbag")
+    rosbag_topics_file = LaunchConfiguration("rosbag_topics_file")
     mission_file_extension = LaunchConfiguration("mission_file_extension")
     mission_executor_execute_service = LaunchConfiguration("mission_executor_execute_service")
     mission_executor_prepare_service = LaunchConfiguration("mission_executor_prepare_service")
@@ -148,6 +241,13 @@ def generate_launch_description():
             "test_schedule_ics_path",
             default_value="src/layer_0_supervisors/tests/schedule_20260000T000000Z.ics",
         ),
+        DeclareLaunchArgument("record_rosbag", default_value="false"),
+        DeclareLaunchArgument(
+            "rosbag_topics_file",
+            default_value=PathJoinSubstitution(
+                [FindPackageShare("amr_sweeper_mission_executor"), "config", "record_rosbag.yaml"]
+            ),
+        ),
         DeclareLaunchArgument("mission_file_extension", default_value=".json"),
         DeclareLaunchArgument("mission_executor_execute_service", default_value="execute_mission"),
         DeclareLaunchArgument("mission_executor_prepare_service", default_value="prepare_manual_mission"),
@@ -183,12 +283,14 @@ def generate_launch_description():
                 "safety_stop_topic": safety_stop_topic,
                 "teleop_odometry_topic": teleop_odometry_topic,
                 "manual_mapping_odometry_topic": manual_mapping_odometry_topic,
+                "rosbag_topics_file": rosbag_topics_file,
                 "manual_mission_inactivity_timeout_seconds": manual_mission_inactivity_timeout_seconds,
                 "idling_profile_id": idling_profile_id,
                 "mission_parser_node_name": mission_parser_node_name,
                 "mission_parser_build_service": mission_parser_build_service,
             }.items(),
         ),
+        OpaqueFunction(function=_start_bringup_rosbag, condition=IfCondition(record_rosbag)),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(_launch_file("amr_sweeper_scheduler", "amr_sweeper_scheduler.launch.py")),
             launch_arguments={
