@@ -33,6 +33,26 @@ constexpr char kDefaultRobotConfigEnvPath[] = "/opt/robot_config/robot_config.gl
 std::string format_local_timestamp(const std::tm & tm);
 std::tm time_point_to_tm(const std::chrono::system_clock::time_point & time_point);
 
+bool has_timestamp_suffix(const std::string & candidate, const std::string & prefix)
+{
+  if (candidate.size() <= prefix.size() + 1U || candidate.rfind(prefix + "_", 0) != 0U) {
+    return false;
+  }
+  const std::string suffix = candidate.substr(prefix.size() + 1U);
+  if (suffix.size() != 16U || suffix.at(8) != 'T' || suffix.back() != 'Z') {
+    return false;
+  }
+  for (std::size_t index = 0; index < suffix.size(); ++index) {
+    if (index == 8U || index == suffix.size() - 1U) {
+      continue;
+    }
+    if (!std::isdigit(static_cast<unsigned char>(suffix.at(index)))) {
+      return false;
+    }
+  }
+  return true;
+}
+
 std::optional<std::time_t> file_mtime(const std::string & path)
 {
   struct stat st;
@@ -1095,15 +1115,20 @@ void SchedulerNode::tick()
 
   for (auto & window : windows) {
     if (window.type == ScheduleType::WORK && window.mission_id) {
-      if (!mission_json_or_folder_exists(*window.mission_id)) {
-        ++missing_mission_counts[*window.mission_id];
-        current_missing_mission_ids.insert(*window.mission_id);
-        continue;
-      }
       window.mission_path = resolve_mission_path(*window.mission_id);
       if (!window.mission_path) {
         ++missing_mission_counts[*window.mission_id];
         current_missing_mission_ids.insert(*window.mission_id);
+        continue;
+      }
+      if (const auto alias = resolve_timestamped_mission_alias(*window.mission_id)) {
+        if (*alias != *window.mission_id &&
+          warned_mission_alias_ids_.insert(*window.mission_id + "->" + *alias).second)
+        {
+          trigger_info(
+            "SCHED_MISSION_ALIAS_RESOLVED",
+            "mission_id=" + *window.mission_id + "; resolved_mission_id=" + *alias);
+        }
       }
     }
   }
@@ -1204,12 +1229,22 @@ void SchedulerNode::maybe_promote_mission(const std::vector<TimeWindow> & window
 
 bool SchedulerNode::mission_json_or_folder_exists(const std::string & mission_id) const
 {
-  const std::filesystem::path missions_directory = resolve_path(missions_directory_);
-  const std::filesystem::path mission_file = missions_directory / (mission_id + mission_file_extension_);
-  const std::filesystem::path mission_folder = missions_directory / mission_id;
-  const std::filesystem::path mission_folder_file = mission_folder / (mission_id + mission_file_extension_);
-  return std::filesystem::exists(mission_file) ||
-         (std::filesystem::exists(mission_folder) && std::filesystem::exists(mission_folder_file));
+  return resolve_mission_path(mission_id).has_value();
+}
+
+std::optional<std::string> SchedulerNode::resolve_timestamped_mission_alias(
+  const std::string & mission_id) const
+{
+  std::optional<std::string> newest_alias;
+  for (const auto & entry : mission_catalog_) {
+    if (!has_timestamp_suffix(entry.first, mission_id)) {
+      continue;
+    }
+    if (!newest_alias || entry.first > *newest_alias) {
+      newest_alias = entry.first;
+    }
+  }
+  return newest_alias;
 }
 
 void SchedulerNode::request_mission_execution(const TimeWindow & window)
@@ -1284,6 +1319,12 @@ std::optional<std::string> SchedulerNode::resolve_mission_path(const std::string
   const auto mission_it = mission_catalog_.find(mission_id);
   if (mission_it != mission_catalog_.end()) {
     return mission_it->second;
+  }
+  if (const auto alias = resolve_timestamped_mission_alias(mission_id)) {
+    const auto alias_it = mission_catalog_.find(*alias);
+    if (alias_it != mission_catalog_.end()) {
+      return alias_it->second;
+    }
   }
   if (mission_catalog_.size() == 1U) {
     return mission_catalog_.begin()->second;

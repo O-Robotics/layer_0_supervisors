@@ -115,6 +115,26 @@ std::string toLower(std::string value)
   return value;
 }
 
+bool has_timestamp_suffix(const std::string & candidate, const std::string & prefix)
+{
+  if (candidate.size() <= prefix.size() + 1U || candidate.rfind(prefix + "_", 0) != 0U) {
+    return false;
+  }
+  const std::string suffix = candidate.substr(prefix.size() + 1U);
+  if (suffix.size() != 16U || suffix.at(8) != 'T' || suffix.back() != 'Z') {
+    return false;
+  }
+  for (std::size_t index = 0; index < suffix.size(); ++index) {
+    if (index == 8U || index == suffix.size() - 1U) {
+      continue;
+    }
+    if (!std::isdigit(static_cast<unsigned char>(suffix.at(index)))) {
+      return false;
+    }
+  }
+  return true;
+}
+
 nlohmann::json loadJsonDocument(const std::filesystem::path & path)
 {
   constexpr int kMaxAttempts = 3;
@@ -1816,9 +1836,14 @@ void MissionExecutorNode::handlePrepareManualMission(
     if (!ensureMissionArtifactsReady(*mission)) {
       response->success = false;
       response->message = "Mission artifacts are not ready for mission_id=" + mission->mission_id;
+      if (const auto staged_directory = newestScheduledArtifactDirectory(mission->mission_id)) {
+        response->message +=
+          "; newest_staged_variant=" + staged_directory->filename().string();
+      }
       return;
     }
-    const PreparedMissionContext context = prepareMissionArtifacts(*mission, "", "");
+    const PreparedMissionContext context =
+      prepareMissionArtifacts(resolveExecutableMissionSource(*mission), "", "");
     response->success = true;
     response->message = "Manual mission prepared";
     response->mission_execution_directory = context.mission_execution_directory;
@@ -1843,6 +1868,7 @@ void MissionExecutorNode::handleExecuteMission(
 
   try {
     const auto resolved_mission = *mission;
+    const auto executable_mission = resolveExecutableMissionSource(resolved_mission);
     PreparedMissionContext context;
     if (!request->mission_execution_directory.empty()) {
       context.mission_execution_directory = request->mission_execution_directory;
@@ -1853,10 +1879,14 @@ void MissionExecutorNode::handleExecuteMission(
       if (!ensureMissionArtifactsReady(resolved_mission)) {
         response->success = false;
         response->message = "Mission artifacts are not ready for mission_id=" + resolved_mission.mission_id;
+        if (const auto staged_directory = newestScheduledArtifactDirectory(resolved_mission.mission_id)) {
+          response->message +=
+            "; newest_staged_variant=" + staged_directory->filename().string();
+        }
         return;
       }
       context = prepareMissionArtifacts(
-        resolved_mission,
+        executable_mission,
         request->mission_window_start,
         request->mission_window_end);
     }
@@ -2333,6 +2363,12 @@ std::filesystem::path MissionExecutorNode::artifactsDirectoryForMission(
   const ManualMissionInfo & mission) const
 {
   if (toLower(mission.mission_type) == kScheduledMissionType) {
+    const std::filesystem::path mission_path(mission.mission_path);
+    if (mission_path.has_parent_path() &&
+      mission_path.parent_path() != resolveMissionsFromDbDirectory())
+    {
+      return mission_path.parent_path();
+    }
     return resolveMissionsLogDirectory() / mission.mission_id;
   }
   return missionFolderPath(std::filesystem::path(mission.mission_path));
@@ -2356,6 +2392,74 @@ std::string MissionExecutorNode::missionRouteBasename(
   const std::filesystem::path & mission_path) const
 {
   return missionStemForPath(mission_path) + "_path";
+}
+
+std::optional<std::filesystem::path> MissionExecutorNode::newestScheduledArtifactDirectory(
+  const std::string & mission_id) const
+{
+  const std::filesystem::path missions_log_directory = resolveMissionsLogDirectory();
+  std::error_code error;
+  if (!std::filesystem::exists(missions_log_directory, error) ||
+    !std::filesystem::is_directory(missions_log_directory, error))
+  {
+    return std::nullopt;
+  }
+
+  std::optional<std::filesystem::path> newest_directory;
+  std::string newest_stem;
+  for (const auto & entry : std::filesystem::directory_iterator(missions_log_directory, error)) {
+    if (error) {
+      error.clear();
+      continue;
+    }
+    if (!entry.is_directory(error)) {
+      error.clear();
+      continue;
+    }
+    const std::string stem = entry.path().filename().string();
+    if (stem != mission_id && !has_timestamp_suffix(stem, mission_id)) {
+      continue;
+    }
+    const std::filesystem::path staged_mission_file = entry.path() / (stem + mission_file_extension_);
+    if (!std::filesystem::exists(staged_mission_file, error)) {
+      error.clear();
+      continue;
+    }
+    if (!newest_directory || stem > newest_stem) {
+      newest_directory = entry.path();
+      newest_stem = stem;
+    }
+  }
+  return newest_directory;
+}
+
+ManualMissionInfo MissionExecutorNode::resolveExecutableMissionSource(const ManualMissionInfo & mission) const
+{
+  if (toLower(mission.mission_type) != kScheduledMissionType) {
+    return mission;
+  }
+
+  const std::filesystem::path mission_path(mission.mission_path);
+  if (mission_path.has_parent_path() &&
+    mission_path.parent_path() != resolveMissionsFromDbDirectory())
+  {
+    return mission;
+  }
+
+  const auto staged_directory = newestScheduledArtifactDirectory(mission.mission_id);
+  if (!staged_directory) {
+    return mission;
+  }
+
+  const std::string staged_stem = staged_directory->filename().string();
+  const std::filesystem::path staged_mission_file = *staged_directory / (staged_stem + mission_file_extension_);
+  if (!std::filesystem::exists(staged_mission_file)) {
+    return mission;
+  }
+
+  ManualMissionInfo resolved = mission;
+  resolved.mission_path = staged_mission_file.string();
+  return resolved;
 }
 
 std::filesystem::path MissionExecutorNode::missionHistoryDirectory(const ManualMissionInfo & mission) const
@@ -3413,8 +3517,9 @@ void MissionExecutorNode::recordSafetyEvent(
 
 bool MissionExecutorNode::missionArtifactsReady(const ManualMissionInfo & mission) const
 {
-  const std::filesystem::path mission_file(mission.mission_path);
-  const std::filesystem::path mission_folder = artifactsDirectoryForMission(mission);
+  const ManualMissionInfo executable_mission = resolveExecutableMissionSource(mission);
+  const std::filesystem::path mission_file(executable_mission.mission_path);
+  const std::filesystem::path mission_folder = artifactsDirectoryForMission(executable_mission);
   return std::filesystem::exists(mission_file) &&
          std::filesystem::exists(mission_folder / (missionCostmapBasename(mission_file) + ".yaml")) &&
          std::filesystem::exists(mission_folder / (missionCostmapBasename(mission_file) + ".pgm")) &&
@@ -3480,7 +3585,30 @@ bool MissionExecutorNode::ensureMissionArtifactsReady(const ManualMissionInfo & 
     return false;
   }
 
-  return missionArtifactsReady(mission);
+  if (missionArtifactsReady(mission)) {
+    return true;
+  }
+
+  const auto staged_directory = newestScheduledArtifactDirectory(mission.mission_id);
+  if (staged_directory) {
+    RCLCPP_WARN(
+      get_logger(),
+      "Mission builder completed for %s, but ready artifacts still did not resolve from newest staged "
+      "folder %s. Scheduler may be referencing a base orderId while parser outputs timestamped mission "
+      "stems.",
+      mission.mission_id.c_str(),
+      staged_directory->filename().string().c_str());
+  } else {
+    RCLCPP_WARN(
+      get_logger(),
+      "Mission builder completed for %s, but no staged artifact folder matching %s or %s_<timestamp> "
+      "was found under %s.",
+      mission.mission_id.c_str(),
+      mission.mission_id.c_str(),
+      mission.mission_id.c_str(),
+      resolveMissionsLogDirectory().string().c_str());
+  }
+  return false;
 }
 
 bool MissionExecutorNode::requestRunningState(

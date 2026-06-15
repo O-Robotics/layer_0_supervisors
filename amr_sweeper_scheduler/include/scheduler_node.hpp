@@ -128,6 +128,8 @@ private:
   void request_mission_execution(const TimeWindow & window);
   [[nodiscard]] std::string resolved_schedule_path() const;
   [[nodiscard]] std::optional<std::filesystem::path> discover_latest_schedule_path() const;
+  [[nodiscard]] std::optional<std::string> resolve_timestamped_mission_alias(
+    const std::string & mission_id) const;
   [[nodiscard]] std::optional<std::string> resolve_mission_path(
     const std::string & mission_id) const;
   void trigger_info(const std::string & code, const std::string & kv = "");
@@ -178,6 +180,7 @@ private:
   std::optional<std::time_t> last_mtime_;
   std::unordered_map<std::string, std::string> mission_catalog_;
   std::set<std::string> warned_missing_mission_ids_;
+  std::set<std::string> warned_mission_alias_ids_;
   int supervision_issue_count_{0};
   bool ready_message_emitted_{false};
   bool fatal_error_{false};

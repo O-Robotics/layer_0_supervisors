@@ -98,6 +98,9 @@ private:
   [[nodiscard]] std::string missionStemForPath(const std::filesystem::path & mission_path) const;
   [[nodiscard]] std::string missionCostmapBasename(const std::filesystem::path & mission_path) const;
   [[nodiscard]] std::string missionRouteBasename(const std::filesystem::path & mission_path) const;
+  [[nodiscard]] std::optional<std::filesystem::path> newestScheduledArtifactDirectory(
+    const std::string & mission_id) const;
+  [[nodiscard]] ManualMissionInfo resolveExecutableMissionSource(const ManualMissionInfo & mission) const;
   [[nodiscard]] std::filesystem::path missionHistoryDirectory(const ManualMissionInfo & mission) const;
   [[nodiscard]] std::optional<ManualMissionInfo> classifyMissionFile(
     const std::filesystem::path & mission_path) const;
