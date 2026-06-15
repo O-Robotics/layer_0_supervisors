@@ -7,10 +7,12 @@
 #include <cctype>
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <mutex>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
@@ -154,10 +156,35 @@ std::tm parse_local_tm(const std::string & value)
   return tm;
 }
 
-std::chrono::system_clock::time_point to_time_point(const std::string & value)
+std::mutex & timezone_mutex()
+{
+  static std::mutex mutex;
+  return mutex;
+}
+
+std::chrono::system_clock::time_point to_time_point(
+  const std::string & value,
+  const std::string & tzid)
 {
   auto tm = parse_local_tm(value);
-  return std::chrono::system_clock::from_time_t(std::mktime(&tm));
+  std::lock_guard<std::mutex> lock(timezone_mutex());
+  const char * previous_tz = std::getenv("TZ");
+  const std::string previous_tz_value = previous_tz ? previous_tz : "";
+  const bool had_previous_tz = previous_tz != nullptr;
+  if (!tzid.empty()) {
+    setenv("TZ", tzid.c_str(), 1);
+  } else {
+    unsetenv("TZ");
+  }
+  tzset();
+  const std::time_t as_time_t = std::mktime(&tm);
+  if (had_previous_tz) {
+    setenv("TZ", previous_tz_value.c_str(), 1);
+  } else {
+    unsetenv("TZ");
+  }
+  tzset();
+  return std::chrono::system_clock::from_time_t(as_time_t);
 }
 
 std::chrono::system_clock::time_point utc_to_time_point(const std::string & value)
@@ -182,10 +209,38 @@ std::chrono::system_clock::time_point utc_to_time_point(const std::string & valu
   return std::chrono::system_clock::from_time_t(as_time_t);
 }
 
-std::string normalize_schedule_timestamp_to_local(const std::string & value)
+std::tm time_point_to_tm_in_timezone(
+  const std::chrono::system_clock::time_point & time_point,
+  const std::string & tzid)
+{
+  const std::time_t as_time_t = std::chrono::system_clock::to_time_t(time_point);
+  std::lock_guard<std::mutex> lock(timezone_mutex());
+  const char * previous_tz = std::getenv("TZ");
+  const std::string previous_tz_value = previous_tz ? previous_tz : "";
+  const bool had_previous_tz = previous_tz != nullptr;
+  if (!tzid.empty()) {
+    setenv("TZ", tzid.c_str(), 1);
+  } else {
+    unsetenv("TZ");
+  }
+  tzset();
+  const std::tm result = *std::localtime(&as_time_t);
+  if (had_previous_tz) {
+    setenv("TZ", previous_tz_value.c_str(), 1);
+  } else {
+    unsetenv("TZ");
+  }
+  tzset();
+  return result;
+}
+
+std::string normalize_schedule_timestamp_to_local(
+  const std::string & value,
+  const std::string & tzid)
 {
   if (!value.empty() && value.back() == 'Z') {
-    return format_local_timestamp(time_point_to_tm(utc_to_time_point(value)));
+    return format_local_timestamp(
+      time_point_to_tm_in_timezone(utc_to_time_point(value), tzid));
   }
   return value;
 }
@@ -408,7 +463,7 @@ std::optional<std::chrono::system_clock::time_point> compute_window_end(
     return start_time + parse_duration_seconds(*event.duration);
   }
   if (event.dtend_local) {
-    return to_time_point(*event.dtend_local);
+    return to_time_point(*event.dtend_local, event.dtstart_tzid);
   }
   return std::nullopt;
 }
@@ -423,17 +478,18 @@ TimeWindow build_window(
   window.robot_id = event.robot_id;
   window.type = event.type;
   window.mission_id = event.mission_id;
-  window.start_local = format_local_timestamp(time_point_to_tm(start_time));
-  window.end_local = format_local_timestamp(time_point_to_tm(end_time));
+  window.tzid = event.dtstart_tzid;
+  window.start_local = format_local_timestamp(time_point_to_tm_in_timezone(start_time, event.dtstart_tzid));
+  window.end_local = format_local_timestamp(time_point_to_tm_in_timezone(end_time, event.dtstart_tzid));
   return window;
 }
 
 bool overlaps(const TimeWindow & left, const TimeWindow & right)
 {
-  const auto left_start = to_time_point(left.start_local);
-  const auto left_end = to_time_point(left.end_local);
-  const auto right_start = to_time_point(right.start_local);
-  const auto right_end = to_time_point(right.end_local);
+  const auto left_start = to_time_point(left.start_local, left.tzid);
+  const auto left_end = to_time_point(left.end_local, left.tzid);
+  const auto right_start = to_time_point(right.start_local, right.tzid);
+  const auto right_end = to_time_point(right.end_local, right.tzid);
   return !(left_end <= right_start || left_start >= right_end);
 }
 
@@ -536,13 +592,12 @@ ScheduleModel IcalParserMinimal::parse_file(const std::string & ics_path, const 
       continue;
     }
     if (starts_with(line, "DTEND")) {
-      current.dtend_local = normalize_schedule_timestamp_to_local(split_kv(line).second);
+      current.dtend_local = split_kv(line).second;
       continue;
     }
     if (starts_with(line, "DTSTART")) {
       const auto key_value = split_kv(line);
       const std::string & key = key_value.first;
-      current.dtstart_local = normalize_schedule_timestamp_to_local(key_value.second);
       const std::string tzid_tag = "TZID=";
       const auto tz_pos = key.find(tzid_tag);
       if (tz_pos != std::string::npos) {
@@ -557,6 +612,7 @@ ScheduleModel IcalParserMinimal::parse_file(const std::string & ics_path, const 
       } else {
         current.dtstart_tzid.clear();
       }
+      current.dtstart_local = normalize_schedule_timestamp_to_local(key_value.second, current.dtstart_tzid);
       continue;
     }
     if (starts_with(line, "X-ROBOT-ID:")) {
@@ -605,7 +661,7 @@ std::vector<TimeWindow> ScheduleExpanderStub::expand(
     }
 
     const std::tm seed_tm = parse_local_tm(event.dtstart_local);
-    const auto seed_start = to_time_point(event.dtstart_local);
+    const auto seed_start = to_time_point(event.dtstart_local, event.dtstart_tzid);
     const auto seed_end = compute_window_end(event, seed_start);
     if (!seed_end) {
       continue;
@@ -1202,8 +1258,8 @@ void SchedulerNode::maybe_promote_mission(const std::vector<TimeWindow> & window
       continue;
     }
 
-    const auto start = to_time_point(window.start_local);
-    const auto end = to_time_point(window.end_local);
+    const auto start = to_time_point(window.start_local, window.tzid);
+    const auto end = to_time_point(window.end_local, window.tzid);
     if (now < start || now > end) {
       continue;
     }

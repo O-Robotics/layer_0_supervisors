@@ -58,6 +58,7 @@ struct TimeWindow
   ScheduleType type{ScheduleType::WORK};
   std::optional<std::string> mission_id;
   std::optional<std::string> mission_path;
+  std::string tzid;
   std::string start_local;
   std::string end_local;
 };
