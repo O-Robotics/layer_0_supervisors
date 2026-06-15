@@ -330,6 +330,7 @@ std::pair<std::string, std::string> split_kv(const std::string & line)
 struct ParsedRRule
 {
   std::string freq;
+  int interval{1};
   std::optional<int> by_set_pos;
   std::vector<std::string> by_day;
 };
@@ -385,6 +386,8 @@ ParsedRRule parse_rrule(const std::string & rule)
     const std::string value = token.substr(equals + 1);
     if (key == "FREQ") {
       parsed.freq = value;
+    } else if (key == "INTERVAL") {
+      parsed.interval = std::max(1, std::stoi(value));
     } else if (key == "BYSETPOS") {
       parsed.by_set_pos = std::stoi(value);
     } else if (key == "BYDAY") {
@@ -478,6 +481,7 @@ TimeWindow build_window(
   window.robot_id = event.robot_id;
   window.type = event.type;
   window.mission_id = event.mission_id;
+  window.record_rosbag = event.record_rosbag;
   window.tzid = event.dtstart_tzid;
   window.start_local = format_local_timestamp(time_point_to_tm_in_timezone(start_time, event.dtstart_tzid));
   window.end_local = format_local_timestamp(time_point_to_tm_in_timezone(end_time, event.dtstart_tzid));
@@ -635,6 +639,11 @@ ScheduleModel IcalParserMinimal::parse_file(const std::string & ics_path, const 
       current.mission_id = line.substr(std::string("X-MISSION-ID:").size());
       continue;
     }
+    if (starts_with(line, "X-RECORD-ROSBAG:")) {
+      const auto value = line.substr(std::string("X-RECORD-ROSBAG:").size());
+      current.record_rosbag = value == "TRUE" || value == "true" || value == "1";
+      continue;
+    }
   }
 
   if (in_vevent) {
@@ -675,6 +684,17 @@ std::vector<TimeWindow> ScheduleExpanderStub::expand(
     }
 
     const ParsedRRule rule = parse_rrule(*event.rrule);
+    if (rule.freq == "MINUTELY") {
+      const auto recurrence_step = std::chrono::minutes(rule.interval);
+      for (auto occurrence = seed_start; occurrence <= horizon_end; occurrence += recurrence_step) {
+        const auto occurrence_end = occurrence + (*seed_end - seed_start);
+        if (occurrence_end < now) {
+          continue;
+        }
+        windows.push_back(build_window(event, occurrence, occurrence_end));
+      }
+      continue;
+    }
     if (rule.freq == "DAILY") {
       for (auto occurrence = seed_start; occurrence <= horizon_end; occurrence += std::chrono::hours(24)) {
         const auto occurrence_end = occurrence + (*seed_end - seed_start);
@@ -1224,7 +1244,8 @@ void SchedulerNode::publish_windows(const std::vector<TimeWindow> & windows)
            << "\"uid\":\"" << window.uid << "\","
            << "\"type\":\"" << schedule_type_to_cstr(window.type) << "\","
            << "\"start\":\"" << window.start_local << "\","
-           << "\"end\":\"" << window.end_local << "\"";
+           << "\"end\":\"" << window.end_local << "\","
+           << "\"record_rosbag\":" << (window.record_rosbag ? "true" : "false");
     if (window.mission_id) {
       stream << ",\"mission_id\":\"" << *window.mission_id << "\"";
       if (window.mission_path) {
@@ -1328,11 +1349,13 @@ void SchedulerNode::request_mission_execution(const TimeWindow & window)
   request->requester = "scheduler_node";
   request->priority = 210;
   request->force = false;
+  request->record_rosbag = window.record_rosbag;
   request->reason =
     "Scheduled mission window active; mission_id=" +
     window.mission_id.value_or(std::string("unknown")) +
     "; start=" + window.start_local +
-    "; end=" + window.end_local;
+    "; end=" + window.end_local +
+    "; record_rosbag=" + std::string(window.record_rosbag ? "true" : "false");
   mission_executor_execute_client_->async_send_request(
     request,
     [this, window](

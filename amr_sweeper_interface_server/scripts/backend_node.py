@@ -1059,6 +1059,7 @@ class MissionBackendNode(Node):
                     "description": event.get("DESCRIPTION", ""),
                     "schedule_type": event.get("X-SCHEDULE-TYPE", ""),
                     "mission_id": event.get("X-MISSION-ID", ""),
+                    "record_rosbag": event.get("X-RECORD-ROSBAG", "").strip().upper() == "TRUE",
                     "robot_id": event.get("X-ROBOT-ID", ""),
                     "start": occurrence_start.isoformat(),
                     "end": occurrence_end.isoformat(),
@@ -1083,6 +1084,17 @@ class MissionBackendNode(Node):
             while current < range_end:
                 append_occurrence(current)
                 current += timedelta(days=1)
+            return occurrences
+
+        if freq == "MINUTELY":
+            interval_minutes = max(1, int(rrule.get("INTERVAL", "1")))
+            step = timedelta(minutes=interval_minutes)
+            current = start
+            while current + duration <= range_start:
+                current += step
+            while current < range_end:
+                append_occurrence(current)
+                current += step
             return occurrences
 
         if freq == "MONTHLY":
@@ -1146,6 +1158,10 @@ class MissionBackendNode(Node):
         if rrule.get("FREQ") == "DAILY":
             recurrence_type = "daily"
             recurrence_label = "Daily"
+        elif rrule.get("FREQ") == "MINUTELY":
+            interval_minutes = max(1, int(rrule.get("INTERVAL", "1")))
+            recurrence_type = "minutely"
+            recurrence_label = f"Every {interval_minutes} min"
         elif rrule.get("FREQ") == "MONTHLY" and rrule.get("BYDAY") and rrule.get("BYSETPOS"):
             recurrence_type = "monthly_nth_weekday"
             recurrence_label = f"Monthly on the {rrule['BYSETPOS']}{rrule['BYDAY']}"
@@ -1156,6 +1172,7 @@ class MissionBackendNode(Node):
             "description": event.get("DESCRIPTION", ""),
             "schedule_type": event.get("X-SCHEDULE-TYPE", "WORK") or "WORK",
             "mission_id": event.get("X-MISSION-ID", ""),
+            "record_rosbag": event.get("X-RECORD-ROSBAG", "").strip().upper() == "TRUE",
             "robot_id": event.get("X-ROBOT-ID", ""),
             "start_local": start.strftime("%Y-%m-%dT%H:%M"),
             "end_local": end.strftime("%Y-%m-%dT%H:%M"),

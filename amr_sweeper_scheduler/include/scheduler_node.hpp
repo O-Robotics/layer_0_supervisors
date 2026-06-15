@@ -38,6 +38,7 @@ struct ScheduleEvent
   std::string robot_id;
   ScheduleType type{ScheduleType::WORK};
   std::optional<std::string> mission_id;
+  bool record_rosbag{false};
   std::string dtstart_tzid;
   std::string dtstart_local;
   std::optional<std::string> duration;
@@ -57,6 +58,7 @@ struct TimeWindow
   std::string robot_id;
   ScheduleType type{ScheduleType::WORK};
   std::optional<std::string> mission_id;
+  bool record_rosbag{false};
   std::optional<std::string> mission_path;
   std::string tzid;
   std::string start_local;
