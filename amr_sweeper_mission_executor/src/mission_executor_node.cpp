@@ -98,6 +98,13 @@ struct RasterizedCostmap
   double origin_y{0.0};
   double occupied_thresh{0.65};
   double free_thresh{0.196};
+  bool georeference_valid{false};
+  std::string georeference_type;
+  std::string georeference_source_crs{"EPSG:4326"};
+  std::string georeference_companion_file;
+  std::size_t georeference_sample_count{0U};
+  std::array<double, 3> longitude_coefficients{0.0, 0.0, 0.0};
+  std::array<double, 3> latitude_coefficients{0.0, 0.0, 0.0};
 };
 
 struct PolygonBounds
@@ -462,6 +469,24 @@ void saveCostmapArtifacts(
     << "occupied_thresh: 0.65\n"
     << "free_thresh: 0.196\n"
     << "mode: trinary\n";
+  if (map.georeference_valid) {
+    yaml_stream << "georeference_type: " <<
+      defaultIfEmpty(map.georeference_type, "affine_xy_to_wgs84") << "\n";
+    yaml_stream << "georeference_source_crs: " <<
+      defaultIfEmpty(map.georeference_source_crs, "EPSG:4326") << "\n";
+    if (!map.georeference_companion_file.empty()) {
+      yaml_stream << "georeference_companion_file: " << map.georeference_companion_file << "\n";
+    }
+    yaml_stream << "georeference_sample_count: " << map.georeference_sample_count << "\n";
+    yaml_stream << "georeference_longitude_coefficients: [" <<
+      map.longitude_coefficients[0] << ", " <<
+      map.longitude_coefficients[1] << ", " <<
+      map.longitude_coefficients[2] << "]\n";
+    yaml_stream << "georeference_latitude_coefficients: [" <<
+      map.latitude_coefficients[0] << ", " <<
+      map.latitude_coefficients[1] << ", " <<
+      map.latitude_coefficients[2] << "]\n";
+  }
 }
 
 RasterizedCostmap loadCostmapArtifacts(const std::filesystem::path & yaml_path)
@@ -477,6 +502,13 @@ RasterizedCostmap loadCostmapArtifacts(const std::filesystem::path & yaml_path)
   double origin_y = 0.0;
   double occupied_thresh = 0.65;
   double free_thresh = 0.196;
+  bool georeference_valid = false;
+  std::string georeference_type;
+  std::string georeference_source_crs = "EPSG:4326";
+  std::string georeference_companion_file;
+  std::size_t georeference_sample_count = 0U;
+  std::array<double, 3> longitude_coefficients{0.0, 0.0, 0.0};
+  std::array<double, 3> latitude_coefficients{0.0, 0.0, 0.0};
   bool negate = false;
   std::string line;
   while (std::getline(yaml_stream, line)) {
@@ -500,6 +532,35 @@ RasterizedCostmap loadCostmapArtifacts(const std::filesystem::path & yaml_path)
       occupied_thresh = std::stod(value);
     } else if (key == "free_thresh") {
       free_thresh = std::stod(value);
+    } else if (key == "georeference_type") {
+      georeference_type = stripQuotes(value);
+      georeference_valid = !georeference_type.empty();
+    } else if (key == "georeference_source_crs") {
+      georeference_source_crs = stripQuotes(value);
+    } else if (key == "georeference_companion_file") {
+      georeference_companion_file = stripQuotes(value);
+    } else if (key == "georeference_sample_count") {
+      georeference_sample_count = static_cast<std::size_t>(std::stoul(value));
+    } else if (key == "georeference_longitude_coefficients") {
+      const auto open = value.find('[');
+      const auto first_comma = value.find(',', open + 1U);
+      const auto second_comma = value.find(',', first_comma + 1U);
+      const auto close = value.find(']', second_comma + 1U);
+      longitude_coefficients = {
+        std::stod(trimCopy(value.substr(open + 1U, first_comma - open - 1U))),
+        std::stod(trimCopy(value.substr(first_comma + 1U, second_comma - first_comma - 1U))),
+        std::stod(trimCopy(value.substr(second_comma + 1U, close - second_comma - 1U)))};
+      georeference_valid = true;
+    } else if (key == "georeference_latitude_coefficients") {
+      const auto open = value.find('[');
+      const auto first_comma = value.find(',', open + 1U);
+      const auto second_comma = value.find(',', first_comma + 1U);
+      const auto close = value.find(']', second_comma + 1U);
+      latitude_coefficients = {
+        std::stod(trimCopy(value.substr(open + 1U, first_comma - open - 1U))),
+        std::stod(trimCopy(value.substr(first_comma + 1U, second_comma - first_comma - 1U))),
+        std::stod(trimCopy(value.substr(second_comma + 1U, close - second_comma - 1U)))};
+      georeference_valid = true;
     } else if (key == "negate") {
       negate = std::stoi(value) != 0;
     }
@@ -530,6 +591,13 @@ RasterizedCostmap loadCostmapArtifacts(const std::filesystem::path & yaml_path)
   map.origin_y = origin_y;
   map.occupied_thresh = occupied_thresh;
   map.free_thresh = free_thresh;
+  map.georeference_valid = georeference_valid;
+  map.georeference_type = georeference_type;
+  map.georeference_source_crs = georeference_source_crs;
+  map.georeference_companion_file = georeference_companion_file;
+  map.georeference_sample_count = georeference_sample_count;
+  map.longitude_coefficients = longitude_coefficients;
+  map.latitude_coefficients = latitude_coefficients;
   map.costs.resize(static_cast<std::size_t>(width) * height);
 
   auto to_cost = [max_value, negate](const int pixel_value) -> unsigned char {
@@ -592,6 +660,22 @@ RasterizedCostmap mergeCostmaps(
   }
   merged.occupied_thresh = persistent.occupied_thresh;
   merged.free_thresh = persistent.free_thresh;
+  merged.georeference_valid = persistent.georeference_valid || runtime.georeference_valid;
+  if (persistent.georeference_valid) {
+    merged.georeference_type = persistent.georeference_type;
+    merged.georeference_source_crs = persistent.georeference_source_crs;
+    merged.georeference_companion_file = persistent.georeference_companion_file;
+    merged.georeference_sample_count = persistent.georeference_sample_count;
+    merged.longitude_coefficients = persistent.longitude_coefficients;
+    merged.latitude_coefficients = persistent.latitude_coefficients;
+  } else if (runtime.georeference_valid) {
+    merged.georeference_type = runtime.georeference_type;
+    merged.georeference_source_crs = runtime.georeference_source_crs;
+    merged.georeference_companion_file = runtime.georeference_companion_file;
+    merged.georeference_sample_count = runtime.georeference_sample_count;
+    merged.longitude_coefficients = runtime.longitude_coefficients;
+    merged.latitude_coefficients = runtime.latitude_coefficients;
+  }
   return merged;
 }
 
@@ -3118,6 +3202,8 @@ void MissionExecutorNode::updateRecordMapArtifacts(nlohmann::json & context_docu
   const std::filesystem::path gaussian_output_directory(
     context_document.value("gaussian_output_directory", std::string{}));
   const std::string mission_id = context_document.value("mission_id", std::string{});
+  const std::filesystem::path actual_path_navsat_file(
+    context_document.value("actual_path_navsat_file", std::string{}));
 
   if (actual_path_file.empty() || !std::filesystem::exists(actual_path_file) ||
     mission_route_file.empty() || mission_costmap_yaml.empty() || mission_folder.empty() || mission_id.empty())
@@ -3137,9 +3223,37 @@ void MissionExecutorNode::updateRecordMapArtifacts(nlohmann::json & context_docu
   }
 
   const RasterizedCostmap map = buildRecordMapCostmap(perimeter_points, obstacle_points);
+  RasterizedCostmap georeferenced_map = map;
+  if (!actual_path_navsat_file.empty() && std::filesystem::exists(actual_path_navsat_file)) {
+    const auto local_trace = extractLineStringCoordinates(loadJsonDocument(actual_path_file));
+    const auto geo_trace = extractGeoLineStringCoordinates(loadJsonDocument(actual_path_navsat_file));
+    const auto georeference = buildGeoReferenceMetadata(
+      local_trace,
+      geo_trace,
+      actual_path_navsat_file.filename().string());
+    if (georeference.has_value()) {
+      georeferenced_map.georeference_valid = true;
+      georeferenced_map.georeference_type = georeference->value("type", std::string("affine_xy_to_wgs84"));
+      georeferenced_map.georeference_source_crs = "EPSG:4326";
+      georeferenced_map.georeference_companion_file =
+        georeference->value("companion_file", std::string{});
+      georeferenced_map.georeference_sample_count =
+        georeference->value("sample_count", static_cast<std::size_t>(0U));
+      const auto & longitude_coefficients = georeference->at("longitude_coefficients");
+      const auto & latitude_coefficients = georeference->at("latitude_coefficients");
+      georeferenced_map.longitude_coefficients = {
+        longitude_coefficients.at(0).get<double>(),
+        longitude_coefficients.at(1).get<double>(),
+        longitude_coefficients.at(2).get<double>()};
+      georeferenced_map.latitude_coefficients = {
+        latitude_coefficients.at(0).get<double>(),
+        latitude_coefficients.at(1).get<double>(),
+        latitude_coefficients.at(2).get<double>()};
+    }
+  }
   const std::filesystem::path mission_costmap_image = mission_costmap_yaml.parent_path() /
     (mission_costmap_yaml.stem().string() + ".pgm");
-  saveCostmapArtifacts(map, mission_costmap_image, mission_costmap_yaml);
+  saveCostmapArtifacts(georeferenced_map, mission_costmap_image, mission_costmap_yaml);
 
   {
     std::ofstream route_stream(mission_route_file, std::ios::trunc);
@@ -3162,7 +3276,7 @@ void MissionExecutorNode::updateRecordMapArtifacts(nlohmann::json & context_docu
   const std::filesystem::path history_costmap_image = history_costmap_yaml.parent_path() /
     (history_costmap_yaml.stem().string() + ".pgm");
   if (history_costmap_yaml != mission_costmap_yaml) {
-    saveCostmapArtifacts(map, history_costmap_image, history_costmap_yaml);
+    saveCostmapArtifacts(georeferenced_map, history_costmap_image, history_costmap_yaml);
   }
 
   context_document["recorded_work_area_route_file"] = mission_route_file.string();
