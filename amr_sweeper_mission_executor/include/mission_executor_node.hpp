@@ -119,6 +119,9 @@ private:
     const srv::EndMission::Request & request,
     std::string & message,
     std::optional<nlohmann::json> context_document = std::nullopt);
+  void promoteRuntimeCostmapArtifacts(
+    nlohmann::json & context_document,
+    const srv::EndMission::Request & request) const;
   void updateRecordMapArtifacts(nlohmann::json & context_document) const;
   void writeLatestRecordedMapSnapshot(const nlohmann::json & context_document) const;
   void refreshActiveMissionState(const nlohmann::json & context_document);
@@ -187,6 +190,7 @@ private:
   std::uint16_t manual_routed_profile_id_{210U};
   std::uint16_t manual_teleop_profile_id_{220U};
   std::uint8_t default_activation_priority_{200U};
+  bool promote_runtime_costmap_on_completed_mission_{true};
   rclcpp::CallbackGroup::SharedPtr client_callback_group_;
   rclcpp::AsyncParametersClient::SharedPtr mission_parser_parameter_client_;
   rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr mission_parser_build_client_;

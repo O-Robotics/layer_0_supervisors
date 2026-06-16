@@ -318,8 +318,6 @@ namespace {
         return launch_arg_enabled(args, "use_amr_sweeper_localization", true);
       }
       if (
-        target_matches_pattern(target, "slam_toolbox") ||
-        target_matches_pattern(target, "amr_sweeper_slam_node") ||
         target_matches_pattern(target, "gaussian_node") ||
         target_matches_pattern(target, "mapping_node"))
       {

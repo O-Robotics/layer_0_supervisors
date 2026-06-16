@@ -223,9 +223,6 @@ profiles:
                 target: "fusioncore"
                 required: true
               - type: "lifecycle"
-                target: "slam_toolbox"
-                required: true
-              - type: "lifecycle"
                 target: "controller_server"
                 required: true
               - type: "lifecycle"
@@ -247,16 +244,10 @@ profiles:
                 target: "velocity_smoother"
                 required: true
               - type: "service"
-                target: "amr_sweeper_slam_node/get_parameters"
-                required: true
-              - type: "service"
                 target: "gaussian_node/get_parameters"
                 required: true
               - type: "service"
                 target: "mapping_node/get_parameters"
-                required: true
-              - type: "topic"
-                target: "mapping/slam_toolbox/status"
                 required: true
               - type: "topic"
                 target: "mapping/status"
@@ -512,9 +503,6 @@ profiles:
                 target: "fusioncore"
                 required: true
               - type: "lifecycle"
-                target: "slam_toolbox"
-                required: true
-              - type: "lifecycle"
                 target: "controller_server"
                 required: true
               - type: "lifecycle"
@@ -536,16 +524,10 @@ profiles:
                 target: "velocity_smoother"
                 required: true
               - type: "service"
-                target: "amr_sweeper_slam_node/get_parameters"
-                required: true
-              - type: "service"
                 target: "gaussian_node/get_parameters"
                 required: true
               - type: "service"
                 target: "mapping_node/get_parameters"
-                required: true
-              - type: "topic"
-                target: "mapping/slam_toolbox/status"
                 required: true
               - type: "topic"
                 target: "mapping/status"
@@ -806,9 +788,6 @@ profiles:
                 target: "controller_server"
                 required: true
               - type: "lifecycle"
-                target: "slam_toolbox"
-                required: true
-              - type: "lifecycle"
                 target: "smoother_server"
                 required: true
               - type: "lifecycle"
@@ -827,16 +806,10 @@ profiles:
                 target: "velocity_smoother"
                 required: true
               - type: "service"
-                target: "amr_sweeper_slam_node/get_parameters"
-                required: true
-              - type: "service"
                 target: "gaussian_node/get_parameters"
                 required: true
               - type: "service"
                 target: "mapping_node/get_parameters"
-                required: true
-              - type: "topic"
-                target: "mapping/slam_toolbox/status"
                 required: true
               - type: "topic"
                 target: "mapping/status"
@@ -1097,9 +1070,6 @@ profiles:
                 target: "controller_server"
                 required: true
               - type: "lifecycle"
-                target: "slam_toolbox"
-                required: true
-              - type: "lifecycle"
                 target: "smoother_server"
                 required: true
               - type: "lifecycle"
@@ -1118,16 +1088,10 @@ profiles:
                 target: "velocity_smoother"
                 required: true
               - type: "service"
-                target: "amr_sweeper_slam_node/get_parameters"
-                required: true
-              - type: "service"
                 target: "gaussian_node/get_parameters"
                 required: true
               - type: "service"
                 target: "mapping_node/get_parameters"
-                required: true
-              - type: "topic"
-                target: "mapping/slam_toolbox/status"
                 required: true
               - type: "topic"
                 target: "mapping/status"
@@ -1559,12 +1523,6 @@ profiles:
                 required: true
               - type: "lifecycle"
                 target: "fusioncore"
-                required: true
-              - type: "lifecycle"
-                target: "slam_toolbox"
-                required: true
-              - type: "service"
-                target: "amr_sweeper_slam_node/get_parameters"
                 required: true
               - type: "service"
                 target: "gaussian_node/get_parameters"

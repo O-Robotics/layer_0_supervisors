@@ -49,13 +49,10 @@ topics:
   - /amr_sweeper/localization/pose
   - /amr_sweeper/mapping/gaussian/world_points
   - /amr_sweeper/mapping/gaussian/status
-  - /amr_sweeper/mapping/occupancy_grid_raw
-  - /amr_sweeper/mapping/occupancy_grid_metadata_raw
   - /amr_sweeper/mapping/occupancy_grid
-  - /amr_sweeper/mapping/route_marker
-  - /amr_sweeper/mapping/slam_toolbox/pose
-  - /amr_sweeper/mapping/slam_toolbox/status
-  - /amr_sweeper/mapping/slam_toolbox/transition_event
+  - /amr_sweeper/mapping/global_costmap
+  - /amr_sweeper/mapping/occupancy_grid_metadata
+  - /amr_sweeper/mapping/waypoint_path
   - /amr_sweeper/mapping/status
   - /amr_sweeper/navigation/bt_navigator/goal_pose
   - /amr_sweeper/navigation/bt_navigator/transition_event

@@ -96,6 +96,8 @@ struct RasterizedCostmap
   double resolution{0.0};
   double origin_x{0.0};
   double origin_y{0.0};
+  double occupied_thresh{0.65};
+  double free_thresh{0.196};
 };
 
 struct PolygonBounds
@@ -198,6 +200,18 @@ std::string trimCopy(std::string value)
   value.erase(
     std::find_if(value.rbegin(), value.rend(), not_space).base(),
     value.end());
+  return value;
+}
+
+std::string stripQuotes(const std::string & value)
+{
+  if (value.size() >= 2U) {
+    const char first = value.front();
+    const char last = value.back();
+    if ((first == '"' && last == '"') || (first == '\'' && last == '\'')) {
+      return value.substr(1U, value.size() - 2U);
+    }
+  }
   return value;
 }
 
@@ -448,6 +462,137 @@ void saveCostmapArtifacts(
     << "occupied_thresh: 0.65\n"
     << "free_thresh: 0.196\n"
     << "mode: trinary\n";
+}
+
+RasterizedCostmap loadCostmapArtifacts(const std::filesystem::path & yaml_path)
+{
+  std::ifstream yaml_stream(yaml_path);
+  if (!yaml_stream.is_open()) {
+    throw std::runtime_error("Failed to open costmap yaml: " + yaml_path.string());
+  }
+
+  std::string image_name;
+  double resolution = 0.0;
+  double origin_x = 0.0;
+  double origin_y = 0.0;
+  double occupied_thresh = 0.65;
+  double free_thresh = 0.196;
+  bool negate = false;
+  std::string line;
+  while (std::getline(yaml_stream, line)) {
+    const auto colon = line.find(':');
+    if (colon == std::string::npos) {
+      continue;
+    }
+    const std::string key = trimCopy(line.substr(0, colon));
+    const std::string value = trimCopy(line.substr(colon + 1U));
+    if (key == "image") {
+      image_name = stripQuotes(value);
+    } else if (key == "resolution") {
+      resolution = std::stod(value);
+    } else if (key == "origin") {
+      const auto open = value.find('[');
+      const auto comma = value.find(',', open + 1U);
+      const auto second_comma = value.find(',', comma + 1U);
+      origin_x = std::stod(trimCopy(value.substr(open + 1U, comma - open - 1U)));
+      origin_y = std::stod(trimCopy(value.substr(comma + 1U, second_comma - comma - 1U)));
+    } else if (key == "occupied_thresh") {
+      occupied_thresh = std::stod(value);
+    } else if (key == "free_thresh") {
+      free_thresh = std::stod(value);
+    } else if (key == "negate") {
+      negate = std::stoi(value) != 0;
+    }
+  }
+
+  const std::filesystem::path image_path = yaml_path.parent_path() / image_name;
+  std::ifstream image_stream(image_path, std::ios::binary);
+  if (!image_stream.is_open()) {
+    throw std::runtime_error("Failed to open costmap image: " + image_path.string());
+  }
+
+  std::string magic;
+  image_stream >> magic;
+  if (magic != "P5" && magic != "P2") {
+    throw std::runtime_error("Unsupported costmap image format: " + magic);
+  }
+
+  unsigned int width = 0U;
+  unsigned int height = 0U;
+  int max_value = 0;
+  image_stream >> width >> height >> max_value;
+
+  RasterizedCostmap map;
+  map.width_cells = width;
+  map.height_cells = height;
+  map.resolution = resolution;
+  map.origin_x = origin_x;
+  map.origin_y = origin_y;
+  map.occupied_thresh = occupied_thresh;
+  map.free_thresh = free_thresh;
+  map.costs.resize(static_cast<std::size_t>(width) * height);
+
+  auto to_cost = [max_value, negate](const int pixel_value) -> unsigned char {
+    const int bounded = std::clamp(pixel_value, 0, std::max(1, max_value));
+    const double normalized = static_cast<double>(bounded) / static_cast<double>(std::max(1, max_value));
+    const double occupied = negate ? normalized : (1.0 - normalized);
+    return static_cast<unsigned char>(std::lround(std::clamp(occupied, 0.0, 1.0) * 255.0));
+  };
+
+  if (magic == "P5") {
+    image_stream.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    for (int row = static_cast<int>(height) - 1; row >= 0; --row) {
+      for (unsigned int col = 0U; col < width; ++col) {
+        unsigned char pixel = 0U;
+        image_stream.read(reinterpret_cast<char *>(&pixel), 1);
+        const std::size_t index = static_cast<std::size_t>(row) * width + col;
+        map.costs.at(index) = to_cost(static_cast<int>(pixel));
+      }
+    }
+    return map;
+  }
+
+  for (int row = static_cast<int>(height) - 1; row >= 0; --row) {
+    for (unsigned int col = 0U; col < width; ++col) {
+      int pixel_value = 0;
+      image_stream >> pixel_value;
+      const std::size_t index = static_cast<std::size_t>(row) * width + col;
+      map.costs.at(index) = to_cost(pixel_value);
+    }
+  }
+
+  return map;
+}
+
+bool compatibleCostmaps(const RasterizedCostmap & lhs, const RasterizedCostmap & rhs)
+{
+  constexpr double kTolerance = 1.0e-6;
+  return lhs.width_cells == rhs.width_cells &&
+         lhs.height_cells == rhs.height_cells &&
+         std::abs(lhs.resolution - rhs.resolution) <= kTolerance &&
+         std::abs(lhs.origin_x - rhs.origin_x) <= kTolerance &&
+         std::abs(lhs.origin_y - rhs.origin_y) <= kTolerance;
+}
+
+RasterizedCostmap mergeCostmaps(
+  const RasterizedCostmap & persistent,
+  const RasterizedCostmap & runtime)
+{
+  RasterizedCostmap merged = persistent;
+  if (!compatibleCostmaps(persistent, runtime)) {
+    return runtime;
+  }
+
+  for (std::size_t index = 0U; index < merged.costs.size(); ++index) {
+    const double persistent_ratio = static_cast<double>(persistent.costs.at(index)) / 255.0;
+    const double runtime_ratio = static_cast<double>(runtime.costs.at(index)) / 255.0;
+    const double merged_ratio = (persistent_ratio + runtime_ratio) * 0.5;
+    merged.costs.at(index) = static_cast<unsigned char>(
+      std::lround(std::clamp(merged_ratio, 0.0, 1.0) * 255.0));
+  }
+  merged.occupied_thresh = persistent.occupied_thresh;
+  merged.free_thresh = persistent.free_thresh;
+  return merged;
 }
 
 nlohmann::json buildPerimeterGeoJson(const std::vector<MapPoint> & perimeter)
@@ -1490,6 +1635,9 @@ MissionExecutorNode::MissionExecutorNode(const rclcpp::NodeOptions & options)
     declare_parameter<int>("manual_teleop_profile_id", 220));
   default_activation_priority_ = static_cast<std::uint8_t>(
     declare_parameter<int>("default_activation_priority", 200));
+  promote_runtime_costmap_on_completed_mission_ = declare_parameter<bool>(
+    "promote_runtime_costmap_on_completed_mission",
+    true);
 
   client_callback_group_ = create_callback_group(rclcpp::CallbackGroupType::Reentrant);
   mission_parser_parameter_client_ =
@@ -2496,6 +2644,15 @@ ManualMissionInfo MissionExecutorNode::resolveExecutableMissionSource(const Manu
     return mission;
   }
 
+  const std::filesystem::path canonical_history_directory = missionHistoryDirectory(mission);
+  const std::filesystem::path canonical_history_mission_file =
+    canonical_history_directory / (mission.mission_id + mission_file_extension_);
+  if (std::filesystem::exists(canonical_history_mission_file)) {
+    ManualMissionInfo resolved = mission;
+    resolved.mission_path = canonical_history_mission_file.string();
+    return resolved;
+  }
+
   const std::filesystem::path mission_path(mission.mission_path);
   if (mission_path.has_parent_path() &&
     mission_path.parent_path() != resolveMissionsFromDbDirectory())
@@ -2678,7 +2835,11 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
     {"mission_folder", mission_history_directory.string()},
     {"mission_route_file", run_route.string()},
     {"mission_costmap_yaml", run_costmap_yaml.string()},
+    {"saved_costmap_yaml", run_costmap_yaml.string()},
     {"mission_run_directory", mission_run_directory.string()},
+    {"persistent_mission_file", history_mission_file.string()},
+    {"persistent_mission_route_file", history_route.string()},
+    {"persistent_mission_costmap_yaml", history_costmap_yaml.string()},
     {"mission_window_start", mission_window_start},
     {"mission_window_end", mission_window_end},
     {"run_started_at", run_timestamp},
@@ -2868,6 +3029,7 @@ bool MissionExecutorNode::finalizeMissionExecution(
   }
 
   updateRecordMapArtifacts(*context_document);
+  promoteRuntimeCostmapArtifacts(*context_document, request);
   refreshLocalPathGeoReferenceFromArtifacts(*context_document);
   writeLatestRecordedMapSnapshot(*context_document);
   recordMissionExecutionEnd(*context_document, request);
@@ -2879,6 +3041,62 @@ bool MissionExecutorNode::finalizeMissionExecution(
   }
 
   return true;
+}
+
+void MissionExecutorNode::promoteRuntimeCostmapArtifacts(
+  nlohmann::json & context_document,
+  const srv::EndMission::Request & request) const
+{
+  if (!promote_runtime_costmap_on_completed_mission_) {
+    return;
+  }
+
+  if (toLower(defaultIfEmpty(request.outcome, "completed")) != "completed") {
+    return;
+  }
+
+  const std::filesystem::path runtime_costmap_yaml(
+    context_document.value("mission_costmap_yaml", std::string{}));
+  std::filesystem::path persistent_costmap_yaml(
+    context_document.value("persistent_mission_costmap_yaml", std::string{}));
+  if (persistent_costmap_yaml.empty()) {
+    const std::filesystem::path mission_folder(
+      context_document.value("mission_folder", std::string{}));
+    if (!mission_folder.empty() && !runtime_costmap_yaml.empty()) {
+      persistent_costmap_yaml = mission_folder / runtime_costmap_yaml.filename();
+    }
+  }
+
+  if (runtime_costmap_yaml.empty() || persistent_costmap_yaml.empty() ||
+    !std::filesystem::exists(runtime_costmap_yaml))
+  {
+    return;
+  }
+
+  const std::filesystem::path persistent_costmap_image =
+    persistent_costmap_yaml.parent_path() / (persistent_costmap_yaml.stem().string() + ".pgm");
+  try {
+    const RasterizedCostmap runtime_costmap = loadCostmapArtifacts(runtime_costmap_yaml);
+    RasterizedCostmap merged_costmap = runtime_costmap;
+    if (std::filesystem::exists(persistent_costmap_yaml)) {
+      const RasterizedCostmap persistent_costmap = loadCostmapArtifacts(persistent_costmap_yaml);
+      merged_costmap = mergeCostmaps(persistent_costmap, runtime_costmap);
+    }
+    saveCostmapArtifacts(merged_costmap, persistent_costmap_image, persistent_costmap_yaml);
+    context_document["persistent_mission_costmap_yaml"] = persistent_costmap_yaml.string();
+    context_document["persistent_mission_costmap_image"] = persistent_costmap_image.string();
+    context_document["persistent_costmap_merge_mode"] = "cell_average";
+    context_document["persistent_costmap_promoted"] = true;
+  } catch (const std::exception & exception) {
+    RCLCPP_WARN(
+      get_logger(),
+      "Failed to promote runtime costmap artifact from %s into %s: %s",
+      runtime_costmap_yaml.string().c_str(),
+      persistent_costmap_yaml.string().c_str(),
+      exception.what());
+    context_document["persistent_costmap_promoted"] = false;
+    context_document["persistent_costmap_promotion_error"] = exception.what();
+  }
 }
 
 void MissionExecutorNode::updateRecordMapArtifacts(nlohmann::json & context_document) const
