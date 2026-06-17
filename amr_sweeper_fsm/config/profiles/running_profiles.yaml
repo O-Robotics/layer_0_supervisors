@@ -216,6 +216,15 @@ profiles:
               - type: "topic"
                 target: "localization/odometry_fused"
                 required: true
+              - type: "service"
+                target: "mapping_node/get_parameters"
+                required: true
+              - type: "topic"
+                target: "mapping/global_costmap"
+                required: true
+              - type: "topic"
+                target: "mapping/local_costmap"
+                required: true
               - type: "lifecycle"
                 target: "fusioncore"
                 required: true
@@ -492,6 +501,15 @@ profiles:
             ready:
               - type: "topic"
                 target: "localization/odometry_fused"
+                required: true
+              - type: "service"
+                target: "mapping_node/get_parameters"
+                required: true
+              - type: "topic"
+                target: "mapping/global_costmap"
+                required: true
+              - type: "topic"
+                target: "mapping/local_costmap"
                 required: true
               - type: "lifecycle"
                 target: "fusioncore"
@@ -772,6 +790,15 @@ profiles:
               - type: "topic"
                 target: "localization/odometry_fused"
                 required: true
+              - type: "service"
+                target: "mapping_node/get_parameters"
+                required: true
+              - type: "topic"
+                target: "mapping/global_costmap"
+                required: true
+              - type: "topic"
+                target: "mapping/local_costmap"
+                required: true
               - type: "lifecycle"
                 target: "fusioncore"
                 required: true
@@ -1050,6 +1077,15 @@ profiles:
             ready:
               - type: "topic"
                 target: "localization/odometry_fused"
+                required: true
+              - type: "service"
+                target: "mapping_node/get_parameters"
+                required: true
+              - type: "topic"
+                target: "mapping/global_costmap"
+                required: true
+              - type: "topic"
+                target: "mapping/local_costmap"
                 required: true
               - type: "lifecycle"
                 target: "fusioncore"
@@ -1514,6 +1550,9 @@ profiles:
                 required: true
               - type: "service"
                 target: "mapping_node/get_parameters"
+                required: true
+              - type: "topic"
+                target: "mapping/global_costmap"
                 required: true
               - type: "topic"
                 target: "mapping/local_costmap"
