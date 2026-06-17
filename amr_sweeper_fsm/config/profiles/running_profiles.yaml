@@ -216,9 +216,6 @@ profiles:
               - type: "topic"
                 target: "localization/odometry_fused"
                 required: true
-              - type: "topic"
-                target: "localization/pose"
-                required: true
               - type: "lifecycle"
                 target: "fusioncore"
                 required: true
@@ -495,9 +492,6 @@ profiles:
             ready:
               - type: "topic"
                 target: "localization/odometry_fused"
-                required: true
-              - type: "topic"
-                target: "localization/pose"
                 required: true
               - type: "lifecycle"
                 target: "fusioncore"
@@ -778,9 +772,6 @@ profiles:
               - type: "topic"
                 target: "localization/odometry_fused"
                 required: true
-              - type: "topic"
-                target: "localization/pose"
-                required: true
               - type: "lifecycle"
                 target: "fusioncore"
                 required: true
@@ -1059,9 +1050,6 @@ profiles:
             ready:
               - type: "topic"
                 target: "localization/odometry_fused"
-                required: true
-              - type: "topic"
-                target: "localization/pose"
                 required: true
               - type: "lifecycle"
                 target: "fusioncore"
@@ -1518,9 +1506,6 @@ profiles:
               - type: "topic"
                 target: "localization/odometry_fused"
                 required: true
-              - type: "topic"
-                target: "localization/pose"
-                required: true
               - type: "lifecycle"
                 target: "fusioncore"
                 required: true
@@ -1531,7 +1516,7 @@ profiles:
                 target: "mapping_node/get_parameters"
                 required: true
               - type: "topic"
-                target: "mapping/occupancy_grid"
+                target: "mapping/local_costmap"
                 required: true
             window_ms: 45000
           rosout_triggers:

@@ -289,9 +289,6 @@ profiles:
               - type: "topic"
                 target: "localization/odometry_fused"
                 required: true
-              - type: "topic"
-                target: "localization/pose"
-                required: true
               - type: "lifecycle"
                 target: "fusioncore"
                 required: true
@@ -702,9 +699,6 @@ profiles:
             ready:
               - type: "topic"
                 target: "localization/odometry_fused"
-                required: true
-              - type: "topic"
-                target: "localization/pose"
                 required: true
               - type: "lifecycle"
                 target: "fusioncore"

@@ -46,12 +46,11 @@ topics:
 # Layer 3 Navigation topics can still be recorded when those nodes are active.
   - /amr_sweeper/localization/fusioncore/transition_event
   - /amr_sweeper/localization/odometry_fused
-  - /amr_sweeper/localization/pose
   - /amr_sweeper/mapping/gaussian/world_points
   - /amr_sweeper/mapping/gaussian/status
-  - /amr_sweeper/mapping/occupancy_grid
+  - /amr_sweeper/mapping/local_costmap
   - /amr_sweeper/mapping/global_costmap
-  - /amr_sweeper/mapping/occupancy_grid_metadata
+  - /amr_sweeper/mapping/local_costmap_metadata
   - /amr_sweeper/mapping/waypoint_path
   - /amr_sweeper/mapping/status
   - /amr_sweeper/navigation/bt_navigator/goal_pose

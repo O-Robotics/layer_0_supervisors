@@ -312,7 +312,6 @@ namespace {
     if (resolved_command.find("ros2 launch amr_sweeper_layer_3_navigation_bringup ") != std::string::npos) {
       if (
         target_matches_pattern(target, "localization/odometry_fused") ||
-        target_matches_pattern(target, "localization/pose") ||
         target_matches_pattern(target, "fusioncore"))
       {
         return launch_arg_enabled(args, "use_amr_sweeper_localization", true);
