@@ -187,7 +187,7 @@ protected:
 
     int timeout_ms{0};
     int controller_query_timeout_ms{5000};
-    int lifecycle_query_timeout_ms{200};
+    int lifecycle_query_timeout_ms{3000};
   };
 
   /// Load (or declare) readiness parameters into readiness_.
