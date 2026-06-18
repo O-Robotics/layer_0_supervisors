@@ -238,16 +238,10 @@ profiles:
                 target: "planner_server"
                 required: true
               - type: "lifecycle"
-                target: "behavior_server"
-                required: true
-              - type: "lifecycle"
                 target: "bt_navigator"
                 required: true
               - type: "lifecycle"
                 target: "waypoint_follower"
-                required: true
-              - type: "lifecycle"
-                target: "velocity_smoother"
                 required: true
               - type: "service"
                 target: "gaussian_node/get_parameters"
