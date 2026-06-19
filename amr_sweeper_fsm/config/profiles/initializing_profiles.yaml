@@ -287,22 +287,43 @@ profiles:
               - "test_output_directory:={test_output_directory}"
             ready:
               - type: "topic"
-                target: "localization/odometry_fused"
+                target: "odometry/fused"
+                required: true
+              - type: "topic"
+                target: "pose"
                 required: true
               - type: "lifecycle"
                 target: "fusioncore"
                 required: true
+              - type: "lifecycle"
+                target: "slam_toolbox"
+                required: true
+              - type: "lifecycle"
+                target: "controller_server"
+                required: true
+              - type: "lifecycle"
+                target: "planner_server"
+                required: true
+              - type: "lifecycle"
+                target: "bt_navigator"
+                required: true
+              - type: "lifecycle"
+                target: "waypoint_follower"
+                required: true
+              - type: "lifecycle"
+                target: "velocity_smoother"
+                required: true
               - type: "service"
-                target: "mapping_node/get_parameters"
+                target: "amr_sweeper_slam_node/get_parameters"
+                required: true
+              - type: "service"
+                target: "amr_sweeper_gaussian_node/get_parameters"
+                required: true
+              - type: "service"
+                target: "amr_sweeper_mapping_node/get_parameters"
                 required: true
               - type: "topic"
-                target: "mapping/global_costmap"
-                required: true
-              - type: "topic"
-                target: "mapping/local_costmap"
-                required: true
-              - type: "service"
-                target: "gaussian_node/get_parameters"
+                target: "mapping/status"
                 required: true
             window_ms: 45000
           rosout_triggers:
@@ -704,22 +725,43 @@ profiles:
               - "test_output_directory:={test_output_directory}"
             ready:
               - type: "topic"
-                target: "localization/odometry_fused"
+                target: "odometry/fused"
+                required: true
+              - type: "topic"
+                target: "pose"
                 required: true
               - type: "lifecycle"
                 target: "fusioncore"
                 required: true
+              - type: "lifecycle"
+                target: "slam_toolbox"
+                required: true
+              - type: "lifecycle"
+                target: "controller_server"
+                required: true
+              - type: "lifecycle"
+                target: "planner_server"
+                required: true
+              - type: "lifecycle"
+                target: "bt_navigator"
+                required: true
+              - type: "lifecycle"
+                target: "waypoint_follower"
+                required: true
+              - type: "lifecycle"
+                target: "velocity_smoother"
+                required: true
               - type: "service"
-                target: "mapping_node/get_parameters"
+                target: "amr_sweeper_slam_node/get_parameters"
+                required: true
+              - type: "service"
+                target: "amr_sweeper_gaussian_node/get_parameters"
+                required: true
+              - type: "service"
+                target: "amr_sweeper_mapping_node/get_parameters"
                 required: true
               - type: "topic"
-                target: "mapping/global_costmap"
-                required: true
-              - type: "topic"
-                target: "mapping/local_costmap"
-                required: true
-              - type: "service"
-                target: "gaussian_node/get_parameters"
+                target: "mapping/status"
                 required: true
             window_ms: 45000
           rosout_triggers:

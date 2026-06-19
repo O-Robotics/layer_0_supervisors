@@ -45,7 +45,7 @@ profiles:
               - "use_amr_sweeper_depth_camera:=true"
               - "use_amr_sweeper_imu:=true"
               - "use_amr_sweeper_gnss:=true"
-              - "use_ntrip_client:=false"
+              - "use_ntrip_client:=true"
             ready:
               - type: "topic"
                 target: "system_info/system_info"
