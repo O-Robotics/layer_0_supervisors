@@ -210,7 +210,7 @@ profiles:
               - "use_amr_sweeper_navigation:=true"
               - "use_gaussian:=false"
               - "mapping_startup_delay_sec:=5.0"
-              - "navigation_startup_delay_sec:=30.0"
+              - "navigation_startup_delay_sec:=10.0"
               - "mission_execution_directory:={mission_execution_directory}"
               - "auto_start_mission:=true"
               - "use_test:={use_test}"
