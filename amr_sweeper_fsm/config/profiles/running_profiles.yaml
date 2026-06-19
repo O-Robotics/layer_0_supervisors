@@ -209,6 +209,8 @@ profiles:
               - "use_amr_sweeper_mapping:=true"
               - "use_amr_sweeper_navigation:=true"
               - "use_gaussian:=false"
+              - "mapping_startup_delay_sec:=30.0"
+              - "navigation_startup_delay_sec:=60.0"
               - "mission_execution_directory:={mission_execution_directory}"
               - "auto_start_mission:=true"
               - "use_test:={use_test}"
@@ -250,7 +252,7 @@ profiles:
               - type: "topic"
                 target: "mapping/status"
                 required: true
-            window_ms: 60000
+            window_ms: 120000
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "level>=ERROR;action=FAULT"
@@ -486,6 +488,8 @@ profiles:
               - "use_amr_sweeper_localization:=true"
               - "use_amr_sweeper_mapping:=true"
               - "use_amr_sweeper_navigation:=true"
+              - "mapping_startup_delay_sec:=30.0"
+              - "navigation_startup_delay_sec:=60.0"
               - "mission_execution_directory:={mission_execution_directory}"
               - "auto_start_mission:=true"
               - "use_test:={use_test}"
@@ -824,7 +828,7 @@ profiles:
               - type: "topic"
                 target: "mapping/status"
                 required: true
-            window_ms: 45000
+            window_ms: 120000
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "level>=ERROR;action=FAULT"
