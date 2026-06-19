@@ -417,6 +417,35 @@ RasterizedMap Vda5050MissionParser::buildGlobalCostmap(
     }
   }
 
+  if (projection_initialized_) {
+    double latitude_at_origin = 0.0;
+    double longitude_at_origin = 0.0;
+    double altitude_at_origin = 0.0;
+    double latitude_at_unit_x = 0.0;
+    double longitude_at_unit_x = 0.0;
+    double altitude_at_unit_x = 0.0;
+    double latitude_at_unit_y = 0.0;
+    double longitude_at_unit_y = 0.0;
+    double altitude_at_unit_y = 0.0;
+
+    projector_.Reverse(0.0, 0.0, 0.0, latitude_at_origin, longitude_at_origin, altitude_at_origin);
+    projector_.Reverse(1.0, 0.0, 0.0, latitude_at_unit_x, longitude_at_unit_x, altitude_at_unit_x);
+    projector_.Reverse(0.0, 1.0, 0.0, latitude_at_unit_y, longitude_at_unit_y, altitude_at_unit_y);
+
+    result.georeference_valid = true;
+    result.georeference_type = "affine_xy_to_wgs84";
+    result.georeference_source_crs = "EPSG:4326";
+    result.georeference_sample_count = 3U;
+    result.longitude_coefficients = {
+      longitude_at_origin,
+      longitude_at_unit_x - longitude_at_origin,
+      longitude_at_unit_y - longitude_at_origin};
+    result.latitude_coefficients = {
+      latitude_at_origin,
+      latitude_at_unit_x - latitude_at_origin,
+      latitude_at_unit_y - latitude_at_origin};
+  }
+
   return result;
 }
 
@@ -479,6 +508,22 @@ void Vda5050MissionParser::saveGlobalCostmapArtifacts(
     << "occupied_thresh: 0.65\n"
     << "free_thresh: 0.196\n"
     << "mode: trinary\n";
+  if (map.georeference_valid) {
+    yaml_stream
+      << "georeference_type: "
+      << (map.georeference_type.empty() ? "affine_xy_to_wgs84" : map.georeference_type) << "\n"
+      << "georeference_source_crs: "
+      << (map.georeference_source_crs.empty() ? "EPSG:4326" : map.georeference_source_crs) << "\n"
+      << "georeference_sample_count: " << map.georeference_sample_count << "\n"
+      << "georeference_longitude_coefficients: ["
+      << map.longitude_coefficients[0] << ", "
+      << map.longitude_coefficients[1] << ", "
+      << map.longitude_coefficients[2] << "]\n"
+      << "georeference_latitude_coefficients: ["
+      << map.latitude_coefficients[0] << ", "
+      << map.latitude_coefficients[1] << ", "
+      << map.latitude_coefficients[2] << "]\n";
+  }
 }
 
 void Vda5050MissionParser::saveMissionWaypointsArtifact(const std::string & path) const
