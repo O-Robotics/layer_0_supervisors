@@ -208,6 +208,7 @@ profiles:
               - "use_amr_sweeper_localization:=true"
               - "use_amr_sweeper_mapping:=true"
               - "use_amr_sweeper_navigation:=true"
+              - "use_gaussian:=false"
               - "mission_execution_directory:={mission_execution_directory}"
               - "auto_start_mission:=true"
               - "use_test:={use_test}"
@@ -242,9 +243,6 @@ profiles:
                 required: true
               - type: "lifecycle"
                 target: "waypoint_follower"
-                required: true
-              - type: "service"
-                target: "gaussian_node/get_parameters"
                 required: true
               - type: "service"
                 target: "mapping_node/get_parameters"
