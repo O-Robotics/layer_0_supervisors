@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <array>
 #include <filesystem>
 #include <map>
 #include <memory>
@@ -70,6 +71,12 @@ struct RasterizedMap
   double resolution;
   double origin_x;
   double origin_y;
+  bool georeference_valid{false};
+  std::string georeference_type;
+  std::string georeference_source_crs{"EPSG:4326"};
+  std::size_t georeference_sample_count{0U};
+  std::array<double, 3> longitude_coefficients{0.0, 0.0, 0.0};
+  std::array<double, 3> latitude_coefficients{0.0, 0.0, 0.0};
 };
 
 struct MissionPathWaypoint
