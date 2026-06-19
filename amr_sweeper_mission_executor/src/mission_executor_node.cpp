@@ -679,6 +679,44 @@ RasterizedCostmap mergeCostmaps(
   return merged;
 }
 
+std::optional<std::filesystem::path> findNewestGeoreferencedHistoricalCostmapYaml(
+  const std::filesystem::path & mission_history_directory,
+  const std::string & costmap_filename)
+{
+  namespace fs = std::filesystem;
+  if (!fs::exists(mission_history_directory) || !fs::is_directory(mission_history_directory)) {
+    return std::nullopt;
+  }
+
+  std::vector<fs::path> run_directories;
+  for (const auto & entry : fs::directory_iterator(mission_history_directory)) {
+    if (entry.is_directory()) {
+      run_directories.push_back(entry.path());
+    }
+  }
+  std::sort(run_directories.begin(), run_directories.end(), std::greater<fs::path>{});
+
+  for (const auto & run_directory : run_directories) {
+    const fs::path candidate_yaml = run_directory / costmap_filename;
+    const fs::path candidate_image =
+      candidate_yaml.parent_path() / (candidate_yaml.stem().string() + ".pgm");
+    if (!fs::exists(candidate_yaml) || !fs::exists(candidate_image)) {
+      continue;
+    }
+
+    try {
+      const RasterizedCostmap candidate = loadCostmapArtifacts(candidate_yaml);
+      if (candidate.georeference_valid) {
+        return candidate_yaml;
+      }
+    } catch (const std::exception &) {
+      continue;
+    }
+  }
+
+  return std::nullopt;
+}
+
 nlohmann::json buildPerimeterGeoJson(const std::vector<MapPoint> & perimeter)
 {
   nlohmann::json coordinates = nlohmann::json::array();
@@ -2853,6 +2891,39 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
   const auto run_start_time = std::chrono::system_clock::now();
   const std::string run_timestamp = formatUtcTimestamp(run_start_time);
   const fs::path mission_history_directory = missionHistoryDirectory(mission);
+  fs::create_directories(mission_history_directory);
+
+  std::filesystem::path selected_costmap_yaml = mission_costmap_yaml;
+  std::filesystem::path selected_costmap_image = mission_costmap_image;
+  try {
+    const RasterizedCostmap source_costmap = loadCostmapArtifacts(mission_costmap_yaml);
+    if (!source_costmap.georeference_valid) {
+      const auto historical_georeferenced_yaml = findNewestGeoreferencedHistoricalCostmapYaml(
+        mission_history_directory,
+        mission.mission_id + "_costmap.yaml");
+      if (historical_georeferenced_yaml.has_value()) {
+        const auto historical_georeferenced_image =
+          historical_georeferenced_yaml->parent_path() /
+          (historical_georeferenced_yaml->stem().string() + ".pgm");
+        if (fs::exists(historical_georeferenced_image)) {
+          selected_costmap_yaml = *historical_georeferenced_yaml;
+          selected_costmap_image = historical_georeferenced_image;
+          RCLCPP_WARN(
+            get_logger(),
+            "Mission source costmap %s is non-georeferenced. Reusing newest georeferenced historical costmap %s for startup seeding.",
+            mission_costmap_yaml.string().c_str(),
+            selected_costmap_yaml.string().c_str());
+        }
+      }
+    }
+  } catch (const std::exception & exception) {
+    RCLCPP_WARN(
+      get_logger(),
+      "Failed to inspect mission source costmap %s before preparing mission artifacts: %s",
+      mission_costmap_yaml.string().c_str(),
+      exception.what());
+  }
+
   const fs::path mission_run_directory = mission_history_directory / run_timestamp;
   fs::create_directories(mission_run_directory);
 
@@ -2862,15 +2933,14 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
   const fs::path history_costmap_image =
     mission_history_directory / (mission.mission_id + "_costmap.pgm");
   const fs::path history_route = mission_history_directory / (mission.mission_id + "_path.geojson");
-  fs::create_directories(mission_history_directory);
   if (mission_file != history_mission_file) {
     fs::copy_file(mission_file, history_mission_file, fs::copy_options::overwrite_existing);
   }
-  if (mission_costmap_yaml != history_costmap_yaml) {
-    fs::copy_file(mission_costmap_yaml, history_costmap_yaml, fs::copy_options::overwrite_existing);
+  if (selected_costmap_yaml != history_costmap_yaml) {
+    fs::copy_file(selected_costmap_yaml, history_costmap_yaml, fs::copy_options::overwrite_existing);
   }
-  if (mission_costmap_image != history_costmap_image) {
-    fs::copy_file(mission_costmap_image, history_costmap_image, fs::copy_options::overwrite_existing);
+  if (selected_costmap_image != history_costmap_image) {
+    fs::copy_file(selected_costmap_image, history_costmap_image, fs::copy_options::overwrite_existing);
   }
   if (mission_route != history_route) {
     fs::copy_file(mission_route, history_route, fs::copy_options::overwrite_existing);
@@ -2930,6 +3000,7 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
     {"source_mission_file", mission_file.string()},
     {"source_mission_route_file", mission_route.string()},
     {"source_mission_costmap_yaml", mission_costmap_yaml.string()},
+    {"selected_startup_costmap_yaml", selected_costmap_yaml.string()},
     {"actual_path_file", actual_path_file.string()},
     {"actual_path_navsat_file", actual_path_navsat_file.string()},
     {"gaussian_output_directory", gaussian_output_directory.string()},
