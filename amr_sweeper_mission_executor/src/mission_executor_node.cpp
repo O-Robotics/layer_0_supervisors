@@ -2897,6 +2897,17 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
   std::filesystem::path selected_costmap_image = mission_costmap_image;
   try {
     const RasterizedCostmap source_costmap = loadCostmapArtifacts(mission_costmap_yaml);
+    RCLCPP_INFO(
+      get_logger(),
+      "Mission startup costmap source %s parsed with georeference_valid=%s resolution=%.3f origin=(%.3f, %.3f) size=%zux%zu samples=%zu.",
+      mission_costmap_yaml.string().c_str(),
+      source_costmap.georeference_valid ? "true" : "false",
+      source_costmap.resolution,
+      source_costmap.origin_x,
+      source_costmap.origin_y,
+      source_costmap.width,
+      source_costmap.height,
+      source_costmap.georeference_sample_count);
     if (!source_costmap.georeference_valid) {
       const auto historical_georeferenced_yaml = findNewestGeoreferencedHistoricalCostmapYaml(
         mission_history_directory,
@@ -2914,6 +2925,12 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
             mission_costmap_yaml.string().c_str(),
             selected_costmap_yaml.string().c_str());
         }
+      } else {
+        RCLCPP_WARN(
+          get_logger(),
+          "Mission source costmap %s is non-georeferenced and no older georeferenced historical startup costmap was found under %s.",
+          mission_costmap_yaml.string().c_str(),
+          mission_history_directory.string().c_str());
       }
     }
   } catch (const std::exception & exception) {
@@ -3008,6 +3025,15 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
     {"collected_artifacts_directory", collected_artifacts_directory.string()},
     {"schedule_log_path", ensureScheduleLogPath(resolveScheduleSourcePath()).string()},
     {"actual_schedule_log_path", ensureActualScheduleLogPath(resolveScheduleSourcePath()).string()}};
+
+  RCLCPP_INFO(
+    get_logger(),
+    "Prepared mission artifacts for %s with startup costmap %s, run costmap %s, persistent costmap %s, source costmap %s.",
+    mission.mission_id.c_str(),
+    selected_costmap_yaml.string().c_str(),
+    run_costmap_yaml.string().c_str(),
+    history_costmap_yaml.string().c_str(),
+    mission_costmap_yaml.string().c_str());
 
   const fs::path execution_context_file = mission_run_directory / "execution_context.json";
   writeJsonDocumentAtomic(execution_context_file, context);
@@ -3205,10 +3231,7 @@ void MissionExecutorNode::promoteRuntimeCostmapArtifacts(
   if (!promote_runtime_costmap_on_completed_mission_) {
     return;
   }
-
-  if (toLower(defaultIfEmpty(request.outcome, "completed")) != "completed") {
-    return;
-  }
+  const std::string normalized_outcome = toLower(defaultIfEmpty(request.outcome, "completed"));
 
   const std::filesystem::path runtime_costmap_yaml(
     context_document.value("mission_costmap_yaml", std::string{}));
@@ -3232,10 +3255,36 @@ void MissionExecutorNode::promoteRuntimeCostmapArtifacts(
     persistent_costmap_yaml.parent_path() / (persistent_costmap_yaml.stem().string() + ".pgm");
   try {
     const RasterizedCostmap runtime_costmap = loadCostmapArtifacts(runtime_costmap_yaml);
+    bool promote_runtime_costmap = (normalized_outcome == "completed");
     RasterizedCostmap merged_costmap = runtime_costmap;
     if (std::filesystem::exists(persistent_costmap_yaml)) {
       const RasterizedCostmap persistent_costmap = loadCostmapArtifacts(persistent_costmap_yaml);
+      if (!promote_runtime_costmap && runtime_costmap.georeference_valid &&
+        !persistent_costmap.georeference_valid)
+      {
+        promote_runtime_costmap = true;
+        RCLCPP_WARN(
+          get_logger(),
+          "Promoting georeferenced runtime costmap %s into non-georeferenced persistent startup artifact %s despite mission outcome '%s'.",
+          runtime_costmap_yaml.string().c_str(),
+          persistent_costmap_yaml.string().c_str(),
+          normalized_outcome.c_str());
+      }
+      if (!promote_runtime_costmap) {
+        return;
+      }
       merged_costmap = mergeCostmaps(persistent_costmap, runtime_costmap);
+    } else if (!promote_runtime_costmap && runtime_costmap.georeference_valid) {
+      promote_runtime_costmap = true;
+      RCLCPP_WARN(
+        get_logger(),
+        "Promoting georeferenced runtime costmap %s into missing persistent startup artifact %s despite mission outcome '%s'.",
+        runtime_costmap_yaml.string().c_str(),
+        persistent_costmap_yaml.string().c_str(),
+        normalized_outcome.c_str());
+    }
+    if (!promote_runtime_costmap) {
+      return;
     }
     saveCostmapArtifacts(merged_costmap, persistent_costmap_image, persistent_costmap_yaml);
     context_document["persistent_mission_costmap_yaml"] = persistent_costmap_yaml.string();
