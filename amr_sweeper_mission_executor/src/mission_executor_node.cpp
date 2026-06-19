@@ -2899,14 +2899,14 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
     const RasterizedCostmap source_costmap = loadCostmapArtifacts(mission_costmap_yaml);
     RCLCPP_INFO(
       get_logger(),
-      "Mission startup costmap source %s parsed with georeference_valid=%s resolution=%.3f origin=(%.3f, %.3f) size=%zux%zu samples=%zu.",
+      "Mission startup costmap source %s parsed with georeference_valid=%s resolution=%.3f origin=(%.3f, %.3f) size=%ux%u samples=%zu.",
       mission_costmap_yaml.string().c_str(),
       source_costmap.georeference_valid ? "true" : "false",
       source_costmap.resolution,
       source_costmap.origin_x,
       source_costmap.origin_y,
-      source_costmap.width,
-      source_costmap.height,
+      source_costmap.width_cells,
+      source_costmap.height_cells,
       source_costmap.georeference_sample_count);
     if (!source_costmap.georeference_valid) {
       const auto historical_georeferenced_yaml = findNewestGeoreferencedHistoricalCostmapYaml(
