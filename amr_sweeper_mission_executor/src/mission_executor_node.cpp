@@ -554,6 +554,36 @@ void saveCostmapArtifacts(
   }
 }
 
+void rewriteCostmapYamlImageReference(
+  const std::filesystem::path & yaml_path,
+  const std::filesystem::path & image_path)
+{
+  std::ifstream input_stream(yaml_path);
+  if (!input_stream.is_open()) {
+    throw std::runtime_error("Failed to reopen costmap yaml: " + yaml_path.string());
+  }
+
+  std::ostringstream buffer;
+  buffer << input_stream.rdbuf();
+  std::string yaml_text = buffer.str();
+  const auto image_key = yaml_text.find("image:");
+  if (image_key == std::string::npos) {
+    throw std::runtime_error("Costmap yaml does not contain an image key: " + yaml_path.string());
+  }
+
+  const auto line_end = yaml_text.find('\n', image_key);
+  yaml_text.replace(
+    image_key,
+    (line_end == std::string::npos ? yaml_text.size() : line_end + 1U) - image_key,
+    "image: " + image_path.filename().string() + "\n");
+
+  std::ofstream output_stream(yaml_path, std::ios::trunc);
+  if (!output_stream.is_open()) {
+    throw std::runtime_error("Failed to update costmap yaml: " + yaml_path.string());
+  }
+  output_stream << yaml_text;
+}
+
 RasterizedCostmap loadCostmapArtifacts(const std::filesystem::path & yaml_path)
 {
   std::ifstream yaml_stream(yaml_path);
@@ -3026,6 +3056,7 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
   }
   if (selected_costmap_yaml != history_costmap_yaml) {
     fs::copy_file(selected_costmap_yaml, history_costmap_yaml, fs::copy_options::overwrite_existing);
+    rewriteCostmapYamlImageReference(history_costmap_yaml, history_costmap_image);
   }
   if (selected_costmap_image != history_costmap_image) {
     fs::copy_file(selected_costmap_image, history_costmap_image, fs::copy_options::overwrite_existing);
@@ -3053,6 +3084,7 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
   fs::copy_file(history_mission_file, run_mission_file, fs::copy_options::overwrite_existing);
   fs::copy_file(history_costmap_yaml, run_costmap_yaml, fs::copy_options::overwrite_existing);
   fs::copy_file(history_costmap_image, run_costmap_image, fs::copy_options::overwrite_existing);
+  rewriteCostmapYamlImageReference(run_costmap_yaml, run_costmap_image);
   fs::copy_file(history_route, run_route, fs::copy_options::overwrite_existing);
   fs::create_directories(gaussian_output_directory);
   fs::create_directories(captured_images_directory);
@@ -3559,28 +3591,7 @@ void MissionExecutorNode::writeLatestRecordedMapSnapshot(const nlohmann::json & 
     latest_costmap_image_file,
     std::filesystem::copy_options::overwrite_existing);
 
-  {
-    std::ifstream input_stream(latest_costmap_yaml_file);
-    if (!input_stream.is_open()) {
-      throw std::runtime_error("Failed to reopen latest recorded map costmap yaml");
-    }
-    std::ostringstream buffer;
-    buffer << input_stream.rdbuf();
-    std::string yaml_text = buffer.str();
-    const auto image_key = yaml_text.find("image:");
-    if (image_key != std::string::npos) {
-      const auto line_end = yaml_text.find('\n', image_key);
-      yaml_text.replace(
-        image_key,
-        (line_end == std::string::npos ? yaml_text.size() : line_end + 1U) - image_key,
-        "image: " + latest_costmap_image_file.filename().string() + "\n");
-    }
-    std::ofstream output_stream(latest_costmap_yaml_file, std::ios::trunc);
-    if (!output_stream.is_open()) {
-      throw std::runtime_error("Failed to update latest recorded map costmap yaml");
-    }
-    output_stream << yaml_text;
-  }
+  rewriteCostmapYamlImageReference(latest_costmap_yaml_file, latest_costmap_image_file);
 
   if (!navsat_route_file.empty() && std::filesystem::exists(navsat_route_file)) {
     std::filesystem::copy_file(
