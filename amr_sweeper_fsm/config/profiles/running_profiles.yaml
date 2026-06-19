@@ -269,36 +269,6 @@ profiles:
             sigterm_timeout_ms: 2000
             sigkill_timeout_ms: 2000
 
-        # Logic block: teleop (optional)
-        - name: "teleop"
-          importance: "optional"
-          startup:
-            exec: "ros2 launch amr_sweeper_teleop teleop.launch.py"
-            args:
-              - "namespace:={ns}"
-              - "joy_dev:=/dev/input/js0"
-            ready:
-              - type: "topic"
-                target: "joy"
-                required: false
-            window_ms: 8000
-          rosout_triggers:
-            - "level>=FATAL;action=FAULT"
-            - "level>=ERROR;action=DEGRADED"
-          errors:
-            on_readiness_fail: "DEGRADED"
-            on_unexpected_exit: "DEGRADED"
-            priority: 200
-            force: false
-          restart:
-            max_restarts: 5
-            restart_delay_ms: 1000
-          shutdown:
-            sigint_timeout_ms: 1500
-            sigterm_timeout_ms: 1500
-            sigkill_timeout_ms: 1500
-
-
   # ---------------------------------------------------------------------------
   # Profile 210 (built-in local missions)
   # ---------------------------------------------------------------------------
