@@ -892,7 +892,8 @@ std::filesystem::path MissionParserNode::stageMissionFile(const std::filesystem:
 {
   const MissionIdentity identity = mission_parser_->inspectMissionIdentity(mission_path.string());
   const std::filesystem::path mission_folder = resolveMissionsLogDirectory() / identity.order_id;
-  const std::filesystem::path staged_path = mission_folder / (identity.order_id + mission_file_extension_);
+  const std::filesystem::path staged_path =
+    mission_folder / (identity.order_id + "_vda5050" + mission_file_extension_);
   std::filesystem::create_directories(mission_folder);
 
   if (mission_path == staged_path) {
@@ -1047,7 +1048,7 @@ std::string MissionParserNode::missionStemForPath(const std::filesystem::path & 
 std::string MissionParserNode::coverageBasenameForMission(
   const std::filesystem::path & mission_path) const
 {
-  return missionStemForPath(mission_path) + "_path";
+  return missionStemForPath(mission_path) + "_path_planned";
 }
 
 std::string MissionParserNode::costmapBasenameForMission(

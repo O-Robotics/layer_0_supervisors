@@ -32,16 +32,16 @@ Responsibilities:
 - build VDA5050 mission artifacts on demand when scheduled missions are not ready yet
 - read synced schedules and VDA5050 mission payloads from `/missions/database`
 - prepare mission-specific execution folders before the FSM handoff
-- write execution history under `/missions/logs` using per-run `execution_context.json` files inside each mission folder
+- write execution history under `/missions/logs` using `<mission_id>_vda5050.json`, `<mission_id>_path_planned.geojson`, and per-run `<mission_id>_<run_timestamp>_context.json` files inside each mission folder
 - honor mission start requests with `record_rosbag=true` by launching `ros2 bag record` from layer 0 and saving the bag under `<mission_run_directory>/artifacts/rosbag`
 - publish the most recent completed `RecordMap` output into `/missions/logs/latest_recorded_map/` so operators can reuse or overwrite the latest working-area recording
 - append manual execution entries into the schedule log and stamp scheduled entries with actual start time
 - finalize mission runs with actual end time, outcome, and an FSM return to `IDLING`
-- calculate the traveled-path length from `actual_path.geojson` and append it into mission end metadata
+- calculate the traveled-path length from `<mission_id>_<run_timestamp>_path_actual.geojson` and append it into mission end metadata
 - subscribe to `safety_msgs/stop` and append dedicated `SAFETY` VEVENT log entries into the schedule
 - watch `drive_controller/odom` during teleop missions and `localization/odometry_fused` during manual mapping missions, and automatically end either mission type after 5 minutes without motion
-- record teleop traveled path into the active run folder's `actual_path.geojson`
-- record `RecordMap` GNSS points into `actual_path_navsat.geojson` so the latest perimeter can be previewed on a satellite map
+- record teleop traveled path into the active run folder's `<mission_id>_<run_timestamp>_path_actual.geojson`
+- record `RecordMap` GNSS points into `<mission_id>_<run_timestamp>_path_navsat.geojson` so the latest perimeter can be previewed on a satellite map
 
 Rosbag recording:
 - the topic allowlist lives in `config/record_rosbag.yaml`

@@ -190,8 +190,37 @@ static std::unordered_map<std::string, std::string> load_mission_layer_overrides
     return overrides;
   }
 
-  const std::filesystem::path context_path =
-    std::filesystem::path(mission_execution_directory) / "execution_context.json";
+  std::filesystem::path context_path;
+  const auto execution_directory = std::filesystem::path(mission_execution_directory);
+  const auto legacy_context_path = execution_directory / "execution_context.json";
+  if (std::filesystem::exists(legacy_context_path)) {
+    context_path = legacy_context_path;
+  } else {
+    std::error_code error;
+    for (std::filesystem::directory_iterator iterator(
+           execution_directory,
+           std::filesystem::directory_options::skip_permission_denied,
+           error);
+         iterator != std::filesystem::directory_iterator();
+         iterator.increment(error))
+    {
+      if (error) {
+        error.clear();
+        continue;
+      }
+      if (!iterator->is_regular_file(error)) {
+        error.clear();
+        continue;
+      }
+      const auto filename = iterator->path().filename().string();
+      if (filename.size() > std::string("_context.json").size() &&
+        filename.compare(filename.size() - 13U, 13U, "_context.json") == 0)
+      {
+        context_path = iterator->path();
+        break;
+      }
+    }
+  }
   if (!std::filesystem::exists(context_path)) {
     return overrides;
   }

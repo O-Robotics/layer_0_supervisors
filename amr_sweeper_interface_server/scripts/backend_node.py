@@ -103,6 +103,12 @@ def _existing_paths(candidates: list[Path]) -> list[Path]:
     return [path for path in candidates if path.exists()]
 
 
+def _execution_context_candidates(missions_log_directory: Path) -> list[Path]:
+    candidates = list(missions_log_directory.rglob("*_context.json"))
+    legacy_candidates = list(missions_log_directory.rglob("execution_context.json"))
+    return sorted({*candidates, *legacy_candidates})
+
+
 def _escape_ics_text(value: str) -> str:
     return (
         str(value)
@@ -826,7 +832,7 @@ class MissionBackendNode(Node):
         selected: dict[str, Any] | None = None
         selected_run_started_at = ""
         try:
-            candidates = missions_log_directory.rglob("execution_context.json")
+            candidates = _execution_context_candidates(missions_log_directory)
         except Exception as exc:  # noqa: BLE001
             return {"error": f"Failed to scan execution contexts: {exc}", "path": str(missions_log_directory)}
 
@@ -1555,7 +1561,7 @@ class MissionBackendNode(Node):
             route_geojson = None
             route_path = mission_file.parent / f"{mission_id}_path.geojson"
             if not route_path.exists():
-                route_path = missions_log_directory / mission_id / f"{mission_id}_path.geojson"
+                route_path = missions_log_directory / mission_id / f"{mission_id}_path_planned.geojson"
             if route_path.exists():
                 route_geojson = self._load_geojson_feature_collection(route_path)
             elif document is not None:
