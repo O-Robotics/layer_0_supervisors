@@ -437,13 +437,13 @@ RasterizedMap Vda5050MissionParser::buildGlobalCostmap(
     result.georeference_source_crs = "EPSG:4326";
     result.georeference_sample_count = 3U;
     result.longitude_coefficients = {
-      longitude_at_origin,
       longitude_at_unit_x - longitude_at_origin,
-      longitude_at_unit_y - longitude_at_origin};
+      longitude_at_unit_y - longitude_at_origin,
+      longitude_at_origin};
     result.latitude_coefficients = {
-      latitude_at_origin,
       latitude_at_unit_x - latitude_at_origin,
-      latitude_at_unit_y - latitude_at_origin};
+      latitude_at_unit_y - latitude_at_origin,
+      latitude_at_origin};
   }
 
   return result;
