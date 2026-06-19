@@ -287,19 +287,16 @@ profiles:
               - "test_output_directory:={test_output_directory}"
             ready:
               - type: "topic"
-                target: "odometry/fused"
-                required: true
-              - type: "topic"
-                target: "pose"
+                target: "localization/odometry_fused"
                 required: true
               - type: "lifecycle"
                 target: "fusioncore"
                 required: true
               - type: "lifecycle"
-                target: "slam_toolbox"
+                target: "controller_server"
                 required: true
               - type: "lifecycle"
-                target: "controller_server"
+                target: "smoother_server"
                 required: true
               - type: "lifecycle"
                 target: "planner_server"
@@ -310,17 +307,11 @@ profiles:
               - type: "lifecycle"
                 target: "waypoint_follower"
                 required: true
-              - type: "lifecycle"
-                target: "velocity_smoother"
+              - type: "service"
+                target: "gaussian_node/get_parameters"
                 required: true
               - type: "service"
-                target: "amr_sweeper_slam_node/get_parameters"
-                required: true
-              - type: "service"
-                target: "amr_sweeper_gaussian_node/get_parameters"
-                required: true
-              - type: "service"
-                target: "amr_sweeper_mapping_node/get_parameters"
+                target: "mapping_node/get_parameters"
                 required: true
               - type: "topic"
                 target: "mapping/status"
@@ -725,19 +716,16 @@ profiles:
               - "test_output_directory:={test_output_directory}"
             ready:
               - type: "topic"
-                target: "odometry/fused"
-                required: true
-              - type: "topic"
-                target: "pose"
+                target: "localization/odometry_fused"
                 required: true
               - type: "lifecycle"
                 target: "fusioncore"
                 required: true
               - type: "lifecycle"
-                target: "slam_toolbox"
+                target: "controller_server"
                 required: true
               - type: "lifecycle"
-                target: "controller_server"
+                target: "smoother_server"
                 required: true
               - type: "lifecycle"
                 target: "planner_server"
@@ -748,17 +736,11 @@ profiles:
               - type: "lifecycle"
                 target: "waypoint_follower"
                 required: true
-              - type: "lifecycle"
-                target: "velocity_smoother"
+              - type: "service"
+                target: "gaussian_node/get_parameters"
                 required: true
               - type: "service"
-                target: "amr_sweeper_slam_node/get_parameters"
-                required: true
-              - type: "service"
-                target: "amr_sweeper_gaussian_node/get_parameters"
-                required: true
-              - type: "service"
-                target: "amr_sweeper_mapping_node/get_parameters"
+                target: "mapping_node/get_parameters"
                 required: true
               - type: "topic"
                 target: "mapping/status"
