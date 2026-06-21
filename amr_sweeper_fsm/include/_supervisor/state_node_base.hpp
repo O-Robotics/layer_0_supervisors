@@ -117,6 +117,10 @@ class StateNodeBase : public rclcpp_lifecycle::LifecycleNode
 public:
   explicit StateNodeBase(const std::string & node_name, const rclcpp::NodeOptions & options);
 
+  // Best-effort explicit teardown hook for process exits such as Ctrl+C where
+  // lifecycle transitions may be bypassed by the launcher.
+  void stop_managed_processes_for_exit();
+
 protected:
   // ----- Lifecycle callbacks (shared wiring for all states) -----
 

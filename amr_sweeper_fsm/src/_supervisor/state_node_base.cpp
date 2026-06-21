@@ -1282,6 +1282,13 @@ StateNodeBase::on_error(const rclcpp_lifecycle::State &)
   return LifecycleNodeInterface::CallbackReturn::SUCCESS;
 }
 
+void StateNodeBase::stop_managed_processes_for_exit()
+{
+  rosout_sub_.reset();
+  stop_process_monitoring_();
+  stop_state_processes();
+}
+
 // ---------- Ready gating ----------
 
 std::string StateNodeBase::qualify_to_ns(const std::string & maybe_relative) const

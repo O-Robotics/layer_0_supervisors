@@ -13,6 +13,7 @@ int main(int argc, char ** argv)
   exec.add_node(node->get_node_base_interface());
   exec.spin();
 
+  node->stop_managed_processes_for_exit();
   rclcpp::shutdown();
   return 0;
 }
