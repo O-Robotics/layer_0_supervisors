@@ -48,9 +48,11 @@ topics:
   - /amr_sweeper/localization/odometry_fused
   - /amr_sweeper/mapping/gaussian/world_points
   - /amr_sweeper/mapping/gaussian/status
-  - /amr_sweeper/mapping/local_costmap
   - /amr_sweeper/mapping/global_costmap
-  - /amr_sweeper/mapping/local_costmap_metadata
+  - /amr_sweeper/local_costmap/costmap_raw
+  - /amr_sweeper/local_costmap/costmap_updates
+  - /amr_sweeper/global_costmap/costmap_raw
+  - /amr_sweeper/global_costmap/costmap_updates
   - /amr_sweeper/mapping/waypoint_path
   - /amr_sweeper/mapping/status
   - /amr_sweeper/navigation/bt_navigator/goal_pose

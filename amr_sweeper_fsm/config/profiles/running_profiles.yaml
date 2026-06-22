@@ -226,7 +226,7 @@ profiles:
                 target: "mapping/global_costmap"
                 required: true
               - type: "topic"
-                target: "mapping/local_costmap"
+                target: "local_costmap/costmap_raw"
                 required: true
               - type: "lifecycle"
                 target: "fusioncore"
@@ -475,7 +475,7 @@ profiles:
                 target: "mapping/global_costmap"
                 required: true
               - type: "topic"
-                target: "mapping/local_costmap"
+                target: "local_costmap/costmap_raw"
                 required: true
               - type: "lifecycle"
                 target: "fusioncore"
@@ -763,7 +763,7 @@ profiles:
                 target: "mapping/global_costmap"
                 required: true
               - type: "topic"
-                target: "mapping/local_costmap"
+                target: "local_costmap/costmap_raw"
                 required: true
               - type: "lifecycle"
                 target: "fusioncore"
@@ -1051,7 +1051,7 @@ profiles:
                 target: "mapping/global_costmap"
                 required: true
               - type: "topic"
-                target: "mapping/local_costmap"
+                target: "local_costmap/costmap_raw"
                 required: true
               - type: "lifecycle"
                 target: "fusioncore"
@@ -1521,7 +1521,7 @@ profiles:
                 target: "mapping/global_costmap"
                 required: true
               - type: "topic"
-                target: "mapping/local_costmap"
+                target: "local_costmap/costmap_raw"
                 required: true
             window_ms: 45000
           rosout_triggers:
