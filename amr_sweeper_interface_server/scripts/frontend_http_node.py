@@ -3362,7 +3362,7 @@ def main(args: list[str] | None = None) -> int:
         node.stop_http_server()
         executor.shutdown()
         node.destroy_node()
-        rclpy.shutdown()
+        rclpy.try_shutdown()
         spin_thread.join(timeout=2.0)
     return 0
 
