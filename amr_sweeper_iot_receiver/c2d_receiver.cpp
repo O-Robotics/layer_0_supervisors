@@ -357,7 +357,7 @@ IOTHUBMESSAGE_DISPOSITION_RESULT on_message_received(IOTHUB_MESSAGE_HANDLE messa
     } else {
       std::cout << "Message detected as mission." << std::endl;
       status_message = kMissionReceivedStatus;
-      write_message_file(*mission_id, content);
+      write_message_file(*mission_id +".json", content);
     }
 
     send_status_message(receiver_context->device_client, status_message);
