@@ -5,6 +5,7 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -500,6 +501,7 @@ void Vda5050MissionParser::saveGlobalCostmapArtifacts(
   }
 
   std::ofstream yaml_stream(yaml_path);
+  yaml_stream << std::setprecision(std::numeric_limits<double>::max_digits10);
   yaml_stream
     << "image: " << fs::path(image_path).filename().string() << "\n"
     << "resolution: " << map.resolution << "\n"

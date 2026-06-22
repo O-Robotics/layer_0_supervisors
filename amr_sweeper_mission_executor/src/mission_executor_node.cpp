@@ -526,6 +526,7 @@ void saveCostmapArtifacts(
   if (!yaml_stream.is_open()) {
     throw std::runtime_error("Failed to write RecordMap costmap yaml: " + yaml_path.string());
   }
+  yaml_stream << std::setprecision(std::numeric_limits<double>::max_digits10);
   yaml_stream
     << "image: " << image_path.filename().string() << "\n"
     << "resolution: " << map.resolution << "\n"
