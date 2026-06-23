@@ -23,6 +23,7 @@ topics:
   - /amr_sweeper/imu/data_heading
   - /amr_sweeper/imu/data_raw
   - /amr_sweeper/gnss/navsat
+  - /amr_sweeper/gnss/fix
   - /amr_sweeper/gnss/ntrip_client/rtcm
   - /amr_sweeper/system_info/system_info
 
@@ -44,8 +45,11 @@ topics:
   - /amr_sweeper/tool_controller/commands
 
 # Layer 3 Navigation topics can still be recorded when those nodes are active.
-  - /amr_sweeper/localization/fusioncore/transition_event
+  - /amr_sweeper/localization/fusioncore/transition_event 
   - /amr_sweeper/localization/odometry_fused
+  - /amr_sweeper/localization/pose
+  - /amr_sweeper/localization/debug/filter_health
+  - /amr_sweeper/localization/debug/gnss_status
   - /amr_sweeper/mapping/gaussian/world_points
   - /amr_sweeper/mapping/gaussian/status
   - /amr_sweeper/mapping/global_costmap
