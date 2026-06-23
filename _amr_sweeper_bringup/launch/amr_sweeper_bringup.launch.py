@@ -64,6 +64,21 @@ def _build_rosbag_regex(topics: list[str]) -> str:
     return "^(" + "|".join(escaped_topics) + ")$"
 
 
+def _write_runtime_rosbag_qos_overrides(rosbag_output_directory: str) -> str:
+    overrides_path = os.path.join(
+        rosbag_output_directory,
+        "rosbag_runtime_qos_overrides.yaml",
+    )
+    with open(overrides_path, "w", encoding="utf-8") as stream:
+        stream.write(
+            "/amr_sweeper/depth_camera/scan:\n"
+            "  reliability: best_effort\n"
+            "  history: keep_last\n"
+            "  depth: 5\n"
+        )
+    return overrides_path
+
+
 def _start_bringup_rosbag(context, *args, **kwargs):
     del args, kwargs
 
@@ -76,8 +91,6 @@ def _start_bringup_rosbag(context, *args, **kwargs):
     )
     use_profile = LaunchConfiguration("use_profile").perform(context)
     rosbag_topics_file = LaunchConfiguration("rosbag_topics_file").perform(context)
-    rosbag_qos_overrides_path = LaunchConfiguration("rosbag_qos_overrides_path").perform(context)
-
     mission_id = f"amr_sweeper_bringup_profile_{use_profile}"
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     rosbag_output_directory = os.path.join(
@@ -101,6 +114,7 @@ def _start_bringup_rosbag(context, *args, **kwargs):
         ]
 
     rosbag_regex = _build_rosbag_regex(topics)
+    rosbag_qos_overrides_path = _write_runtime_rosbag_qos_overrides(rosbag_output_directory)
     return [
         LogInfo(msg=f"[amr_sweeper_bringup] Recording rosbag under {rosbag_output_directory}"),
         ExecuteProcess(
@@ -171,7 +185,6 @@ def generate_launch_description():
     test_schedule_ics_path = LaunchConfiguration("test_schedule_ics_path")
     record_rosbag = LaunchConfiguration("record_rosbag")
     rosbag_topics_file = LaunchConfiguration("rosbag_topics_file")
-    rosbag_qos_overrides_path = LaunchConfiguration("rosbag_qos_overrides_path")
     mission_file_extension = LaunchConfiguration("mission_file_extension")
     mission_executor_execute_service = LaunchConfiguration("mission_executor_execute_service")
     mission_executor_prepare_service = LaunchConfiguration("mission_executor_prepare_service")
@@ -198,11 +211,6 @@ def generate_launch_description():
     default_manual_missions_directory = PathJoinSubstitution([
         FindPackageShare("amr_sweeper_navigation"),
         "missions",
-    ])
-    default_rosbag_qos_overrides_path = PathJoinSubstitution([
-        FindPackageShare("amr_sweeper_bringup"),
-        "config",
-        "rosbag_qos_overrides.yaml",
     ])
     effective_schedule_ics_path = PythonExpression([
         '"', test_schedule_ics_path, '" if ("', use_test, '" == "true" and "', schedule_ics_path,
@@ -264,10 +272,6 @@ def generate_launch_description():
             default_value=PathJoinSubstitution(
                 [FindPackageShare("amr_sweeper_mission_executor"), "config", "record_rosbag.yaml"]
             ),
-        ),
-        DeclareLaunchArgument(
-            "rosbag_qos_overrides_path",
-            default_value=default_rosbag_qos_overrides_path,
         ),
         DeclareLaunchArgument("mission_file_extension", default_value=".json"),
         DeclareLaunchArgument("mission_executor_execute_service", default_value="execute_mission"),

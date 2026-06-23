@@ -225,6 +225,8 @@ private:
   std::vector<geometry_msgs::msg::Point> manual_mapping_navsat_points_;
   pid_t rosbag_recording_pid_{-1};
   std::string active_rosbag_output_directory_;
+  std::string active_rosbag_context_file_;
+  std::string active_rosbag_log_file_;
   bool routed_mission_pose_ready_{false};
   geometry_msgs::msg::Point routed_mission_position_;
   geometry_msgs::msg::Quaternion routed_mission_orientation_;

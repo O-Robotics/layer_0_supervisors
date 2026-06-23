@@ -1,4 +1,0 @@
-/amr_sweeper/depth_camera/scan:
-  reliability: best_effort
-  history: keep_last
-  depth: 5

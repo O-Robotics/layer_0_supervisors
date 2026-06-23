@@ -46,6 +46,7 @@ topics:
 
 # Layer 3 Navigation topics can still be recorded when those nodes are active.
   - /amr_sweeper/localization/fusioncore/transition_event 
+  - /amr_sweeper/localization/odometry_body
   - /amr_sweeper/localization/odometry_fused
   - /amr_sweeper/localization/pose
   - /amr_sweeper/localization/debug/filter_health
@@ -55,8 +56,10 @@ topics:
   - /amr_sweeper/mapping/global_costmap
   - /amr_sweeper/local_costmap/costmap_raw
   - /amr_sweeper/local_costmap/costmap_updates
+  - /amr_sweeper/local_costmap/published_footprint
   - /amr_sweeper/global_costmap/costmap_raw
   - /amr_sweeper/global_costmap/costmap_updates
+  - /amr_sweeper/global_costmap/published_footprint
   - /amr_sweeper/mapping/waypoint_path
   - /amr_sweeper/mapping/status
   - /amr_sweeper/navigation/bt_navigator/goal_pose
