@@ -227,9 +227,6 @@ profiles:
                 target: "attitude_controller/roll_pitch"
                 required: true
               - type: "topic"
-                target: "attitude_controller/joint_states"
-                required: true
-              - type: "topic"
                 target: "drive_controller/odom"
                 required: true
               - type: "topic"
@@ -654,9 +651,6 @@ profiles:
                 required: true
               - type: "topic"
                 target: "attitude_controller/roll_pitch"
-                required: true
-              - type: "topic"
-                target: "attitude_controller/joint_states"
                 required: true
               - type: "topic"
                 target: "drive_controller/odom"
