@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import errno
 import json
+import socket
 import threading
 import urllib.parse
 from html import escape
@@ -237,45 +238,83 @@ class MissionFrontendHttpNode(MissionBackendNode):
 
             def _send_html(self, body: str) -> None:
                 encoded = body.encode("utf-8")
-                self.send_response(HTTPStatus.OK)
-                self.send_header("Content-Type", "text/html; charset=utf-8")
-                self.send_header("Content-Length", str(len(encoded)))
-                self.end_headers()
-                self.wfile.write(encoded)
+                self._send_bytes(
+                    HTTPStatus.OK,
+                    encoded,
+                    {
+                        "Content-Type": "text/html; charset=utf-8",
+                        "Content-Length": str(len(encoded)),
+                    },
+                )
 
             def _send_json(self, status: HTTPStatus, payload: dict[str, Any]) -> None:
                 encoded = json.dumps(payload).encode("utf-8")
-                self.send_response(status)
-                self.send_header("Content-Type", "application/json; charset=utf-8")
-                self.send_header("Cache-Control", "no-store")
-                self.send_header("Content-Length", str(len(encoded)))
-                self.end_headers()
-                self.wfile.write(encoded)
+                self._send_bytes(
+                    status,
+                    encoded,
+                    {
+                        "Content-Type": "application/json; charset=utf-8",
+                        "Cache-Control": "no-store",
+                        "Content-Length": str(len(encoded)),
+                    },
+                )
 
             def _send_file(self, path: Path, content_type: str) -> None:
                 if not path.exists() or not path.is_file():
                     self._send_json(HTTPStatus.NOT_FOUND, {"success": False, "message": "Asset not found"})
                     return
                 encoded = path.read_bytes()
-                self.send_response(HTTPStatus.OK)
-                self.send_header("Content-Type", content_type)
-                self.send_header("Cache-Control", "public, max-age=3600")
-                self.send_header("Content-Length", str(len(encoded)))
-                self.end_headers()
-                self.wfile.write(encoded)
+                self._send_bytes(
+                    HTTPStatus.OK,
+                    encoded,
+                    {
+                        "Content-Type": content_type,
+                        "Cache-Control": "public, max-age=3600",
+                        "Content-Length": str(len(encoded)),
+                    },
+                )
 
             def _send_download(self, path: Path, content_type: str) -> None:
                 if not path.exists() or not path.is_file():
                     self._send_json(HTTPStatus.NOT_FOUND, {"success": False, "message": "Mission file not found"})
                     return
                 encoded = path.read_bytes()
-                self.send_response(HTTPStatus.OK)
-                self.send_header("Content-Type", content_type)
-                self.send_header("Cache-Control", "no-store")
-                self.send_header("Content-Length", str(len(encoded)))
-                self.send_header("Content-Disposition", f'attachment; filename="{path.name}"')
-                self.end_headers()
-                self.wfile.write(encoded)
+                self._send_bytes(
+                    HTTPStatus.OK,
+                    encoded,
+                    {
+                        "Content-Type": content_type,
+                        "Cache-Control": "no-store",
+                        "Content-Length": str(len(encoded)),
+                        "Content-Disposition": f'attachment; filename="{path.name}"',
+                    },
+                )
+
+            def _send_bytes(
+                self,
+                status: HTTPStatus,
+                body: bytes,
+                headers: dict[str, str],
+            ) -> None:
+                self.send_response(status)
+                for key, value in headers.items():
+                    self.send_header(key, value)
+                try:
+                    self.end_headers()
+                    self.wfile.write(body)
+                except OSError as exc:
+                    if self._is_client_disconnect(exc):
+                        node.get_logger().debug(
+                            f"HTTP client disconnected before response completed: {exc}"
+                        )
+                        return
+                    raise
+
+            @staticmethod
+            def _is_client_disconnect(exc: OSError) -> bool:
+                return isinstance(exc, (BrokenPipeError, ConnectionResetError, socket.timeout)) or (
+                    exc.errno in {errno.EPIPE, errno.ECONNRESET, errno.ECONNABORTED}
+                )
 
         return MissionWebRequestHandler
 
