@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import errno
+import re
 import threading
+import time
 import urllib.parse
 import calendar
 from datetime import datetime, timedelta, timezone
@@ -91,6 +93,8 @@ MISSION_LAYER_OVERRIDE_FALLBACKS = {
     "auto_start_mission": True,
 }
 
+ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*m")
+
 
 def _resolve_path(configured_path: str) -> Path:
     path = Path(configured_path).expanduser()
@@ -160,10 +164,71 @@ def _parse_transition_completion_message(message: str) -> tuple[str, int] | None
     return state, profile
 
 
+def _strip_ansi_text(message: str) -> str:
+    if not isinstance(message, str):
+        return ""
+    return ANSI_ESCAPE_RE.sub("", message)
+
+
+def _parse_started_command_from_log(message: str) -> str | None:
+    normalized = _strip_ansi_text(message).strip()
+    prefix = "Started: "
+    if not normalized.startswith(prefix):
+        return None
+    command = normalized[len(prefix):].strip()
+    return command or None
+
+
+def _parse_command_launch_arg(command: str, key: str) -> str | None:
+    prefix = f"{key}:="
+    for token in str(command).split():
+        if token.startswith(prefix):
+            return token[len(prefix):]
+    return None
+
+
+def _parse_command_launch_bool(command: str, key: str, default: bool) -> bool:
+    value = _parse_command_launch_arg(command, key)
+    if value is None:
+        return default
+    parsed = _coerce_bool_value(value)
+    return default if parsed is None else parsed
+
+
+def _parse_command_launch_float(command: str, key: str, default: float) -> float:
+    value = _parse_command_launch_arg(command, key)
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _layer3_transition_progress_steps_from_command(command: str) -> list[tuple[float, str]]:
+    steps: list[tuple[float, str]] = []
+    if _parse_command_launch_bool(command, "use_amr_sweeper_localization", True):
+        steps.append((0.0, "Starting Localization"))
+    if _parse_command_launch_bool(command, "use_amr_sweeper_mapping", True):
+        steps.append((
+            max(0.0, _parse_command_launch_float(command, "mapping_startup_delay_sec", 0.0)),
+            "Starting Mapping",
+        ))
+    if _parse_command_launch_bool(command, "use_amr_sweeper_navigation", True):
+        navigation_delay_sec = _parse_command_launch_float(command, "navigation_startup_delay_sec", 3.0)
+        waypoint_delay_sec = _parse_command_launch_float(command, "waypoint_follower_startup_delay_sec", 3.0)
+        if navigation_delay_sec == 3.0 and waypoint_delay_sec != 3.0:
+            navigation_delay_sec = waypoint_delay_sec
+        if navigation_delay_sec == 3.0:
+            navigation_delay_sec = 5.0
+        steps.append((max(0.0, navigation_delay_sec), "Starting Navigation"))
+    return sorted(steps, key=lambda item: item[0])
+
+
 def _transition_progress_message_from_log(message: str) -> str | None:
     if not isinstance(message, str):
         return None
-    normalized = message.strip()
+    normalized = _strip_ansi_text(message).strip()
     if normalized == "Critical profile process ready: amr_sweeper_layer_1_hardware_bringup":
         return "Hardware ready"
     if normalized == "Critical profile process ready: amr_sweeper_layer_2_controllers_bringup":
@@ -386,6 +451,8 @@ class MissionBackendNode(Node):
         self._display_fsm_profile: int | None = None
         self._display_transition_active = False
         self._display_transition_progress = ""
+        self._scheduled_transition_progress_steps: list[tuple[float, str]] = []
+        self._scheduled_transition_progress_started_at: float | None = None
 
         self.create_subscription(FSMState, self._fsm_state_topic, self._handle_fsm_state, 10)
         self.create_subscription(FSMStatus, self._fsm_status_topic, self._handle_fsm_status, 10)
@@ -433,6 +500,7 @@ class MissionBackendNode(Node):
             target_profile = int(message.transitioning_to_profile)
             if transition_status == "TRANSITIONING":
                 self._display_transition_active = True
+                self._refresh_scheduled_transition_progress_locked()
                 if not self._display_transition_progress:
                     self._display_transition_progress = "Transition in progress"
             else:
@@ -444,6 +512,7 @@ class MissionBackendNode(Node):
                     self._display_fsm_state = message.current_state
                     self._display_fsm_profile = current_profile
                     self._display_transition_progress = ""
+                    self._clear_scheduled_transition_progress_locked()
             if transition_status == "TRANSITIONING" and target_profile == current_profile:
                 self._display_transition_progress = "Transition in progress"
             if current_state != "RUNNING":
@@ -488,8 +557,11 @@ class MissionBackendNode(Node):
 
     def _handle_rosout(self, message: Log) -> None:
         completion = _parse_transition_completion_message(message.msg)
+        started_command = _parse_started_command_from_log(message.msg)
         progress = _transition_progress_message_from_log(message.msg)
         with self._state_lock:
+            if started_command and self._display_transition_active:
+                self._handle_started_command_progress_locked(started_command)
             if progress and self._display_transition_active:
                 self._display_transition_progress = progress
             if completion is not None:
@@ -498,6 +570,7 @@ class MissionBackendNode(Node):
                 self._display_fsm_profile = completed_profile
                 self._display_transition_active = False
                 self._display_transition_progress = ""
+                self._clear_scheduled_transition_progress_locked()
         if int(message.level) < int(Log.WARN):
             return
         with self._state_lock:
@@ -741,6 +814,7 @@ class MissionBackendNode(Node):
 
     def status_snapshot(self) -> dict[str, Any]:
         with self._state_lock:
+            self._refresh_scheduled_transition_progress_locked()
             fsm_state = dict(self._latest_fsm_state) if self._latest_fsm_state is not None else None
             fsm_status = dict(self._latest_fsm_status) if self._latest_fsm_status is not None else None
             navsat = dict(self._latest_navsat) if self._latest_navsat is not None else None
@@ -781,6 +855,41 @@ class MissionBackendNode(Node):
             "active_execution": active_execution,
             "recent_logs": recent_logs,
         }
+
+    def _handle_started_command_progress_locked(self, command: str) -> None:
+        if "ros2 launch amr_sweeper_layer_1_hardware_bringup " in command:
+            self._clear_scheduled_transition_progress_locked()
+            self._display_transition_progress = "Starting Hardware"
+            return
+        if "ros2 launch amr_sweeper_layer_2_controllers_bringup " in command:
+            self._clear_scheduled_transition_progress_locked()
+            self._display_transition_progress = "Starting Controllers"
+            return
+        if "ros2 launch amr_sweeper_layer_3_navigation_bringup " in command:
+            self._scheduled_transition_progress_steps = _layer3_transition_progress_steps_from_command(command)
+            self._scheduled_transition_progress_started_at = time.monotonic()
+            self._refresh_scheduled_transition_progress_locked()
+
+    def _refresh_scheduled_transition_progress_locked(self) -> None:
+        if (
+            not self._display_transition_active or
+            not self._scheduled_transition_progress_steps or
+            self._scheduled_transition_progress_started_at is None
+        ):
+            return
+        elapsed_sec = max(0.0, time.monotonic() - self._scheduled_transition_progress_started_at)
+        latest_label: str | None = None
+        for offset_sec, label in self._scheduled_transition_progress_steps:
+            if elapsed_sec >= offset_sec:
+                latest_label = label
+            else:
+                break
+        if latest_label:
+            self._display_transition_progress = latest_label
+
+    def _clear_scheduled_transition_progress_locked(self) -> None:
+        self._scheduled_transition_progress_steps = []
+        self._scheduled_transition_progress_started_at = None
 
     def _safety_clear_delay_remaining_seconds(self, safety_status: dict[str, Any] | None = None) -> float:
         if safety_status is None:
