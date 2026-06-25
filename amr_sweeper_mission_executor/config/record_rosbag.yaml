@@ -19,6 +19,7 @@ topics:
   - /amr_sweeper/depth_camera/depth/color/points
   - /amr_sweeper/depth_camera/motion/sample
   - /amr_sweeper/description/robot_description
+  - /amr_sweeper/imu/azimuth
   - /amr_sweeper/imu/data_acc_gyro
   - /amr_sweeper/imu/data_heading
   - /amr_sweeper/imu/data_raw
