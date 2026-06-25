@@ -3380,13 +3380,30 @@ class MissionFrontendHttpNode(MissionBackendNode):
 """
 
 
+def _spin_executor(executor: MultiThreadedExecutor, node: MissionFrontendHttpNode) -> None:
+    try:
+        executor.spin()
+    except KeyboardInterrupt:
+        return
+    except AttributeError as exc:
+        if not rclpy.ok():
+            node.get_logger().debug(f"Suppressing executor shutdown race during Ctrl-C: {exc}")
+            return
+        raise
+    except Exception as exc:  # noqa: BLE001
+        if not rclpy.ok():
+            node.get_logger().debug(f"Suppressing executor exception during shutdown: {exc}")
+            return
+        raise
+
+
 def main(args: list[str] | None = None) -> int:
     rclpy.init(args=args)
     node = MissionFrontendHttpNode()
     executor = MultiThreadedExecutor()
     executor.add_node(node)
 
-    spin_thread = threading.Thread(target=executor.spin, daemon=True)
+    spin_thread = threading.Thread(target=_spin_executor, args=(executor, node), daemon=True)
     spin_thread.start()
 
     try:
@@ -3400,9 +3417,9 @@ def main(args: list[str] | None = None) -> int:
     finally:
         node.stop_http_server()
         executor.shutdown()
+        spin_thread.join(timeout=2.0)
         node.destroy_node()
         rclpy.try_shutdown()
-        spin_thread.join(timeout=2.0)
     return 0
 
 
