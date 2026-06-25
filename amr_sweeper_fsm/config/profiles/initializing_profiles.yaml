@@ -280,6 +280,7 @@ profiles:
               - "use_amr_sweeper_mapping:=true"
               - "use_amr_sweeper_navigation:=true"
               - "auto_start_mission:=false"
+              - "run_layer_3_system_check:=true"
               - "use_test:={use_test}"
               - "test_output_directory:={test_output_directory}"
             ready:
@@ -311,9 +312,12 @@ profiles:
                 target: "mapping_node/get_parameters"
                 required: true
               - type: "topic"
+                target: "layer_3/system_check_passed"
+                required: true
+              - type: "topic"
                 target: "mapping/status"
                 required: true
-            window_ms: 45000
+            window_ms: 90000
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "level>=ERROR;action=FAULT"
@@ -581,6 +585,7 @@ profiles:
               - "use_amr_sweeper_mapping:=true"
               - "use_amr_sweeper_navigation:=true"
               - "auto_start_mission:=false"
+              - "run_layer_3_system_check:=true"
               - "use_test:={use_test}"
               - "test_output_directory:={test_output_directory}"
             ready:
@@ -612,9 +617,12 @@ profiles:
                 target: "mapping_node/get_parameters"
                 required: true
               - type: "topic"
+                target: "layer_3/system_check_passed"
+                required: true
+              - type: "topic"
                 target: "mapping/status"
                 required: true
-            window_ms: 45000
+            window_ms: 90000
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "level>=ERROR;action=FAULT"
@@ -891,6 +899,7 @@ profiles:
               - "use_amr_sweeper_mapping:=true"
               - "use_amr_sweeper_navigation:=true"
               - "auto_start_mission:=false"
+              - "run_layer_3_system_check:=true"
               - "use_test:={use_test}"
               - "test_output_directory:={test_output_directory}"
             ready:
@@ -922,9 +931,12 @@ profiles:
                 target: "mapping_node/get_parameters"
                 required: true
               - type: "topic"
+                target: "layer_3/system_check_passed"
+                required: true
+              - type: "topic"
                 target: "mapping/status"
                 required: true
-            window_ms: 45000
+            window_ms: 90000
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "level>=ERROR;action=FAULT"

@@ -1430,6 +1430,8 @@ amr_sweeper_fsm::msg::FSMStatus SupervisorNode::build_status_payload(const Statu
 
 void SupervisorNode::tick()
 {
+  bool clamp_motion = true;
+
   // Decide what operation to run (start state machine) under lock.
   {
     std::lock_guard<std::mutex> lk(mtx_);
@@ -1458,6 +1460,17 @@ void SupervisorNode::tick()
         }
       }
     }
+
+    // INITIALIZING system-check profiles may energize the stack, but they
+    // should still hold the motion path at zero while they validate bringup.
+    clamp_motion = (
+      current_state_ == FSMState::INITIALIZING &&
+      desired_state_ == FSMState::INITIALIZING &&
+      op_phase_ == OpPhase::IDLE);
+  }
+
+  if (clamp_motion) {
+    publish_immediate_stop_commands();
   }
 
   // Schedule exactly one lifecycle action if needed.
