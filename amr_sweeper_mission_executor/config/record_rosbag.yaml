@@ -62,6 +62,7 @@ topics:
   - /amr_sweeper/global_costmap/costmap_updates
   - /amr_sweeper/global_costmap/published_footprint
   - /amr_sweeper/mapping/waypoint_path
+  - /amr_sweeper/mapping/map_pose_status
   - /amr_sweeper/mapping/status
   - /amr_sweeper/navigation/bt_navigator/goal_pose
   - /amr_sweeper/navigation/bt_navigator/transition_event
