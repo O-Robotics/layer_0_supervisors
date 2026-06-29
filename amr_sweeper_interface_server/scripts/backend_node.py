@@ -1003,9 +1003,13 @@ class MissionBackendNode(Node):
                 return path
 
         missions_log_directory = _resolve_path(self._missions_log_directory)
-        fixed_path = missions_log_directory / "actual_schedule.ics"
+        fixed_path = missions_log_directory / "simulation_schedule.ics"
         if fixed_path.exists():
             return fixed_path
+
+        legacy_path = missions_log_directory / "actual_schedule.ics"
+        if legacy_path.exists():
+            return legacy_path
         return None
 
     def _robot_timezone_name(self) -> str:

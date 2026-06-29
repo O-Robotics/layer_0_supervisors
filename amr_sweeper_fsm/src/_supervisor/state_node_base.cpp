@@ -52,6 +52,9 @@ namespace {
     "use_amr_sweeper_mapping",
     "use_amr_sweeper_navigation",
     "auto_start_mission",
+    "missions_log_directory",
+    "schedule_ics_path",
+    "robot_id",
   };
 
   const std::vector<std::string> kLayer1BringupOverrideKeys{
@@ -90,6 +93,9 @@ namespace {
     "use_amr_sweeper_mapping",
     "use_amr_sweeper_navigation",
     "auto_start_mission",
+    "missions_log_directory",
+    "schedule_ics_path",
+    "robot_id",
   };
 
   const std::vector<std::string> kParserOverrideKeys{
@@ -97,12 +103,15 @@ namespace {
     "missions_directory",
     "auto_build_on_start",
     "watch_for_updates",
+    "missions_log_directory",
   };
 
   const std::vector<std::string> kSchedulerOverrideKeys{
     "use_sim_time",
     "missions_directory",
     "trigger_running_on_work_window",
+    "schedule_ics_path",
+    "robot_id",
   };
 
   struct TriggerLine

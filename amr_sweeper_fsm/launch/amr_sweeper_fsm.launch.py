@@ -38,6 +38,9 @@ def generate_launch_description():
         "use_amr_sweeper_mapping",
         "use_amr_sweeper_navigation",
         "auto_start_mission",
+        "missions_log_directory",
+        "schedule_ics_path",
+        "robot_id",
     ]
     """
     Launch the AMR Sweeper FSM supervisor and all FSM-state lifecycle nodes.

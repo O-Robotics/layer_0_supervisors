@@ -162,6 +162,9 @@ def generate_launch_description():
         "use_amr_sweeper_mapping",
         "use_amr_sweeper_navigation",
         "auto_start_mission",
+        "missions_log_directory",
+        "schedule_ics_path",
+        "robot_id",
     ]
     namespace = LaunchConfiguration("namespace")
     use_sim_time = LaunchConfiguration("use_sim_time")

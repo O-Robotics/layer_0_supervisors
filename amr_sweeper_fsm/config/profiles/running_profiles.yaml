@@ -1473,7 +1473,7 @@ profiles:
               - type: "controller"
                 target: "joint_broad"
                 required: true
-            window_ms: 45000
+            window_ms: 60000
           errors:
             on_readiness_fail: "FAULT"
             on_unexpected_exit: "FAULT"
@@ -1522,7 +1522,7 @@ profiles:
               - type: "topic"
                 target: "collision_detector/impact_detected"
                 required: true
-            window_ms: 45000
+            window_ms: 60000
           errors:
             on_readiness_fail: "FAULT"
             on_unexpected_exit: "FAULT"
@@ -1553,7 +1553,7 @@ profiles:
               - type: "topic"
                 target: "localization/odometry_fused"
                 required: true
-            window_ms: 45000
+            window_ms: 180000
           errors:
             on_readiness_fail: "DEGRADED"
             on_unexpected_exit: "DEGRADED"
@@ -1614,7 +1614,7 @@ profiles:
               - type: "controller"
                 target: "joint_broad"
                 required: true
-            window_ms: 45000
+            window_ms: 60000
           errors:
             on_readiness_fail: "FAULT"
             on_unexpected_exit: "FAULT"
@@ -1732,7 +1732,7 @@ profiles:
               - type: "controller"
                 target: "joint_broad"
                 required: true
-            window_ms: 45000
+            window_ms: 60000
           errors:
             on_readiness_fail: "FAULT"
             on_unexpected_exit: "FAULT"
@@ -1766,7 +1766,7 @@ profiles:
               - type: "topic"
                 target: "drive_controller/odom"
                 required: true
-            window_ms: 45000
+            window_ms: 180000
           errors:
             on_readiness_fail: "FAULT"
             on_unexpected_exit: "FAULT"

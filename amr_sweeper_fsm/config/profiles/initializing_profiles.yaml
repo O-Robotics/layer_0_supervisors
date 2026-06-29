@@ -178,7 +178,7 @@ profiles:
               - type: "controller"
                 target: "joint_broad"
                 required: true
-            window_ms: 45000
+            window_ms: 60000
           rosout_triggers:
             - "node=system_info_node;level>=ERROR;action=FAULT"
             - "node=system_info_node;level>=WARN;action=DEGRADED"
@@ -317,7 +317,7 @@ profiles:
               - type: "topic"
                 target: "mapping/status"
                 required: true
-            window_ms: 90000
+            window_ms: 180000
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "level>=ERROR;action=FAULT"
@@ -485,7 +485,7 @@ profiles:
               - type: "controller"
                 target: "joint_broad"
                 required: true
-            window_ms: 45000
+            window_ms: 60000
           rosout_triggers:
             - "node=system_info_node;level>=ERROR;action=FAULT"
             - "node=system_info_node;level>=WARN;action=DEGRADED"
@@ -691,7 +691,7 @@ profiles:
     # Profile 050 (simulation full initializing)
     # ---------------------------------------------------------------------------
   - profile:
-      id: "050"
+      id: 050
       transitions:
         auto_transition_on: true
         auto_transition_profile: 150
@@ -831,7 +831,7 @@ profiles:
               - type: "controller"
                 target: "joint_broad"
                 required: true
-            window_ms: 45000
+            window_ms: 60000
           rosout_triggers:
             - "node=system_info_node;level>=ERROR;action=FAULT"
             - "node=system_info_node;level>=WARN;action=DEGRADED"
@@ -887,7 +887,7 @@ profiles:
               - type: "topic"
                 target: "collision_detector/impact_detected"
                 required: true
-            window_ms: 45000
+            window_ms: 60000
           errors:
             on_readiness_fail: "FAULT"
             on_unexpected_exit: "FAULT"
@@ -951,7 +951,7 @@ profiles:
               - type: "topic"
                 target: "mapping/status"
                 required: true
-            window_ms: 90000
+            window_ms: 180000
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "level>=ERROR;action=FAULT"

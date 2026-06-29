@@ -127,7 +127,7 @@ profiles:
               - type: "service"
                 target: "gnss/gnss_node/get_parameters"
                 required: true
-            window_ms: 45000
+            window_ms: 60000
           rosout_triggers:
             - "node=system_info_node;level>=ERROR;action=FAULT"
             - "node=system_info_node;level>=WARN;action=DEGRADED"
