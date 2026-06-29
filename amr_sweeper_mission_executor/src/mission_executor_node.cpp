@@ -1870,6 +1870,7 @@ MissionExecutorNode::MissionExecutorNode(const rclcpp::NodeOptions & options)
     "mission_parser_build_service",
     "build_current_mission");
   fsm_request_service_ = declare_parameter<std::string>("fsm_request_service", "request_state");
+  use_simulation_ = declare_parameter<bool>("use_simulation", false);
   manual_mission_inactivity_timeout_seconds_ = declare_parameter<double>(
     "manual_mission_inactivity_timeout_seconds",
     300.0);
@@ -1893,6 +1894,23 @@ MissionExecutorNode::MissionExecutorNode(const rclcpp::NodeOptions & options)
     declare_parameter<int>("manual_routed_profile_id", 210));
   manual_teleop_profile_id_ = static_cast<std::uint16_t>(
     declare_parameter<int>("manual_teleop_profile_id", 220));
+  if (use_simulation_) {
+    if (idling_profile_id_ == 101U) {
+      idling_profile_id_ = 150U;
+    }
+    if (scheduled_running_profile_id_ == 201U) {
+      scheduled_running_profile_id_ = 251U;
+    }
+    if (manual_mapping_profile_id_ == 225U) {
+      manual_mapping_profile_id_ = 256U;
+    }
+    if (manual_routed_profile_id_ == 210U) {
+      manual_routed_profile_id_ = 252U;
+    }
+    if (manual_teleop_profile_id_ == 220U) {
+      manual_teleop_profile_id_ = 255U;
+    }
+  }
   default_activation_priority_ = static_cast<std::uint8_t>(
     declare_parameter<int>("default_activation_priority", 200));
   promote_runtime_costmap_on_completed_mission_ = declare_parameter<bool>(
@@ -2860,6 +2878,26 @@ std::string MissionExecutorNode::missionRouteBasename(
   return missionStemForPath(mission_path) + "_path_planned";
 }
 
+std::filesystem::path MissionExecutorNode::resolveMissionRoutePath(
+  const ManualMissionInfo & mission,
+  const std::filesystem::path & mission_file) const
+{
+  const std::filesystem::path mission_folder = artifactsDirectoryForMission(mission);
+  const std::filesystem::path planned_route =
+    mission_folder / (missionRouteBasename(mission_file) + ".geojson");
+  if (std::filesystem::exists(planned_route)) {
+    return planned_route;
+  }
+
+  const std::filesystem::path builtin_route =
+    mission_folder / (missionStemForPath(mission_file) + "_path.geojson");
+  if (std::filesystem::exists(builtin_route)) {
+    return builtin_route;
+  }
+
+  return planned_route;
+}
+
 std::optional<std::filesystem::path> MissionExecutorNode::newestScheduledArtifactDirectory(
   const std::string & mission_id) const
 {
@@ -3018,8 +3056,7 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
     source_mission_folder / (missionCostmapBasename(mission_file) + ".yaml");
   const std::filesystem::path mission_costmap_image =
     source_mission_folder / (missionCostmapBasename(mission_file) + ".pgm");
-  const std::filesystem::path mission_route =
-    source_mission_folder / (missionRouteBasename(mission_file) + ".geojson");
+  const std::filesystem::path mission_route = resolveMissionRoutePath(mission, mission_file);
 
   if (!fs::exists(mission_file) ||
     !fs::exists(mission_costmap_yaml) ||
@@ -4184,7 +4221,7 @@ bool MissionExecutorNode::missionArtifactsReady(const ManualMissionInfo & missio
   return std::filesystem::exists(mission_file) &&
          std::filesystem::exists(mission_folder / (missionCostmapBasename(mission_file) + ".yaml")) &&
          std::filesystem::exists(mission_folder / (missionCostmapBasename(mission_file) + ".pgm")) &&
-         std::filesystem::exists(mission_folder / (missionRouteBasename(mission_file) + ".geojson"));
+         std::filesystem::exists(resolveMissionRoutePath(executable_mission, mission_file));
 }
 
 bool MissionExecutorNode::ensureMissionArtifactsReady(const ManualMissionInfo & mission)

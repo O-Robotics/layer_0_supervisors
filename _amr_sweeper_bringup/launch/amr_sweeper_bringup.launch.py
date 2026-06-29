@@ -138,6 +138,8 @@ def generate_launch_description():
     console_output_format = "[{severity}] [{time}] [{name}] : {message}"
     ros_log_dir = tempfile.mkdtemp(prefix="amr_sweeper_bringup_roslog_")
     fsm_override_arg_names = [
+        "use_sim_time",
+        "use_simulation",
         "use_amr_sweeper_ros2_control",
         "use_amr_sweeper_battery",
         "use_amr_sweeper_system_info",
@@ -166,6 +168,7 @@ def generate_launch_description():
     state_params_file = LaunchConfiguration("state_params_file")
     test_output_directory = LaunchConfiguration("test_output_directory")
     use_profile = LaunchConfiguration("use_profile")
+    use_simulation = LaunchConfiguration("use_simulation")
     tick_period_ms = LaunchConfiguration("tick_period_ms")
     missions_from_db_directory = LaunchConfiguration("missions_from_db_directory")
     missions_log_directory = LaunchConfiguration("missions_log_directory")
@@ -224,6 +227,7 @@ def generate_launch_description():
 
     fsm_launch_arguments = {
         "namespace": namespace,
+        "use_simulation": use_simulation,
         "use_sim_time": use_sim_time,
         "use_profile": use_profile,
         "tick_period_ms": tick_period_ms,
@@ -242,6 +246,7 @@ def generate_launch_description():
         SetEnvironmentVariable("RCUTILS_COLORIZED_OUTPUT", "1"),
         SetEnvironmentVariable("RCUTILS_CONSOLE_OUTPUT_FORMAT", console_output_format),
         DeclareLaunchArgument("namespace", default_value="amr_sweeper"),
+        DeclareLaunchArgument("use_simulation", default_value="false"),
         DeclareLaunchArgument("use_sim_time", default_value="false"),
         DeclareLaunchArgument("state_params_file", default_value=default_state_params_file),
         DeclareLaunchArgument("test_output_directory", default_value="src/layer_3_navigation/tests"),
@@ -299,6 +304,7 @@ def generate_launch_description():
             PythonLaunchDescriptionSource(_launch_file("amr_sweeper_mission_executor", "mission_executor.launch.py")),
             launch_arguments={
                 "namespace": namespace,
+                "use_simulation": use_simulation,
                 "missions_directory": missions_from_db_directory,
                 "missions_log_directory": missions_log_directory,
                 "manual_missions_directory": manual_missions_directory,

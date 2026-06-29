@@ -100,6 +100,9 @@ private:
   [[nodiscard]] std::string missionStemForPath(const std::filesystem::path & mission_path) const;
   [[nodiscard]] std::string missionCostmapBasename(const std::filesystem::path & mission_path) const;
   [[nodiscard]] std::string missionRouteBasename(const std::filesystem::path & mission_path) const;
+  [[nodiscard]] std::filesystem::path resolveMissionRoutePath(
+    const ManualMissionInfo & mission,
+    const std::filesystem::path & mission_file) const;
   [[nodiscard]] std::optional<std::filesystem::path> newestScheduledArtifactDirectory(
     const std::string & mission_id) const;
   [[nodiscard]] ManualMissionInfo resolveExecutableMissionSource(const ManualMissionInfo & mission) const;
@@ -179,6 +182,7 @@ private:
   std::string mission_parser_node_name_;
   std::string mission_parser_build_service_;
   std::string fsm_request_service_;
+  bool use_simulation_{false};
   double manual_mission_inactivity_timeout_seconds_{300.0};
   double manual_mission_min_linear_speed_mps_{0.01};
   double manual_mission_min_angular_speed_rps_{0.01};

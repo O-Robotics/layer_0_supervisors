@@ -532,7 +532,7 @@ profiles:
               - type: "topic"
                 target: "joy"
                 required: false
-            window_ms: 8000
+            window_ms: 20000
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "level>=ERROR;action=DEGRADED"
@@ -817,7 +817,7 @@ profiles:
               - type: "topic"
                 target: "joy"
                 required: false
-            window_ms: 8000
+            window_ms: 20000
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "level>=ERROR;action=DEGRADED"
@@ -921,7 +921,7 @@ profiles:
               - type: "controller"
                 target: "joint_broad"
                 required: true
-            window_ms: 45000
+            window_ms: 120000
           rosout_triggers:
             - "node=system_info_node;level>=ERROR;action=FAULT"
             - "node=system_info_node;level>=WARN;action=DEGRADED"
@@ -1074,7 +1074,7 @@ profiles:
               - type: "topic"
                 target: "mapping/status"
                 required: true
-            window_ms: 45000
+            window_ms: 90000
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "level>=ERROR;action=FAULT"
@@ -1102,7 +1102,7 @@ profiles:
               - type: "topic"
                 target: "joy"
                 required: false
-            window_ms: 8000
+            window_ms: 20000
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "level>=ERROR;action=DEGRADED"
@@ -1206,7 +1206,7 @@ profiles:
               - type: "controller"
                 target: "joint_broad"
                 required: true
-            window_ms: 45000
+            window_ms: 120000
           rosout_triggers:
             - "node=system_info_node;level>=ERROR;action=FAULT"
             - "node=system_info_node;level>=WARN;action=DEGRADED"
@@ -1380,7 +1380,7 @@ profiles:
               - type: "controller"
                 target: "joint_broad"
                 required: true
-            window_ms: 45000
+            window_ms: 90000
           rosout_triggers:
             - "node=system_info_node;level>=ERROR;action=FAULT"
             - "node=system_info_node;level>=WARN;action=DEGRADED"
@@ -1395,6 +1395,777 @@ profiles:
             on_unexpected_exit: "FAULT"
             priority: 250
             force: true
+          restart:
+            max_restarts: 5
+            restart_delay_ms: 1000
+            shutdown:
+              sigint_timeout_ms: 1000
+              sigterm_timeout_ms: 1000
+              sigkill_timeout_ms: 1000
+
+
+    # ---------------------------------------------------------------------------
+    # Profile 250 (simulation bridge)
+    # ---------------------------------------------------------------------------
+  - profile:
+      id: 250
+      transitions:
+        auto_transition_on: true
+        auto_transition_profile: 251
+        fault_transition_on: true
+        fault_transition_profile: 400
+
+      processes: []
+
+
+    # ---------------------------------------------------------------------------
+    # Profile 251 (simulation default)
+    # ---------------------------------------------------------------------------
+  - profile:
+      id: 251
+      transitions:
+        auto_transition_on: false
+        auto_transition_profile:
+        fault_transition_on: true
+        fault_transition_profile: 400
+
+      processes:
+        - name: "amr_sweeper_layer_1_hardware_bringup"
+          importance: "critical"
+          startup:
+            exec: "ros2 launch amr_sweeper_layer_1_hardware_bringup amr_sweeper_layer_1_hardware_bringup.launch.py"
+            args:
+              - "namespace:={ns}"
+              - "use_simulation:=true"
+              - "use_sim_time:=true"
+              - "use_amr_sweeper_ros2_control:=true"
+              - "use_amr_sweeper_battery:=true"
+              - "use_amr_sweeper_system_info:=true"
+              - "use_amr_sweeper_usb_cameras:=false"
+              - "use_amr_sweeper_depth_camera:=false"
+              - "use_amr_sweeper_imu:=false"
+              - "use_amr_sweeper_gnss:=false"
+              - "use_ntrip_client:=false"
+            ready:
+              - type: "topic"
+                target: "system_info/system_info"
+                required: true
+              - type: "topic"
+                target: "battery/battery_state"
+                required: true
+              - type: "service"
+                target: "robot_state_publisher/get_parameters"
+                required: true
+              - type: "service"
+                target: "battery/battery_node/get_parameters"
+                required: true
+              - type: "service"
+                target: "system_info/system_info_node/get_parameters"
+                required: true
+              - type: "hardware"
+                target: "odrive_ros2_control"
+                state: "active"
+                required: true
+              - type: "hardware"
+                target: "steadydrive_ros2_control"
+                state: "active"
+                required: true
+              - type: "controller"
+                target: "joint_broad"
+                required: true
+            window_ms: 45000
+          errors:
+            on_readiness_fail: "FAULT"
+            on_unexpected_exit: "FAULT"
+            priority: 250
+            force: true
+          restart:
+            max_restarts: 5
+            restart_delay_ms: 1000
+          shutdown:
+            sigint_timeout_ms: 1000
+            sigterm_timeout_ms: 1000
+            sigkill_timeout_ms: 1000
+
+        - name: "amr_sweeper_layer_2_controllers_bringup"
+          importance: "critical"
+          startup:
+            exec: "ros2 launch amr_sweeper_layer_2_controllers_bringup amr_sweeper_layer_2_controllers_bringup.launch.py"
+            args:
+              - "namespace:={ns}"
+              - "use_simulation:=true"
+              - "use_sim_time:=true"
+              - "use_amr_sweeper_drive_controller:=true"
+              - "use_amr_sweeper_tool_controller:=true"
+              - "use_amr_sweeper_teleop:=false"
+              - "use_amr_sweeper_sweeping_controller:=true"
+              - "use_amr_sweeper_attitude_controller:=true"
+              - "use_amr_sweeper_collision_detector:=true"
+              - "use_amr_sweeper_safety_controller:=true"
+              - "use_sweeping_mode:=cmd_vel_sweeping"
+            ready:
+              - type: "topic"
+                target: "drive_controller/odom"
+                required: true
+              - type: "topic"
+                target: "sweeping_controller/cmd_vel_drive"
+                required: true
+              - type: "topic"
+                target: "sweeping_controller/cmd_vel_tools"
+                required: true
+              - type: "topic"
+                target: "attitude_controller/roll_pitch"
+                required: true
+              - type: "topic"
+                target: "safety_controller/status"
+                required: true
+              - type: "topic"
+                target: "collision_detector/impact_detected"
+                required: true
+            window_ms: 45000
+          errors:
+            on_readiness_fail: "FAULT"
+            on_unexpected_exit: "FAULT"
+            priority: 250
+            force: true
+          restart:
+            max_restarts: 5
+            restart_delay_ms: 1000
+          shutdown:
+            sigint_timeout_ms: 1000
+            sigterm_timeout_ms: 1000
+            sigkill_timeout_ms: 1000
+
+        - name: "amr_sweeper_layer_3_navigation_bringup"
+          importance: "degraded"
+          startup:
+            exec: "ros2 launch amr_sweeper_layer_3_navigation_bringup amr_sweeper_layer_3_navigation_bringup.launch.py"
+            args:
+              - "namespace:={ns}"
+              - "use_simulation:=true"
+              - "use_sim_time:=true"
+              - "use_amr_sweeper_visual_odometry:=false"
+              - "use_amr_sweeper_localization:=true"
+              - "use_amr_sweeper_mapping:=true"
+              - "use_amr_sweeper_navigation:=true"
+              - "auto_start_mission:=false"
+            ready:
+              - type: "topic"
+                target: "localization/odometry_fused"
+                required: true
+            window_ms: 45000
+          errors:
+            on_readiness_fail: "DEGRADED"
+            on_unexpected_exit: "DEGRADED"
+            priority: 220
+            force: false
+          restart:
+            max_restarts: 5
+            restart_delay_ms: 1000
+          shutdown:
+            sigint_timeout_ms: 1000
+            sigterm_timeout_ms: 1000
+            sigkill_timeout_ms: 1000
+
+
+    # ---------------------------------------------------------------------------
+    # Profile 252 (simulation built-in local missions)
+    # ---------------------------------------------------------------------------
+  - profile:
+      id: 252
+      transitions:
+        auto_transition_on: false
+        auto_transition_profile:
+        fault_transition_on: true
+        fault_transition_profile: 400
+
+      processes:
+        - name: "amr_sweeper_layer_1_hardware_bringup"
+          importance: "critical"
+          startup:
+            exec: "ros2 launch amr_sweeper_layer_1_hardware_bringup amr_sweeper_layer_1_hardware_bringup.launch.py"
+            args:
+              - "namespace:={ns}"
+              - "use_simulation:=true"
+              - "use_sim_time:=true"
+              - "use_amr_sweeper_ros2_control:=true"
+              - "use_amr_sweeper_battery:=true"
+              - "use_amr_sweeper_system_info:=true"
+              - "use_amr_sweeper_usb_cameras:=false"
+              - "use_amr_sweeper_depth_camera:=false"
+              - "use_amr_sweeper_imu:=false"
+              - "use_amr_sweeper_gnss:=false"
+              - "use_ntrip_client:=false"
+            ready:
+              - type: "topic"
+                target: "system_info/system_info"
+                required: true
+              - type: "topic"
+                target: "battery/battery_state"
+                required: true
+              - type: "hardware"
+                target: "odrive_ros2_control"
+                state: "active"
+                required: true
+              - type: "hardware"
+                target: "steadydrive_ros2_control"
+                state: "active"
+                required: true
+              - type: "controller"
+                target: "joint_broad"
+                required: true
+            window_ms: 45000
+          errors:
+            on_readiness_fail: "FAULT"
+            on_unexpected_exit: "FAULT"
+            priority: 250
+            force: true
+          restart:
+            max_restarts: 5
+            restart_delay_ms: 1000
+          shutdown:
+            sigint_timeout_ms: 1000
+            sigterm_timeout_ms: 1000
+            sigkill_timeout_ms: 1000
+
+        - name: "amr_sweeper_layer_2_controllers_bringup"
+          importance: "critical"
+          startup:
+            exec: "ros2 launch amr_sweeper_layer_2_controllers_bringup amr_sweeper_layer_2_controllers_bringup.launch.py"
+            args:
+              - "namespace:={ns}"
+              - "use_simulation:=true"
+              - "use_sim_time:=true"
+              - "use_amr_sweeper_drive_controller:=true"
+              - "use_amr_sweeper_tool_controller:=true"
+              - "use_amr_sweeper_teleop:=false"
+              - "use_amr_sweeper_sweeping_controller:=true"
+              - "use_amr_sweeper_attitude_controller:=true"
+              - "use_amr_sweeper_collision_detector:=true"
+              - "use_amr_sweeper_safety_controller:=true"
+              - "use_sweeping_mode:=cmd_vel_sweeping"
+            ready:
+              - type: "topic"
+                target: "drive_controller/odom"
+                required: true
+            window_ms: 120000
+          errors:
+            on_readiness_fail: "FAULT"
+            on_unexpected_exit: "FAULT"
+            priority: 250
+            force: true
+          restart:
+            max_restarts: 5
+            restart_delay_ms: 1000
+          shutdown:
+            sigint_timeout_ms: 1000
+            sigterm_timeout_ms: 1000
+            sigkill_timeout_ms: 1000
+
+        - name: "amr_sweeper_layer_3_navigation_bringup"
+          importance: "degraded"
+          startup:
+            exec: "ros2 launch amr_sweeper_layer_3_navigation_bringup amr_sweeper_layer_3_navigation_bringup.launch.py"
+            args:
+              - "namespace:={ns}"
+              - "use_simulation:=true"
+              - "use_sim_time:=true"
+              - "use_amr_sweeper_visual_odometry:=false"
+              - "use_amr_sweeper_localization:=true"
+              - "use_amr_sweeper_mapping:=false"
+              - "use_amr_sweeper_navigation:=true"
+              - "auto_start_mission:=false"
+            ready:
+              - type: "topic"
+                target: "localization/odometry_fused"
+                required: true
+            window_ms: 120000
+          errors:
+            on_readiness_fail: "DEGRADED"
+            on_unexpected_exit: "DEGRADED"
+            priority: 220
+            force: false
+          restart:
+            max_restarts: 5
+            restart_delay_ms: 1000
+          shutdown:
+            sigint_timeout_ms: 1000
+            sigterm_timeout_ms: 1000
+            sigkill_timeout_ms: 1000
+
+
+    # ---------------------------------------------------------------------------
+    # Profile 253 (simulation auto-run 3x3Sweep)
+    # ---------------------------------------------------------------------------
+  - profile:
+      id: 253
+      transitions:
+        auto_transition_on: false
+        auto_transition_profile:
+        fault_transition_on: true
+        fault_transition_profile: 400
+
+      processes:
+        - name: "amr_sweeper_layer_1_hardware_bringup"
+          importance: "critical"
+          startup:
+            exec: "ros2 launch amr_sweeper_layer_1_hardware_bringup amr_sweeper_layer_1_hardware_bringup.launch.py"
+            args:
+              - "namespace:={ns}"
+              - "use_simulation:=true"
+              - "use_sim_time:=true"
+              - "use_amr_sweeper_ros2_control:=true"
+              - "use_amr_sweeper_battery:=true"
+              - "use_amr_sweeper_system_info:=true"
+              - "use_amr_sweeper_usb_cameras:=false"
+              - "use_amr_sweeper_depth_camera:=false"
+              - "use_amr_sweeper_imu:=false"
+              - "use_amr_sweeper_gnss:=false"
+              - "use_ntrip_client:=false"
+            ready:
+              - type: "topic"
+                target: "system_info/system_info"
+                required: true
+              - type: "topic"
+                target: "battery/battery_state"
+                required: true
+              - type: "controller"
+                target: "joint_broad"
+                required: true
+            window_ms: 45000
+          errors:
+            on_readiness_fail: "FAULT"
+            on_unexpected_exit: "FAULT"
+            priority: 250
+            force: true
+          restart:
+            max_restarts: 5
+            restart_delay_ms: 1000
+          shutdown:
+            sigint_timeout_ms: 1000
+            sigterm_timeout_ms: 1000
+            sigkill_timeout_ms: 1000
+
+        - name: "amr_sweeper_layer_2_controllers_bringup"
+          importance: "critical"
+          startup:
+            exec: "ros2 launch amr_sweeper_layer_2_controllers_bringup amr_sweeper_layer_2_controllers_bringup.launch.py"
+            args:
+              - "namespace:={ns}"
+              - "use_simulation:=true"
+              - "use_sim_time:=true"
+              - "use_amr_sweeper_drive_controller:=true"
+              - "use_amr_sweeper_tool_controller:=true"
+              - "use_amr_sweeper_teleop:=false"
+              - "use_amr_sweeper_sweeping_controller:=true"
+              - "use_amr_sweeper_attitude_controller:=true"
+              - "use_amr_sweeper_collision_detector:=true"
+              - "use_amr_sweeper_safety_controller:=true"
+              - "use_sweeping_mode:=cmd_vel_sweeping"
+            ready:
+              - type: "topic"
+                target: "drive_controller/odom"
+                required: true
+            window_ms: 45000
+          errors:
+            on_readiness_fail: "FAULT"
+            on_unexpected_exit: "FAULT"
+            priority: 250
+            force: true
+          restart:
+            max_restarts: 5
+            restart_delay_ms: 1000
+          shutdown:
+            sigint_timeout_ms: 1000
+            sigterm_timeout_ms: 1000
+            sigkill_timeout_ms: 1000
+
+        - name: "amr_sweeper_layer_3_navigation_bringup"
+          importance: "degraded"
+          startup:
+            exec: "ros2 launch amr_sweeper_layer_3_navigation_bringup amr_sweeper_layer_3_navigation_bringup.launch.py"
+            args:
+              - "namespace:={ns}"
+              - "use_simulation:=true"
+              - "use_sim_time:=true"
+              - "use_amr_sweeper_visual_odometry:=false"
+              - "use_amr_sweeper_localization:=true"
+              - "use_amr_sweeper_mapping:=true"
+              - "use_amr_sweeper_navigation:=true"
+              - "auto_start_mission:=true"
+              - "mission_file:=src/layer_3_navigation/amr_sweeper_navigation/missions/default_missions/3x3Sweep/3x3Sweep.json"
+            ready:
+              - type: "topic"
+                target: "localization/odometry_fused"
+                required: true
+            window_ms: 45000
+          errors:
+            on_readiness_fail: "DEGRADED"
+            on_unexpected_exit: "DEGRADED"
+            priority: 220
+            force: false
+          restart:
+            max_restarts: 5
+            restart_delay_ms: 1000
+          shutdown:
+            sigint_timeout_ms: 1000
+            sigterm_timeout_ms: 1000
+            sigkill_timeout_ms: 1000
+
+
+    # ---------------------------------------------------------------------------
+    # Profile 254 (simulation auto-run SpotSweep)
+    # ---------------------------------------------------------------------------
+  - profile:
+      id: 254
+      transitions:
+        auto_transition_on: false
+        auto_transition_profile:
+        fault_transition_on: true
+        fault_transition_profile: 400
+
+      processes:
+        - name: "amr_sweeper_layer_1_hardware_bringup"
+          importance: "critical"
+          startup:
+            exec: "ros2 launch amr_sweeper_layer_1_hardware_bringup amr_sweeper_layer_1_hardware_bringup.launch.py"
+            args:
+              - "namespace:={ns}"
+              - "use_simulation:=true"
+              - "use_sim_time:=true"
+              - "use_amr_sweeper_ros2_control:=true"
+              - "use_amr_sweeper_battery:=true"
+              - "use_amr_sweeper_system_info:=true"
+              - "use_amr_sweeper_usb_cameras:=false"
+              - "use_amr_sweeper_depth_camera:=false"
+              - "use_amr_sweeper_imu:=false"
+              - "use_amr_sweeper_gnss:=false"
+              - "use_ntrip_client:=false"
+            ready:
+              - type: "topic"
+                target: "system_info/system_info"
+                required: true
+              - type: "topic"
+                target: "battery/battery_state"
+                required: true
+              - type: "controller"
+                target: "joint_broad"
+                required: true
+            window_ms: 45000
+          errors:
+            on_readiness_fail: "FAULT"
+            on_unexpected_exit: "FAULT"
+            priority: 250
+            force: true
+          restart:
+            max_restarts: 5
+            restart_delay_ms: 1000
+          shutdown:
+            sigint_timeout_ms: 1000
+            sigterm_timeout_ms: 1000
+            sigkill_timeout_ms: 1000
+
+        - name: "amr_sweeper_layer_2_controllers_bringup"
+          importance: "critical"
+          startup:
+            exec: "ros2 launch amr_sweeper_layer_2_controllers_bringup amr_sweeper_layer_2_controllers_bringup.launch.py"
+            args:
+              - "namespace:={ns}"
+              - "use_simulation:=true"
+              - "use_sim_time:=true"
+              - "use_amr_sweeper_drive_controller:=true"
+              - "use_amr_sweeper_tool_controller:=true"
+              - "use_amr_sweeper_teleop:=false"
+              - "use_amr_sweeper_sweeping_controller:=true"
+              - "use_amr_sweeper_attitude_controller:=true"
+              - "use_amr_sweeper_collision_detector:=true"
+              - "use_amr_sweeper_safety_controller:=true"
+              - "use_sweeping_mode:=cmd_vel_sweeping"
+            ready:
+              - type: "topic"
+                target: "drive_controller/odom"
+                required: true
+            window_ms: 45000
+          errors:
+            on_readiness_fail: "FAULT"
+            on_unexpected_exit: "FAULT"
+            priority: 250
+            force: true
+          restart:
+            max_restarts: 5
+            restart_delay_ms: 1000
+          shutdown:
+            sigint_timeout_ms: 1000
+            sigterm_timeout_ms: 1000
+            sigkill_timeout_ms: 1000
+
+        - name: "amr_sweeper_layer_3_navigation_bringup"
+          importance: "degraded"
+          startup:
+            exec: "ros2 launch amr_sweeper_layer_3_navigation_bringup amr_sweeper_layer_3_navigation_bringup.launch.py"
+            args:
+              - "namespace:={ns}"
+              - "use_simulation:=true"
+              - "use_sim_time:=true"
+              - "use_amr_sweeper_visual_odometry:=false"
+              - "use_amr_sweeper_localization:=true"
+              - "use_amr_sweeper_mapping:=true"
+              - "use_amr_sweeper_navigation:=true"
+              - "auto_start_mission:=true"
+              - "mission_file:=src/layer_3_navigation/amr_sweeper_navigation/missions/default_missions/SpotSweep/SpotSweep.json"
+            ready:
+              - type: "topic"
+                target: "localization/odometry_fused"
+                required: true
+            window_ms: 45000
+          errors:
+            on_readiness_fail: "DEGRADED"
+            on_unexpected_exit: "DEGRADED"
+            priority: 220
+            force: false
+          restart:
+            max_restarts: 5
+            restart_delay_ms: 1000
+          shutdown:
+            sigint_timeout_ms: 1000
+            sigterm_timeout_ms: 1000
+            sigkill_timeout_ms: 1000
+
+
+    # ---------------------------------------------------------------------------
+    # Profile 255 (simulation manual teleoperation)
+    # ---------------------------------------------------------------------------
+  - profile:
+      id: 255
+      transitions:
+        auto_transition_on: false
+        auto_transition_profile:
+        fault_transition_on: true
+        fault_transition_profile: 400
+
+      processes:
+        - name: "amr_sweeper_layer_1_hardware_bringup"
+          importance: "critical"
+          startup:
+            exec: "ros2 launch amr_sweeper_layer_1_hardware_bringup amr_sweeper_layer_1_hardware_bringup.launch.py"
+            args:
+              - "namespace:={ns}"
+              - "use_simulation:=true"
+              - "use_sim_time:=true"
+              - "use_amr_sweeper_ros2_control:=true"
+              - "use_amr_sweeper_battery:=true"
+              - "use_amr_sweeper_system_info:=true"
+              - "use_amr_sweeper_usb_cameras:=false"
+              - "use_amr_sweeper_depth_camera:=false"
+              - "use_amr_sweeper_imu:=false"
+              - "use_amr_sweeper_gnss:=false"
+              - "use_ntrip_client:=false"
+            ready:
+              - type: "topic"
+                target: "system_info/system_info"
+                required: true
+              - type: "topic"
+                target: "battery/battery_state"
+                required: true
+              - type: "controller"
+                target: "joint_broad"
+                required: true
+            window_ms: 45000
+          errors:
+            on_readiness_fail: "FAULT"
+            on_unexpected_exit: "FAULT"
+            priority: 250
+            force: true
+          restart:
+            max_restarts: 5
+            restart_delay_ms: 1000
+          shutdown:
+            sigint_timeout_ms: 1000
+            sigterm_timeout_ms: 1000
+            sigkill_timeout_ms: 1000
+
+        - name: "amr_sweeper_layer_2_controllers_bringup"
+          importance: "critical"
+          startup:
+            exec: "ros2 launch amr_sweeper_layer_2_controllers_bringup amr_sweeper_layer_2_controllers_bringup.launch.py"
+            args:
+              - "namespace:={ns}"
+              - "use_simulation:=true"
+              - "use_sim_time:=true"
+              - "use_amr_sweeper_drive_controller:=true"
+              - "use_amr_sweeper_tool_controller:=true"
+              - "use_amr_sweeper_teleop:=true"
+              - "use_amr_sweeper_sweeping_controller:=false"
+              - "use_amr_sweeper_attitude_controller:=true"
+              - "use_amr_sweeper_collision_detector:=true"
+              - "use_amr_sweeper_safety_controller:=true"
+              - "use_sweeping_mode:=cmd_vel_sweeping"
+            ready:
+              - type: "topic"
+                target: "drive_controller/odom"
+                required: true
+              - type: "topic"
+                target: "teleop/cmd_vel_drive"
+                required: true
+              - type: "topic"
+                target: "teleop/cmd_vel_tools"
+                required: true
+            window_ms: 45000
+          errors:
+            on_readiness_fail: "FAULT"
+            on_unexpected_exit: "FAULT"
+            priority: 250
+            force: true
+          restart:
+            max_restarts: 5
+            restart_delay_ms: 1000
+          shutdown:
+            sigint_timeout_ms: 1000
+            sigterm_timeout_ms: 1000
+            sigkill_timeout_ms: 1000
+
+        - name: "amr_sweeper_layer_3_navigation_bringup"
+          importance: "degraded"
+          startup:
+            exec: "ros2 launch amr_sweeper_layer_3_navigation_bringup amr_sweeper_layer_3_navigation_bringup.launch.py"
+            args:
+              - "namespace:={ns}"
+              - "use_simulation:=true"
+              - "use_sim_time:=true"
+              - "use_amr_sweeper_visual_odometry:=false"
+              - "use_amr_sweeper_localization:=true"
+              - "use_amr_sweeper_mapping:=false"
+              - "use_amr_sweeper_navigation:=false"
+            ready:
+              - type: "topic"
+                target: "localization/odometry_fused"
+                required: true
+            window_ms: 45000
+          errors:
+            on_readiness_fail: "DEGRADED"
+            on_unexpected_exit: "DEGRADED"
+            priority: 220
+            force: false
+          restart:
+            max_restarts: 5
+            restart_delay_ms: 1000
+          shutdown:
+            sigint_timeout_ms: 1000
+            sigterm_timeout_ms: 1000
+            sigkill_timeout_ms: 1000
+
+
+    # ---------------------------------------------------------------------------
+    # Profile 256 (simulation manual record map)
+    # ---------------------------------------------------------------------------
+  - profile:
+      id: 256
+      transitions:
+        auto_transition_on: false
+        auto_transition_profile:
+        fault_transition_on: true
+        fault_transition_profile: 400
+
+      processes:
+        - name: "amr_sweeper_layer_1_hardware_bringup"
+          importance: "critical"
+          startup:
+            exec: "ros2 launch amr_sweeper_layer_1_hardware_bringup amr_sweeper_layer_1_hardware_bringup.launch.py"
+            args:
+              - "namespace:={ns}"
+              - "use_simulation:=true"
+              - "use_sim_time:=true"
+              - "use_amr_sweeper_ros2_control:=true"
+              - "use_amr_sweeper_battery:=true"
+              - "use_amr_sweeper_system_info:=true"
+              - "use_amr_sweeper_usb_cameras:=false"
+              - "use_amr_sweeper_depth_camera:=false"
+              - "use_amr_sweeper_imu:=false"
+              - "use_amr_sweeper_gnss:=false"
+              - "use_ntrip_client:=false"
+            ready:
+              - type: "topic"
+                target: "system_info/system_info"
+                required: true
+              - type: "topic"
+                target: "battery/battery_state"
+                required: true
+              - type: "controller"
+                target: "joint_broad"
+                required: true
+            window_ms: 45000
+          errors:
+            on_readiness_fail: "FAULT"
+            on_unexpected_exit: "FAULT"
+            priority: 250
+            force: true
+          restart:
+            max_restarts: 5
+            restart_delay_ms: 1000
+          shutdown:
+            sigint_timeout_ms: 1000
+            sigterm_timeout_ms: 1000
+            sigkill_timeout_ms: 1000
+
+        - name: "amr_sweeper_layer_2_controllers_bringup"
+          importance: "critical"
+          startup:
+            exec: "ros2 launch amr_sweeper_layer_2_controllers_bringup amr_sweeper_layer_2_controllers_bringup.launch.py"
+            args:
+              - "namespace:={ns}"
+              - "use_simulation:=true"
+              - "use_sim_time:=true"
+              - "use_amr_sweeper_drive_controller:=true"
+              - "use_amr_sweeper_tool_controller:=true"
+              - "use_amr_sweeper_teleop:=false"
+              - "use_amr_sweeper_sweeping_controller:=true"
+              - "use_amr_sweeper_attitude_controller:=true"
+              - "use_amr_sweeper_collision_detector:=true"
+              - "use_amr_sweeper_safety_controller:=true"
+              - "use_sweeping_mode:=cmd_vel_sweeping"
+            ready:
+              - type: "topic"
+                target: "drive_controller/odom"
+                required: true
+            window_ms: 45000
+          errors:
+            on_readiness_fail: "FAULT"
+            on_unexpected_exit: "FAULT"
+            priority: 250
+            force: true
+          restart:
+            max_restarts: 5
+            restart_delay_ms: 1000
+          shutdown:
+            sigint_timeout_ms: 1000
+            sigterm_timeout_ms: 1000
+            sigkill_timeout_ms: 1000
+
+        - name: "amr_sweeper_layer_3_navigation_bringup"
+          importance: "degraded"
+          startup:
+            exec: "ros2 launch amr_sweeper_layer_3_navigation_bringup amr_sweeper_layer_3_navigation_bringup.launch.py"
+            args:
+              - "namespace:={ns}"
+              - "use_simulation:=true"
+              - "use_sim_time:=true"
+              - "use_amr_sweeper_visual_odometry:=false"
+              - "use_amr_sweeper_localization:=true"
+              - "use_amr_sweeper_mapping:=true"
+              - "use_amr_sweeper_navigation:=true"
+              - "auto_start_mission:=false"
+              - "mission_file:=src/layer_3_navigation/amr_sweeper_navigation/missions/manual_missions/RecordMap/RecordMap.json"
+              - "mission_type:=builtin_manual_mapping"
+            ready:
+              - type: "topic"
+                target: "localization/odometry_fused"
+                required: true
+            window_ms: 45000
+          errors:
+            on_readiness_fail: "DEGRADED"
+            on_unexpected_exit: "DEGRADED"
+            priority: 220
+            force: false
           restart:
             max_restarts: 5
             restart_delay_ms: 1000

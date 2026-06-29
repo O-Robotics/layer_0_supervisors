@@ -1001,7 +1001,13 @@ switch (current_state_) {
     break;
 }
 current_profile_ = effective_profile;
-desired_profile_ = current_profile_;
+// Preserve any queued cross-state request that may have arrived while the current
+// state's activation was still completing. Otherwise a late completion of IDLING
+// can overwrite a queued RUNNING simulation profile such as 252 back to 150,
+// which is then clamped to 201 on the subsequent switch.
+if (desired_state_ == current_state_) {
+  desired_profile_ = current_profile_;
+}
 transitioning_to_profile_ = current_profile_;
 last_lifecycle_id_ = State::PRIMARY_STATE_ACTIVE;
 active_lifecycle_label_ = lifecycle_id_to_label(last_lifecycle_id_);

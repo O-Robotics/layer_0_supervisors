@@ -51,7 +51,7 @@ profiles:
               - type: "service"
                 target: "build_current_mission"
                 required: true
-            window_ms: 8000
+            window_ms: 20000
           rosout_triggers:
             - "node=vda5050_parser_node;level>=ERROR;action=FAULT"
           errors:
@@ -81,7 +81,7 @@ profiles:
               - type: "service"
                 target: "reload_schedule"
                 required: true
-            window_ms: 8000
+            window_ms: 20000
           rosout_triggers:
             - "node=scheduler_node;level>=ERROR;action=FAULT"
           errors:
@@ -364,7 +364,7 @@ profiles:
               - type: "service"
                 target: "build_current_mission"
                 required: true
-            window_ms: 8000
+            window_ms: 20000
           rosout_triggers:
             - "node=vda5050_parser_node;level>=ERROR;action=FAULT"
           errors:
@@ -394,7 +394,7 @@ profiles:
               - type: "service"
                 target: "reload_schedule"
                 required: true
-            window_ms: 8000
+            window_ms: 20000
           rosout_triggers:
             - "node=scheduler_node;level>=ERROR;action=FAULT"
           errors:
@@ -670,7 +670,53 @@ profiles:
               - type: "service"
                 target: "build_current_mission"
                 required: true
-            window_ms: 8000
+            window_ms: 20000
+          rosout_triggers:
+            - "node=vda5050_parser_node;level>=ERROR;action=FAULT"
+          errors:
+            on_readiness_fail: "FAULT"
+            on_unexpected_exit: "FAULT"
+            priority: 250
+            force: true
+          restart:
+            max_restarts: 5
+            restart_delay_ms: 1000
+            shutdown:
+              sigint_timeout_ms: 1000
+              sigterm_timeout_ms: 1000
+              sigkill_timeout_ms: 1000
+
+
+    # ---------------------------------------------------------------------------
+    # Profile 050 (simulation full initializing)
+    # ---------------------------------------------------------------------------
+  - profile:
+      id: "050"
+      transitions:
+        auto_transition_on: true
+        auto_transition_profile: 150
+        fault_transition_on: true
+        fault_transition_profile: 400
+
+      processes:
+        - name: "amr_sweeper_vda5050_parser"
+          importance: "critical"
+          startup:
+            exec: "ros2 launch amr_sweeper_vda5050_parser amr_sweeper_vda5050_parser.launch.py"
+            args:
+              - "namespace:={ns}"
+              - "use_sim_time:=true"
+              - "missions_directory:=missions/database"
+              - "auto_build_on_start:=true"
+              - "watch_for_updates:=true"
+            ready:
+              - type: "service"
+                target: "vda5050_parser_node/get_parameters"
+                required: true
+              - type: "service"
+                target: "build_current_mission"
+                required: true
+            window_ms: 20000
           rosout_triggers:
             - "node=vda5050_parser_node;level>=ERROR;action=FAULT"
           errors:
@@ -686,21 +732,20 @@ profiles:
             sigterm_timeout_ms: 1000
             sigkill_timeout_ms: 1000
 
-        # Logic block: scheduler (critical)
         - name: "scheduler_node"
           importance: "critical"
           startup:
             exec: "ros2 launch amr_sweeper_scheduler amr_sweeper_scheduler.launch.py"
             args:
               - "namespace:={ns}"
-              - "use_sim_time:=false"
+              - "use_sim_time:=true"
               - "missions_directory:=missions/database"
               - "trigger_running_on_work_window:=false"
             ready:
               - type: "service"
                 target: "reload_schedule"
                 required: true
-            window_ms: 8000
+            window_ms: 20000
           rosout_triggers:
             - "node=scheduler_node;level>=ERROR;action=FAULT"
           errors:
@@ -716,21 +761,22 @@ profiles:
             sigterm_timeout_ms: 1000
             sigkill_timeout_ms: 1000
 
-        # Logic block: layer_1_hardware bringup (critical)
         - name: "amr_sweeper_layer_1_hardware_bringup"
           importance: "critical"
           startup:
             exec: "ros2 launch amr_sweeper_layer_1_hardware_bringup amr_sweeper_layer_1_hardware_bringup.launch.py"
             args:
               - "namespace:={ns}"
+              - "use_simulation:=true"
+              - "use_sim_time:=true"
               - "use_amr_sweeper_ros2_control:=true"
               - "use_amr_sweeper_battery:=true"
               - "use_amr_sweeper_system_info:=true"
-              - "use_amr_sweeper_usb_cameras:=true"
+              - "use_amr_sweeper_usb_cameras:=false"
               - "use_amr_sweeper_depth_camera:=true"
               - "use_amr_sweeper_imu:=true"
               - "use_amr_sweeper_gnss:=true"
-              - "use_ntrip_client:=true"
+              - "use_ntrip_client:=false"
             ready:
               - type: "topic"
                 target: "system_info/system_info"
@@ -749,15 +795,6 @@ profiles:
                 required: true
               - type: "topic"
                 target: "battery/battery_state"
-                required: true
-              - type: "topic"
-                target: "usb_cameras/rear_left_camera/image_raw/compressed"
-                required: true
-              - type: "topic"
-                target: "usb_cameras/rear_right_camera/image_raw/compressed"
-                required: true
-              - type: "topic"
-                target: "usb_cameras/tools_camera/image_raw/compressed"
                 required: true
               - type: "topic"
                 target: "depth_camera/depth/camera_info"
@@ -783,9 +820,6 @@ profiles:
               - type: "service"
                 target: "gnss/gnss_node/get_parameters"
                 required: true
-              - type: "service"
-                target: "gnss/ntrip_client_node/get_parameters"
-                required: true
               - type: "hardware"
                 target: "odrive_ros2_control"
                 state: "active"
@@ -801,12 +835,10 @@ profiles:
           rosout_triggers:
             - "node=system_info_node;level>=ERROR;action=FAULT"
             - "node=system_info_node;level>=WARN;action=DEGRADED"
-            - "node=system_info_node;match=Could not open file;action=FAULT"
             - "node=battery_node;level>=ERROR;action=FAULT"
             - "node=battery_node;level>=WARN;action=DEGRADED"
             - "node=depth_camera_watchdog;level>=ERROR;action=DEGRADED"
             - "node=depth_camera_watchdog;level>=WARN;action=DEGRADED"
-            - "level>=ERROR;match=Failed to open V4L2 device;action=FAULT"
           errors:
             on_readiness_fail: "FAULT"
             on_unexpected_exit: "FAULT"
@@ -820,14 +852,14 @@ profiles:
             sigterm_timeout_ms: 1000
             sigkill_timeout_ms: 1000
 
-        # Logic block: layer_2_controllers bringup (critical)
         - name: "amr_sweeper_layer_2_controllers_bringup"
           importance: "critical"
           startup:
             exec: "ros2 launch amr_sweeper_layer_2_controllers_bringup amr_sweeper_layer_2_controllers_bringup.launch.py"
             args:
               - "namespace:={ns}"
-              - "use_sim_time:=false"
+              - "use_simulation:=true"
+              - "use_sim_time:=true"
               - "use_amr_sweeper_drive_controller:=true"
               - "use_amr_sweeper_tool_controller:=true"
               - "use_amr_sweeper_teleop:=false"
@@ -835,7 +867,11 @@ profiles:
               - "use_amr_sweeper_attitude_controller:=true"
               - "use_amr_sweeper_collision_detector:=true"
               - "use_amr_sweeper_safety_controller:=true"
+              - "use_sweeping_mode:=cmd_vel_sweeping"
             ready:
+              - type: "topic"
+                target: "drive_controller/odom"
+                required: true
               - type: "topic"
                 target: "sweeping_controller/cmd_vel_drive"
                 required: true
@@ -846,54 +882,33 @@ profiles:
                 target: "attitude_controller/roll_pitch"
                 required: true
               - type: "topic"
-                target: "drive_controller/odom"
-                required: true
-              - type: "topic"
                 target: "safety_controller/status"
                 required: true
               - type: "topic"
                 target: "collision_detector/impact_detected"
                 required: true
-              - type: "service"
-                target: "amr_sweeper_attitude_controller/enable_attitude_estimation"
-                required: true
-              - type: "service"
-                target: "amr_sweeper_safety_controller/enable_controller"
-                required: true
-              - type: "service"
-                target: "amr_sweeper_collision_detector/enable_detector"
-                required: true
-              - type: "controller"
-                target: "drive_controller"
-                required: true
-              - type: "controller"
-                target: "tool_controller"
-                required: true
-            window_ms: 30000
-          rosout_triggers:
-            - "level>=FATAL;action=FAULT"
-            - "level>=ERROR;action=FAULT"
+            window_ms: 45000
           errors:
             on_readiness_fail: "FAULT"
             on_unexpected_exit: "FAULT"
             priority: 250
             force: true
           restart:
-            max_restarts: 0
+            max_restarts: 5
             restart_delay_ms: 1000
           shutdown:
-            sigint_timeout_ms: 1500
-            sigterm_timeout_ms: 1500
-            sigkill_timeout_ms: 1500
+            sigint_timeout_ms: 1000
+            sigterm_timeout_ms: 1000
+            sigkill_timeout_ms: 1000
 
-        # Logic block: layer_3_navigation bringup (critical)
         - name: "amr_sweeper_layer_3_navigation_bringup"
           importance: "critical"
           startup:
             exec: "ros2 launch amr_sweeper_layer_3_navigation_bringup amr_sweeper_layer_3_navigation_bringup.launch.py"
             args:
               - "namespace:={ns}"
-              - "use_sim_time:=false"
+              - "use_simulation:=true"
+              - "use_sim_time:=true"
               - "use_amr_sweeper_visual_odometry:=false"
               - "use_amr_sweeper_localization:=true"
               - "use_amr_sweeper_mapping:=true"

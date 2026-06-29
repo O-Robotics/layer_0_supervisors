@@ -23,10 +23,12 @@ namespace {
   constexpr char kAnsiLightMagenta[] = "\033[95m";
   constexpr char kAnsiReset[] = "\033[0m";
   const std::vector<std::string> kRuntimeOverrideKeys{
+    "use_sim_time",
     "missions_directory",
     "auto_build_on_start",
     "watch_for_updates",
     "trigger_running_on_work_window",
+    "use_simulation",
     "use_amr_sweeper_ros2_control",
     "use_amr_sweeper_battery",
     "use_amr_sweeper_system_info",
@@ -53,6 +55,7 @@ namespace {
   };
 
   const std::vector<std::string> kLayer1BringupOverrideKeys{
+    "use_simulation",
     "use_sim_time",
     "use_amr_sweeper_ros2_control",
     "use_amr_sweeper_battery",
@@ -65,6 +68,7 @@ namespace {
   };
 
   const std::vector<std::string> kLayer2BringupOverrideKeys{
+    "use_simulation",
     "use_sim_time",
     "use_amr_sweeper_drive_controller",
     "use_amr_sweeper_tool_controller",
@@ -79,6 +83,7 @@ namespace {
   };
 
   const std::vector<std::string> kLayer3BringupOverrideKeys{
+    "use_simulation",
     "use_sim_time",
     "use_amr_sweeper_visual_odometry",
     "use_amr_sweeper_localization",
@@ -226,6 +231,30 @@ namespace {
       return true;
     }
     return target.find(pattern) != std::string::npos;
+  }
+
+  int parse_profile_id_scalar(const YAML::Node & node)
+  {
+    if (!node || !node.IsScalar()) {
+      return -1;
+    }
+
+    try {
+      return node.as<int>();
+    } catch (const YAML::Exception &) {
+    }
+
+    try {
+      const auto raw = node.as<std::string>();
+      size_t consumed = 0;
+      const int parsed = std::stoi(raw, &consumed, 10);
+      if (consumed != raw.size()) {
+        return -1;
+      }
+      return parsed;
+    } catch (const std::exception &) {
+      return -1;
+    }
   }
 
   bool is_profile_requirement_enabled(
@@ -378,7 +407,7 @@ namespace {
       if (!prof || !prof.IsMap()) {
         continue;
       }
-      const auto id = prof["id"].as<int>(-1);
+      const auto id = parse_profile_id_scalar(prof["id"]);
       if (id < 0) {
         continue;
       }
@@ -547,7 +576,7 @@ bool load_profile_transitions(
     if (!prof || !prof.IsMap()) {
       continue;
     }
-    const auto id = prof["id"].as<int>(-1);
+    const auto id = parse_profile_id_scalar(prof["id"]);
     if (id < 0) {
       continue;
     }

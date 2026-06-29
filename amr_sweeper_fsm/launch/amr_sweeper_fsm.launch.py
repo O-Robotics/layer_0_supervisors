@@ -10,10 +10,12 @@ import os
 def generate_launch_description():
     console_output_format = "[{severity}] [{time}] [{name}] : {message}"
     runtime_override_arg_names = [
+        "use_sim_time",
         "missions_directory",
         "auto_build_on_start",
         "watch_for_updates",
         "trigger_running_on_work_window",
+        "use_simulation",
         "use_amr_sweeper_ros2_control",
         "use_amr_sweeper_battery",
         "use_amr_sweeper_system_info",
@@ -63,6 +65,7 @@ def generate_launch_description():
 
     # Namespace policy: top-level namespace for the robot.
     namespace = LaunchConfiguration("namespace")
+    use_simulation = LaunchConfiguration("use_simulation")
     use_sim_time = LaunchConfiguration("use_sim_time")
     state_params_file = LaunchConfiguration("state_params_file")
     use_profile = LaunchConfiguration("use_profile")
@@ -75,6 +78,12 @@ def generate_launch_description():
         "namespace",
         default_value="amr_sweeper",
         description="Top-level namespace for all FSM nodes.",
+    )
+
+    declare_use_simulation = DeclareLaunchArgument(
+        "use_simulation",
+        default_value="false",
+        description="Launch FSM-managed layer bringups in simulation mode.",
     )
 
     declare_use_sim_time = DeclareLaunchArgument(
@@ -240,6 +249,7 @@ def generate_launch_description():
             SetEnvironmentVariable("RCUTILS_COLORIZED_OUTPUT", "1"),
             SetEnvironmentVariable("RCUTILS_CONSOLE_OUTPUT_FORMAT", console_output_format),
             declare_namespace,
+            declare_use_simulation,
             declare_use_sim_time,
             declare_use_profile,
             declare_tick_period_ms,
