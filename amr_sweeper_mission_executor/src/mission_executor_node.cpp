@@ -1863,6 +1863,7 @@ MissionExecutorNode::MissionExecutorNode(const rclcpp::NodeOptions & options)
   rosbag_topics_file_ = declare_parameter<std::string>(
     "rosbag_topics_file",
     "");
+  record_mission_rosbag_ = declare_parameter<bool>("record_mission_rosbag", false);
   mission_parser_node_name_ = declare_parameter<std::string>(
     "mission_parser_node_name",
     "vda5050_parser_node");
@@ -2300,7 +2301,8 @@ void MissionExecutorNode::handleExecuteMission(
         request->mission_window_start,
         request->mission_window_end);
     }
-    writeMissionExecutionPreferences(context.execution_context_file, request->record_rosbag);
+    const bool effective_record_rosbag = request->record_rosbag || record_mission_rosbag_;
+    writeMissionExecutionPreferences(context.execution_context_file, effective_record_rosbag);
     rewriteBuiltinLocalPatternArtifacts(resolved_mission, context);
     std::string message;
     if (!requestRunningState(context, *request, message)) {
@@ -2313,7 +2315,7 @@ void MissionExecutorNode::handleExecuteMission(
     }
     recordMissionExecutionStart(resolved_mission, context, *request);
     std::string rosbag_warning;
-    if (!startMissionRosbagRecording(context, request->record_rosbag, rosbag_warning) &&
+    if (!startMissionRosbagRecording(context, effective_record_rosbag, rosbag_warning) &&
       !rosbag_warning.empty())
     {
       message += " (" + rosbag_warning + ")";
@@ -4461,7 +4463,7 @@ bool MissionExecutorNode::startMissionRosbagRecording(
 
   copyFileIfExists(
     resolved_topics_path,
-    rosbag_config_snapshot_directory / "record_rosbag.yaml");
+    rosbag_config_snapshot_directory / resolved_topics_path.filename());
   try {
     const auto localization_share =
       std::filesystem::path(ament_index_cpp::get_package_share_directory("amr_sweeper_localization"));

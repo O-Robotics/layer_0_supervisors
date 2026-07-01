@@ -44,6 +44,7 @@ Responsibilities:
 - record `RecordMap` GNSS points into `<mission_id>_<run_timestamp>_path_navsat.geojson` so the latest perimeter can be previewed on a satellite map
 
 Rosbag recording:
-- the topic allowlist lives in `config/record_rosbag.yaml`
+- the default mission-recording topic allowlist lives in `config/record_mission_rosbag.yaml`
 - topics listed there are recorded with `ros2 bag record --regex ...`, so missing topics do not crash mission launch
-- image-heavy topics stay commented out by default and can be enabled as needed
+- the list is focused on runtime mission performance: commands, odometry, localization, planning, mapping, and other mission-execution signals
+- `record_mission_rosbag:=true` enables mission rosbag recording by default for executions launched through this stack.

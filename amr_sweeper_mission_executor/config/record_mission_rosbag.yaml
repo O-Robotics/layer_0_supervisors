@@ -1,0 +1,56 @@
+topics:
+  - /clock
+  - /tf
+  - /tf_static
+
+# Mission lifecycle and routing context.
+  - /amr_sweeper/fsm/supervisor_node/fsm_state
+  - /amr_sweeper/fsm/supervisor_node/fsm_status
+  - /amr_sweeper/vda5050_parser/status
+  - /amr_sweeper/safety_msgs/stop
+
+# Commands and motion execution.
+  - /amr_sweeper/drive_controller/cmd_vel
+  - /amr_sweeper/drive_controller/odom
+  - /amr_sweeper/sweeping_controller/cmd_vel_drive
+  - /amr_sweeper/sweeping_controller/cmd_vel_tools
+  - /amr_sweeper/sweeping_controller/status
+  - /amr_sweeper/teleop/cmd_vel_drive
+  - /amr_sweeper/teleop/cmd_vel_tools
+  - /amr_sweeper/tool_controller/commands
+  - /amr_sweeper/navigation/cmd_vel
+
+# Localization and mission performance.
+  - /amr_sweeper/localization/odometry_body
+  - /amr_sweeper/localization/odometry_fused
+  - /amr_sweeper/localization/pose
+  - /amr_sweeper/localization/fusioncore/transition_event
+  - /amr_sweeper/localization/debug/filter_health
+  - /amr_sweeper/localization/debug/gnss_status
+  - /amr_sweeper/visual_odometry/odom
+  - /amr_sweeper/visual_odometry/status
+
+# Navigation and path-following performance.
+  - /amr_sweeper/navigation/bt_navigator/goal_pose
+  - /amr_sweeper/navigation/bt_navigator/transition_event
+  - /amr_sweeper/navigation/controller_server/local_plan
+  - /amr_sweeper/navigation/controller_server/cost_cloud
+  - /amr_sweeper/navigation/controller_server/transition_event
+  - /amr_sweeper/navigation/planner_server/plan
+  - /amr_sweeper/navigation/planner_server/transition_event
+  - /amr_sweeper/navigation/waypoint_follower/transition_event
+
+# Runtime mapping outputs used during missions.
+  - /amr_sweeper/mapping/global_costmap
+  - /amr_sweeper/local_costmap/costmap_raw
+  - /amr_sweeper/local_costmap/costmap_updates
+  - /amr_sweeper/global_costmap/costmap_raw
+  - /amr_sweeper/global_costmap/costmap_updates
+  - /amr_sweeper/mapping/waypoint_path
+  - /amr_sweeper/mapping/map_pose_status
+  - /amr_sweeper/mapping/status
+
+# Mission-relevant perception and positioning.
+  - /amr_sweeper/gnss/navsat
+  - /amr_sweeper/gnss/fix
+  - /amr_sweeper/depth_camera/scan

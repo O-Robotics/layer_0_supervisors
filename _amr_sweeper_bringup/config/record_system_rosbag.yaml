@@ -1,0 +1,41 @@
+topics:
+  - /clock
+  - /parameter_events
+  - /rosout
+  - /tf
+  - /tf_static
+
+# FSM and supervisor state.
+  - /amr_sweeper/fsm/supervisor_node/fsm_state
+  - /amr_sweeper/fsm/supervisor_node/fsm_status
+
+# Operator-level system coordination.
+  - /amr_sweeper/safety_msgs/stop
+  - /amr_sweeper/vda5050_parser/status
+
+# Core hardware health and system observability.
+  - /amr_sweeper/system_info/system_info
+  - /amr_sweeper/battery/battery_state
+  - /amr_sweeper/battery/battery_health
+  - /amr_sweeper/description/robot_description
+
+# Base sensing needed to diagnose system bringup and state transitions.
+  - /amr_sweeper/imu/azimuth
+  - /amr_sweeper/imu/data_acc_gyro
+  - /amr_sweeper/imu/data_heading
+  - /amr_sweeper/imu/data_raw
+  - /amr_sweeper/gnss/navsat
+  - /amr_sweeper/gnss/fix
+  - /amr_sweeper/gnss/ntrip_client/rtcm
+  - /amr_sweeper/depth_camera/scan
+  - /amr_sweeper/depth_camera/depth/camera_info
+  - /amr_sweeper/depth_camera/motion/sample
+
+# Controller and safety status topics for overall system behavior.
+  - /amr_sweeper/attitude_controller/status
+  - /amr_sweeper/drive_controller/odom
+  - /amr_sweeper/collision_detector/impact_detected
+  - /amr_sweeper/collision_detector/status
+  - /amr_sweeper/safety_controller/status
+  - /amr_sweeper/safety_controller/web_status
+  - /amr_sweeper/sweeping_controller/status

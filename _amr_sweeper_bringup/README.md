@@ -12,6 +12,12 @@ Packages started by this bringup:
 Main launch:
 - `ros2 launch amr_sweeper_bringup amr_sweeper_bringup.launch.py`
 
+Rosbag recording:
+- `amr_sweeper_bringup` owns the system-level rosbag recorder launch logic.
+- its default topic allowlist lives in `config/record_system_rosbag.yaml` and focuses on FSM, supervisor, hardware health, and whole-system status topics.
+- launch it with `record_system_rosbag:=true` to capture a bringup-level system bag.
+- pass `record_mission_rosbag:=true` to make mission execution record bags by default.
+
 Test schedule mode:
 - `use_test:=false` by default keeps `missions/database` free of checked-in test fixtures.
 - `use_test:=true` makes bringup pass `src/layer_0_supervisors/tests/schedule_20260000T000000Z.ics` to the mission executor and scheduler when `schedule_ics_path` is otherwise empty.

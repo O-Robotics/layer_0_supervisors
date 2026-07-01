@@ -105,8 +105,8 @@ def _write_runtime_rosbag_qos_overrides(rosbag_output_directory: str) -> str:
 def _start_bringup_rosbag(context, *args, **kwargs):
     del args, kwargs
 
-    record_rosbag = LaunchConfiguration("record_rosbag").perform(context).strip().lower()
-    if record_rosbag != "true":
+    record_system_rosbag = LaunchConfiguration("record_system_rosbag").perform(context).strip().lower()
+    if record_system_rosbag != "true":
         return []
 
     missions_log_directory = _resolve_workspace_path(
@@ -130,7 +130,7 @@ def _start_bringup_rosbag(context, *args, **kwargs):
         return [
             LogInfo(
                 msg=(
-                    "[amr_sweeper_bringup] record_rosbag requested but no topics were "
+                    "[amr_sweeper_bringup] record_system_rosbag requested but no topics were "
                     f"loaded from {rosbag_topics_file}"
                 )
             )
@@ -269,7 +269,8 @@ def generate_launch_description():
     default_schedule_filename = LaunchConfiguration("default_schedule_filename")
     use_test = LaunchConfiguration("use_test")
     test_schedule_ics_path = LaunchConfiguration("test_schedule_ics_path")
-    record_rosbag = LaunchConfiguration("record_rosbag")
+    record_system_rosbag = LaunchConfiguration("record_system_rosbag")
+    record_mission_rosbag = LaunchConfiguration("record_mission_rosbag")
     rosbag_topics_file = LaunchConfiguration("rosbag_topics_file")
     mission_file_extension = LaunchConfiguration("mission_file_extension")
     mission_executor_execute_service = LaunchConfiguration("mission_executor_execute_service")
@@ -355,11 +356,12 @@ def generate_launch_description():
             "test_schedule_ics_path",
             default_value="src/layer_0_supervisors/tests/schedule_20260000T000000Z.ics",
         ),
-        DeclareLaunchArgument("record_rosbag", default_value="false"),
+        DeclareLaunchArgument("record_system_rosbag", default_value="false"),
+        DeclareLaunchArgument("record_mission_rosbag", default_value="false"),
         DeclareLaunchArgument(
             "rosbag_topics_file",
             default_value=PathJoinSubstitution(
-                [FindPackageShare("amr_sweeper_mission_executor"), "config", "record_rosbag.yaml"]
+                [FindPackageShare("amr_sweeper_bringup"), "config", "record_system_rosbag.yaml"]
             ),
         ),
         DeclareLaunchArgument("mission_file_extension", default_value=".json"),
@@ -411,6 +413,7 @@ def generate_launch_description():
                 "safety_stop_topic": safety_stop_topic,
                 "teleop_odometry_topic": teleop_odometry_topic,
                 "manual_mapping_odometry_topic": manual_mapping_odometry_topic,
+                "record_mission_rosbag": record_mission_rosbag,
                 "rosbag_topics_file": rosbag_topics_file,
                 "manual_mission_inactivity_timeout_seconds": manual_mission_inactivity_timeout_seconds,
                 "idling_profile_id": idling_profile_id,
@@ -418,7 +421,7 @@ def generate_launch_description():
                 "mission_parser_build_service": mission_parser_build_service,
             }.items(),
         ),
-        OpaqueFunction(function=_start_bringup_rosbag, condition=IfCondition(record_rosbag)),
+        OpaqueFunction(function=_start_bringup_rosbag, condition=IfCondition(record_system_rosbag)),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(_launch_file("amr_sweeper_scheduler", "amr_sweeper_scheduler.launch.py")),
             launch_arguments={

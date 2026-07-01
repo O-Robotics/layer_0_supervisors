@@ -180,6 +180,7 @@ private:
   std::string manual_mapping_navsat_topic_;
   std::string routed_mission_odometry_topic_;
   std::string rosbag_topics_file_;
+  bool record_mission_rosbag_{false};
   std::string mission_parser_node_name_;
   std::string mission_parser_build_service_;
   std::string fsm_request_service_;
