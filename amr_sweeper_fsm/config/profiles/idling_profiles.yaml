@@ -38,7 +38,6 @@ profiles:
             exec: "ros2 launch amr_sweeper_vda5050_parser amr_sweeper_vda5050_parser.launch.py"
             args:
               - "namespace:={ns}"
-              - "use_sim_time:=false"
               - "missions_directory:=missions/database"
               - "auto_build_on_start:=true"
               - "watch_for_updates:=true"
@@ -68,7 +67,6 @@ profiles:
             exec: "ros2 launch amr_sweeper_scheduler amr_sweeper_scheduler.launch.py"
             args:
               - "namespace:={ns}"
-              - "use_sim_time:=false"
               - "missions_directory:=missions/database"
             ready:
               - type: "service"
@@ -165,7 +163,6 @@ profiles:
             exec: "ros2 launch amr_sweeper_vda5050_parser amr_sweeper_vda5050_parser.launch.py"
             args:
               - "namespace:={ns}"
-              - "use_sim_time:=false"
               - "missions_directory:=missions/database"
               - "auto_build_on_start:=true"
               - "watch_for_updates:=true"
@@ -195,7 +192,6 @@ profiles:
             exec: "ros2 launch amr_sweeper_scheduler amr_sweeper_scheduler.launch.py"
             args:
               - "namespace:={ns}"
-              - "use_sim_time:=false"
               - "missions_directory:=missions/database"
             ready:
               - type: "service"

@@ -794,7 +794,7 @@ MissionParserNode::MissionParserNode(const rclcpp::NodeOptions & options)
       this,
       std::placeholders::_1,
       std::placeholders::_2));
-  build_timer_ = create_wall_timer(
+  build_timer_ = create_timer(
     std::chrono::seconds(2),
     std::bind(&MissionParserNode::buildIfNeeded, this));
 

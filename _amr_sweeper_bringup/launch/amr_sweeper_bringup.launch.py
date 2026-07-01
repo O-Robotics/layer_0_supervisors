@@ -8,13 +8,18 @@ from datetime import datetime, timezone
 from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
+    EmitEvent,
     ExecuteProcess,
     IncludeLaunchDescription,
     LogInfo,
     OpaqueFunction,
+    RegisterEventHandler,
+    SetLaunchConfiguration,
     SetEnvironmentVariable,
 )
 from launch.conditions import IfCondition
+from launch.event_handlers import OnProcessExit
+from launch.events import Shutdown
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch_ros.substitutions import FindPackageShare
@@ -36,6 +41,24 @@ def _resolve_workspace_path(configured_path: str) -> str:
     if os.path.exists(workspace_relative):
         return workspace_relative
     return configured_path
+
+
+def _as_bool(value: str) -> bool:
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _normalize_namespace(namespace: str) -> str:
+    return namespace.strip().strip("/")
+
+
+def _absolute_topic(namespace: str, topic_name: str) -> str:
+    if topic_name.startswith("/"):
+        return topic_name
+    normalized_namespace = _normalize_namespace(namespace)
+    normalized_topic = topic_name.strip().lstrip("/")
+    if normalized_namespace:
+        return f"/{normalized_namespace}/{normalized_topic}"
+    return f"/{normalized_topic}"
 
 
 def _load_rosbag_topics(topics_file: str) -> list[str]:
@@ -130,6 +153,63 @@ def _start_bringup_rosbag(context, *args, **kwargs):
                 rosbag_output_directory,
             ],
             output="screen",
+        ),
+    ]
+
+
+def _start_fault_shutdown_watcher(context, *args, **kwargs):
+    del args, kwargs
+
+    if not _as_bool(LaunchConfiguration("use_simulation").perform(context)):
+        return []
+    if not _as_bool(LaunchConfiguration("shutdown_on_fault").perform(context)):
+        return []
+
+    namespace = LaunchConfiguration("namespace").perform(context)
+    fsm_state_topic = LaunchConfiguration("fsm_state_topic").perform(context)
+    shutdown_fault_state = LaunchConfiguration("shutdown_fault_state").perform(context)
+    shutdown_fault_profile = LaunchConfiguration("shutdown_fault_profile").perform(context)
+    qualified_topic = _absolute_topic(namespace, fsm_state_topic)
+
+    watcher = ExecuteProcess(
+        cmd=[
+            "ros2",
+            "run",
+            "amr_sweeper_bringup",
+            "wait_for_fsm_fault_shutdown.py",
+            "--topic",
+            qualified_topic,
+            "--state",
+            shutdown_fault_state,
+            "--profile",
+            shutdown_fault_profile,
+        ],
+        output="screen",
+    )
+
+    return [
+        watcher,
+        RegisterEventHandler(
+            OnProcessExit(
+                target_action=watcher,
+                on_exit=[
+                    LogInfo(
+                        msg=(
+                            "[amr_sweeper_bringup] Simulation fault watcher exited after "
+                            f"detecting FSM {shutdown_fault_state}/{shutdown_fault_profile}; "
+                            "requesting launch shutdown."
+                        )
+                    ),
+                    EmitEvent(
+                        event=Shutdown(
+                            reason=(
+                                "Simulation shutdown requested after FSM entered "
+                                f"{shutdown_fault_state}/{shutdown_fault_profile}"
+                            )
+                        )
+                    ),
+                ],
+            )
         ),
     ]
 
@@ -251,6 +331,7 @@ def generate_launch_description():
         DeclareLaunchArgument("namespace", default_value="amr_sweeper"),
         DeclareLaunchArgument("use_simulation", default_value="false"),
         DeclareLaunchArgument("use_sim_time", default_value="false"),
+        SetLaunchConfiguration("use_sim_time", "true", condition=IfCondition(use_simulation)),
         DeclareLaunchArgument("state_params_file", default_value=default_state_params_file),
         DeclareLaunchArgument("test_output_directory", default_value="src/layer_3_navigation/tests"),
         DeclareLaunchArgument("use_profile", default_value="001"),
@@ -298,7 +379,20 @@ def generate_launch_description():
         DeclareLaunchArgument("fsm_status_topic", default_value="fsm/supervisor_node/fsm_status"),
         DeclareLaunchArgument("site_title", default_value="AMR Sweeper Mission Control"),
         DeclareLaunchArgument("public_base_url", default_value="http://192.168.2.1:8080"),
+        DeclareLaunchArgument("shutdown_on_fault", default_value="true"),
+        DeclareLaunchArgument("shutdown_fault_state", default_value="FAULT"),
+        DeclareLaunchArgument("shutdown_fault_profile", default_value="400"),
         *extra_fsm_override_declarations,
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(_launch_file("amr_sweeper_bringup", "amr_sweeper_gazebo.launch.py")),
+            launch_arguments={
+                "namespace": namespace,
+                "enable_gnss": "true",
+                "enable_imu": "true",
+                "enable_depth_camera": "true",
+            }.items(),
+            condition=IfCondition(use_simulation),
+        ),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(_launch_file("amr_sweeper_fsm", "amr_sweeper_fsm.launch.py")),
             launch_arguments=fsm_launch_arguments.items(),
@@ -334,6 +428,7 @@ def generate_launch_description():
                 "missions_directory": missions_from_db_directory,
                 "default_schedule_filename": default_schedule_filename,
                 "mission_file_extension": mission_file_extension,
+                "robot_id": robot_id,
                 "mission_executor_execute_service": mission_executor_execute_service,
                 "mission_executor_prepare_service": mission_executor_prepare_service,
                 "trigger_running_on_work_window": trigger_running_on_work_window,
@@ -370,4 +465,5 @@ def generate_launch_description():
                 "public_base_url": public_base_url,
             }.items(),
         ),
+        OpaqueFunction(function=_start_fault_shutdown_watcher),
     ])

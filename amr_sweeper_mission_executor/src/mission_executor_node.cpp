@@ -1894,23 +1894,6 @@ MissionExecutorNode::MissionExecutorNode(const rclcpp::NodeOptions & options)
     declare_parameter<int>("manual_routed_profile_id", 210));
   manual_teleop_profile_id_ = static_cast<std::uint16_t>(
     declare_parameter<int>("manual_teleop_profile_id", 220));
-  if (use_simulation_) {
-    if (idling_profile_id_ == 101U) {
-      idling_profile_id_ = 150U;
-    }
-    if (scheduled_running_profile_id_ == 201U) {
-      scheduled_running_profile_id_ = 251U;
-    }
-    if (manual_mapping_profile_id_ == 225U) {
-      manual_mapping_profile_id_ = 256U;
-    }
-    if (manual_routed_profile_id_ == 210U) {
-      manual_routed_profile_id_ = 252U;
-    }
-    if (manual_teleop_profile_id_ == 220U) {
-      manual_teleop_profile_id_ = 255U;
-    }
-  }
   default_activation_priority_ = static_cast<std::uint8_t>(
     declare_parameter<int>("default_activation_priority", 200));
   promote_runtime_costmap_on_completed_mission_ = declare_parameter<bool>(
@@ -1998,7 +1981,7 @@ MissionExecutorNode::MissionExecutorNode(const rclcpp::NodeOptions & options)
     routed_mission_odometry_topic_,
     rclcpp::SystemDefaultsQoS(),
     std::bind(&MissionExecutorNode::handleRoutedMissionOdometry, this, std::placeholders::_1));
-  manual_mission_watchdog_timer_ = create_wall_timer(
+  manual_mission_watchdog_timer_ = create_timer(
     std::chrono::seconds(5),
     std::bind(&MissionExecutorNode::checkManualMissionInactivity, this));
 
@@ -4708,6 +4691,11 @@ void MissionExecutorNode::stopMissionRosbagRecording()
   }
 }
 
+void MissionExecutorNode::shutdownForExit()
+{
+  stopMissionRosbagRecording();
+}
+
 std::string MissionExecutorNode::formatUtcTimestamp(
   const std::chrono::system_clock::time_point & time_point)
 {
@@ -4794,9 +4782,17 @@ int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
   auto node = std::make_shared<amr_sweeper_mission_executor::MissionExecutorNode>();
+  rclcpp::on_shutdown(
+    [weak_node = std::weak_ptr<amr_sweeper_mission_executor::MissionExecutorNode>(node)]() {
+      if (const auto locked = weak_node.lock()) {
+        locked->shutdownForExit();
+      }
+    },
+    node->get_node_base_interface()->get_context());
   rclcpp::executors::MultiThreadedExecutor executor(rclcpp::ExecutorOptions(), 2U);
   executor.add_node(node);
   executor.spin();
+  node->shutdownForExit();
   executor.remove_node(node);
   rclcpp::shutdown();
   return 0;

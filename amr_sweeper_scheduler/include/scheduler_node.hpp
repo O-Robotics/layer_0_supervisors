@@ -69,7 +69,7 @@ struct ParserConfig
 {
   bool strict_validation{true};
   int max_events{2000};
-  bool require_x_robot_id{true};
+  bool require_x_robot_id{false};
   bool require_x_schedule_type{true};
   bool require_x_mission_id_for_work{true};
 };
@@ -93,7 +93,6 @@ public:
   virtual ~ScheduleExpander() = default;
   virtual std::vector<TimeWindow> expand(
     const ScheduleModel & model,
-    const std::string & robot_id,
     const std::chrono::system_clock::time_point & now,
     const std::chrono::hours & horizon) = 0;
 };
@@ -103,7 +102,6 @@ class ScheduleExpanderStub final : public ScheduleExpander
 public:
   std::vector<TimeWindow> expand(
     const ScheduleModel & model,
-    const std::string & robot_id,
     const std::chrono::system_clock::time_point & now,
     const std::chrono::hours & horizon) override;
 };
@@ -127,6 +125,7 @@ private:
   void refresh_mission_catalog();
   void publish_windows(const std::vector<TimeWindow> & windows);
   void maybe_promote_mission(const std::vector<TimeWindow> & windows);
+  [[nodiscard]] std::chrono::system_clock::time_point current_schedule_time() const;
   [[nodiscard]] bool mission_json_or_folder_exists(const std::string & mission_id) const;
   void request_mission_execution(const TimeWindow & window);
   [[nodiscard]] std::string resolved_schedule_path() const;
@@ -188,6 +187,10 @@ private:
   bool ready_message_emitted_{false};
   bool fatal_error_{false};
   bool schedule_has_no_events_{false};
+  bool use_sim_time_{false};
+  mutable bool schedule_time_anchor_initialized_{false};
+  mutable rclcpp::Time schedule_time_anchor_ros_;
+  mutable std::chrono::system_clock::time_point schedule_time_anchor_wall_;
 };
 
 }  // namespace amr_sweeper_scheduler

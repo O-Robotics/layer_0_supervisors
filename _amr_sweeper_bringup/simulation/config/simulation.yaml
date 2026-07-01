@@ -1,0 +1,43 @@
+simulation:
+  world_name: amr_sweeper_test
+  world_file: amr_sweeper_test.sdf
+  entity_name: amr_sweeper
+  spawn_pose:
+    x: 0.0
+    y: 0.0
+    z: 0.15
+    roll: 0.0
+    pitch: 0.0
+    yaw: 0.0
+  gnss:
+    navsat_topic: gnss/navsat
+    gpsfix_topic: gnss/fix
+    odometry_topic: gnss/odometry
+    status_marker_topic: gnss/status_marker
+    frame_id: gnss_link
+
+bridges:
+  - ros_topic_name: /clock
+    ros_type_name: rosgraph_msgs/msg/Clock
+    gz_type_name: gz.msgs.Clock
+    direction: gz_to_ros
+  - ros_topic_name: imu/data_raw_gz
+    ros_type_name: sensor_msgs/msg/Imu
+    gz_type_name: gz.msgs.IMU
+    direction: gz_to_ros
+  - ros_topic_name: depth_camera/scan_gz
+    ros_type_name: sensor_msgs/msg/LaserScan
+    gz_type_name: gz.msgs.LaserScan
+    direction: gz_to_ros
+  - ros_topic_name: drive_controller/odom
+    ros_type_name: nav_msgs/msg/Odometry
+    gz_type_name: gz.msgs.Odometry
+    direction: gz_to_ros
+  - ros_topic_name: sweeping_controller/cmd_vel_drive
+    ros_type_name: geometry_msgs/msg/Twist
+    gz_type_name: gz.msgs.Twist
+    direction: ros_to_gz
+  - ros_topic_name: /world/amr_sweeper_test/pose/info
+    ros_type_name: tf2_msgs/msg/TFMessage
+    gz_type_name: gz.msgs.Pose_V
+    direction: gz_to_ros

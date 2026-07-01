@@ -5,8 +5,8 @@
     missions_directory:                 missions/database          # Folder containing schedule_<timestamp>.ics and synced VDA5050 mission files/subfolders.
     default_schedule_filename:          ""                            # Legacy fallback schedule filename if auto-discovery finds no schedule_<timestamp>.ics files.
     mission_file_extension:             .json                         # File suffix used when cataloging VDA5050 mission files.
-    robot_id:                           ""                            # Leave empty to derive AMR-Sweeper_000xx from ROBOT_NUMBER in robot_config_env_path.
-    robot_config_env_path:              /opt/robot_config/robot_config.global.env # Environment file used to derive ROBOT_NUMBER for the default robot_id.
+    robot_id:                           ""                            # Optional robot identifier kept for metadata only. Leave empty to avoid robot-specific schedule binding.
+    robot_config_env_path:              /opt/robot_config/robot_config.global.env # Optional environment file used when deriving metadata robot_id from ROBOT_NUMBER.
     mission_executor_execute_service:   execute_mission               # Mission executor service used to build, prepare, and activate scheduled missions.
     mission_executor_prepare_service:   prepare_manual_mission        # Compatibility prepare_mission_execution service for manual missions.
 
@@ -27,7 +27,7 @@
     # -- Validation -----------------------------------------------------------
     strict_validation:                  true                # Fail the schedule load when required fields or values are invalid.
     max_events:                         2000                # Safety cap on parsed VEVENT count.
-    require_x_robot_id:                 true                # Require X-ROBOT-ID on every VEVENT.
+    require_x_robot_id:                 false               # Keep X-ROBOT-ID optional so schedules can move between replacement robots unchanged.
     require_x_schedule_type:            true                # Require X-SCHEDULE-TYPE on every VEVENT.
     require_x_mission_id_for_work:      true                # Require X-MISSION-ID on WORK entries.
 

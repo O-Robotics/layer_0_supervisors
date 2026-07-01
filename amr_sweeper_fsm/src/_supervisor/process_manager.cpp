@@ -1,6 +1,7 @@
 #include "_supervisor/process_manager.hpp"
 
 #include <signal.h>
+#include <sys/prctl.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -100,6 +101,12 @@ bool ProcessManager::start(const std::string & command, std::string & err_out)
     // Child: new process group so we can signal the whole tree.
     ::setpgid(0, 0);
 
+    // Ensure abrupt FSM/state-node death tears down the managed launch process too.
+    (void)::prctl(PR_SET_PDEATHSIG, SIGKILL);
+    if (::getppid() == 1) {
+      _exit(1);
+    }
+
     // Give each FSM-managed launch tree an isolated ROS log directory so concurrent
     // `ros2 launch` invocations do not race on ~/.ros/log/latest.
     const std::filesystem::path ros_log_dir =
@@ -118,7 +125,8 @@ bool ProcessManager::start(const std::string & command, std::string & err_out)
     // to avoid spurious RTPS transport startup errors.
     ::setenv("RMW_FASTRTPS_USE_SHM", "0", 1);
 
-    ::execl("/bin/sh", "sh", "-c", command.c_str(), (char *)nullptr);
+    const std::string exec_command = "exec " + command;
+    ::execl("/bin/sh", "sh", "-c", exec_command.c_str(), (char *)nullptr);
     _exit(127);
   }
 
@@ -151,13 +159,12 @@ bool ProcessManager::stop(const std::string & command, std::string & err_out, co
   const pid_t pgid = pid;
 
   // Signal process group (-pid) so typical "ros2 launch" trees are handled.
-  // Prefer SIGTERM first for FSM-managed transitions so launch trees do not
-  // report this as a user Ctrl-C interruption.
+  // Prefer SIGINT first so ROS launch trees get a graceful Ctrl-C style shutdown.
   if (process_group_alive(pgid) || pid_alive(pid)) {
-    ::kill(-pgid, SIGTERM);
-    if (!wait_process_group_dead(pgid, policy.sigterm_timeout)) {
-      ::kill(-pgid, SIGINT);
-      if (!wait_process_group_dead(pgid, policy.sigint_timeout)) {
+    ::kill(-pgid, SIGINT);
+    if (!wait_process_group_dead(pgid, policy.sigint_timeout)) {
+      ::kill(-pgid, SIGTERM);
+      if (!wait_process_group_dead(pgid, policy.sigterm_timeout)) {
         ::kill(-pgid, SIGKILL);
         (void)wait_process_group_dead(pgid, policy.sigkill_timeout);
       }

@@ -29,7 +29,6 @@ namespace
 
 constexpr char kLowerPriorityRejectedPrefix[] = "Rejected: lower priority than last request";
 constexpr auto kLowerPriorityRetryCooldown = std::chrono::seconds(30);
-constexpr char kLegacyRobotId[] = "RBT-01";
 constexpr char kDefaultRobotConfigEnvPath[] = "/opt/robot_config/robot_config.global.env";
 
 std::string format_local_timestamp(const std::tm & tm);
@@ -654,7 +653,6 @@ ScheduleModel IcalParserMinimal::parse_file(const std::string & ics_path, const 
 
 std::vector<TimeWindow> ScheduleExpanderStub::expand(
   const ScheduleModel & model,
-  const std::string & robot_id,
   const std::chrono::system_clock::time_point & now,
   const std::chrono::hours & horizon)
 {
@@ -663,9 +661,6 @@ std::vector<TimeWindow> ScheduleExpanderStub::expand(
 
   for (const auto & event : model.events) {
     if (event.type == ScheduleType::SAFETY) {
-      continue;
-    }
-    if (!event.robot_id.empty() && event.robot_id != robot_id) {
       continue;
     }
 
@@ -793,7 +788,7 @@ SchedulerNode::SchedulerNode(const rclcpp::NodeOptions & options)
   robot_config_env_path_ = declare_parameter<std::string>(
     "robot_config_env_path",
     kDefaultRobotConfigEnvPath);
-  if (robot_id_.empty() || robot_id_ == kLegacyRobotId) {
+  if (robot_id_.empty()) {
     try {
       const auto derived_robot_id = derived_robot_id_from_env_file(robot_config_env_path_);
       if (derived_robot_id) {
@@ -823,9 +818,13 @@ SchedulerNode::SchedulerNode(const rclcpp::NodeOptions & options)
   fatal_after_consecutive_errors_ = declare_parameter<int>("fatal_after_consecutive_errors", 10);
   reload_on_mtime_change_ = declare_parameter<bool>("reload_on_mtime_change", true);
   reload_on_every_poll_ = declare_parameter<bool>("reload_on_every_poll", false);
+  if (!has_parameter("use_sim_time")) {
+    declare_parameter<bool>("use_sim_time", false);
+  }
+  get_parameter("use_sim_time", use_sim_time_);
   declare_parameter<bool>("strict_validation", true);
   declare_parameter<int>("max_events", 2000);
-  declare_parameter<bool>("require_x_robot_id", true);
+  declare_parameter<bool>("require_x_robot_id", false);
   declare_parameter<bool>("require_x_schedule_type", true);
   declare_parameter<bool>("require_x_mission_id_for_work", true);
   emit_rosout_triggers_ = declare_parameter<bool>("emit_rosout_triggers", true);
@@ -937,10 +936,10 @@ SchedulerNode::SchedulerNode(const rclcpp::NodeOptions & options)
   parser_ = std::make_unique<IcalParserMinimal>();
   expander_ = std::make_unique<ScheduleExpanderStub>();
 
-  tick_timer_ = create_wall_timer(
+  tick_timer_ = create_timer(
     std::chrono::duration<double>(tick_seconds_),
     std::bind(&SchedulerNode::tick, this));
-  poll_timer_ = create_wall_timer(
+  poll_timer_ = create_timer(
     std::chrono::duration<double>(schedule_poll_interval_sec_),
     std::bind(&SchedulerNode::poll_schedule, this));
 
@@ -1069,26 +1068,6 @@ void SchedulerNode::poll_schedule()
     return;
   }
 
-  if (robot_id_.empty() || robot_id_ == kLegacyRobotId) {
-    try {
-      const auto derived_robot_id = derived_robot_id_from_env_file(robot_config_env_path_);
-      if (derived_robot_id) {
-        robot_id_ = *derived_robot_id;
-      }
-    } catch (const std::exception & exception) {
-      RCLCPP_WARN(
-        get_logger(),
-        "Failed to derive robot_id from %s: %s",
-        robot_config_env_path_.c_str(),
-        exception.what());
-    }
-  }
-  if (robot_id_.empty() || robot_id_ == kLegacyRobotId) {
-    trigger_warn("SCHED_PARAMS_MISSING", "set robot_id or ROBOT_NUMBER");
-    report_supervision_issue("robot_id unavailable; set robot_id or ROBOT_NUMBER");
-    return;
-  }
-
   refresh_mission_catalog();
 
   const std::string schedule_path = resolved_schedule_path();
@@ -1114,8 +1093,7 @@ void SchedulerNode::poll_schedule()
     trigger_info(
       "SCHED_ICS_LOADED",
       "events=" + std::to_string(schedule_.events.size()) +
-      "; schedule=" + std::filesystem::path(schedule_path).filename().string() +
-      "; robot_id=" + robot_id_);
+      "; schedule=" + std::filesystem::path(schedule_path).filename().string());
     if (schedule_has_no_events_) {
       trigger_warn("SCHED_ICS_LOAD_FAILED", "reason=ICS contains no VEVENTs");
     }
@@ -1182,9 +1160,9 @@ void SchedulerNode::tick()
     return;
   }
 
-  const auto now = std::chrono::system_clock::now();
+  const auto now = current_schedule_time();
   const auto horizon = std::chrono::hours(horizon_hours_);
-  auto windows = expander_->expand(schedule_, robot_id_, now, horizon);
+  auto windows = expander_->expand(schedule_, now, horizon);
   windows = apply_blackout_overlay(windows);
   std::unordered_map<std::string, std::size_t> missing_mission_counts;
   std::set<std::string> current_missing_mission_ids;
@@ -1263,7 +1241,7 @@ void SchedulerNode::publish_windows(const std::vector<TimeWindow> & windows)
   }
 
   if (windows.empty()) {
-    trigger_warn("SCHED_NO_WINDOWS", "robot_id=" + robot_id_);
+    trigger_warn("SCHED_NO_WINDOWS");
   }
 }
 
@@ -1273,7 +1251,7 @@ void SchedulerNode::maybe_promote_mission(const std::vector<TimeWindow> & window
     return;
   }
 
-  const auto now = std::chrono::system_clock::now();
+  const auto now = current_schedule_time();
   for (const auto & window : windows) {
     if (window.type != ScheduleType::WORK) {
       continue;
@@ -1311,6 +1289,23 @@ void SchedulerNode::maybe_promote_mission(const std::vector<TimeWindow> & window
   running_request_window_uid_.clear();
   rejected_running_window_uid_.clear();
   next_running_request_retry_time_.reset();
+}
+
+std::chrono::system_clock::time_point SchedulerNode::current_schedule_time() const
+{
+  if (!use_sim_time_) {
+    return std::chrono::system_clock::now();
+  }
+
+  if (!schedule_time_anchor_initialized_) {
+    schedule_time_anchor_wall_ = std::chrono::system_clock::now();
+    schedule_time_anchor_ros_ = this->now();
+    schedule_time_anchor_initialized_ = true;
+  }
+
+  const auto ros_elapsed =
+    std::chrono::nanoseconds((this->now() - schedule_time_anchor_ros_).nanoseconds());
+  return schedule_time_anchor_wall_ + ros_elapsed;
 }
 
 bool SchedulerNode::mission_json_or_folder_exists(const std::string & mission_id) const

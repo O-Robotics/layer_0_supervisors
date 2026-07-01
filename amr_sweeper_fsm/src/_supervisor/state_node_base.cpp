@@ -272,6 +272,7 @@ namespace {
     const std::string & target)
   {
     const LaunchArgMap args = parse_launch_arguments_from_command(resolved_command);
+    const bool use_simulation = launch_arg_enabled(args, "use_simulation", false);
 
     if (resolved_command.find("ros2 launch amr_sweeper_layer_1_hardware_bringup ") != std::string::npos) {
       if (
@@ -289,10 +290,10 @@ namespace {
         return launch_arg_enabled(args, "use_amr_sweeper_gnss", true);
       }
       if (target_matches_pattern(target, "gnss/ntrip_client_node")) {
-        return launch_arg_enabled(args, "use_ntrip_client", true);
+        return !use_simulation && launch_arg_enabled(args, "use_ntrip_client", true);
       }
       if (target_matches_pattern(target, "usb_cameras/")) {
-        return launch_arg_enabled(args, "use_amr_sweeper_usb_cameras", true);
+        return !use_simulation && launch_arg_enabled(args, "use_amr_sweeper_usb_cameras", true);
       }
       if (target_matches_pattern(target, "depth_camera/")) {
         return launch_arg_enabled(args, "use_amr_sweeper_depth_camera", true);
@@ -874,6 +875,11 @@ StateNodeBase::StateNodeBase(const std::string & node_name, const rclcpp::NodeOp
 LifecycleNodeInterface::CallbackReturn
 StateNodeBase::on_configure(const rclcpp_lifecycle::State &)
 {
+  if (shutdown_requested_() || !rclcpp::ok()) {
+    RCLCPP_WARN(get_logger(), "Skipping configure because shutdown is already in progress");
+    return LifecycleNodeInterface::CallbackReturn::FAILURE;
+  }
+
   // Reset per-activation log guards.
   warned_noncritical_readiness_.clear();
 
@@ -1165,6 +1171,11 @@ if (!profiles_file_.empty()) {
 LifecycleNodeInterface::CallbackReturn
 StateNodeBase::on_activate(const rclcpp_lifecycle::State &)
 {
+  if (shutdown_requested_() || !rclcpp::ok()) {
+    RCLCPP_WARN(get_logger(), "Skipping activation because shutdown is already in progress");
+    return LifecycleNodeInterface::CallbackReturn::FAILURE;
+  }
+
   // Reset guard preventing repeated FAULT requests
   fault_requested_ = false;
 
@@ -1230,9 +1241,15 @@ StateNodeBase::on_activate(const rclcpp_lifecycle::State &)
     return LifecycleNodeInterface::CallbackReturn::FAILURE;
   }
 
+  if (shutdown_requested_() || !rclcpp::ok()) {
+    RCLCPP_WARN(get_logger(), "Activation aborted because shutdown began during startup");
+    stop_state_processes();
+    return LifecycleNodeInterface::CallbackReturn::FAILURE;
+  }
+
 
 // Optional: request an automatic FSM transition once this state is ACTIVE.
-if (auto_transition_on_) {
+if (auto_transition_on_ && !shutdown_requested_() && rclcpp::ok()) {
   const std::string target_state = target_state_from_profile_id(auto_transition_profile_);
   if (target_state.empty()) {
     RCLCPP_WARN(
@@ -1303,25 +1320,40 @@ StateNodeBase::on_cleanup(const rclcpp_lifecycle::State &)
 LifecycleNodeInterface::CallbackReturn
 StateNodeBase::on_shutdown(const rclcpp_lifecycle::State &)
 {
-  // no triggers in ShuttingDown/Finalized
-  rosout_sub_.reset();     
-  stop_process_monitoring_();
-  stop_state_processes();
+  mark_shutdown_requested_();
+  perform_managed_teardown_();
   return LifecycleNodeInterface::CallbackReturn::SUCCESS;
 }
 
 LifecycleNodeInterface::CallbackReturn
 StateNodeBase::on_error(const rclcpp_lifecycle::State &)
 {
-  // no triggers in ErrorProcessing
-  rosout_sub_.reset();     
-  stop_process_monitoring_();
-  stop_state_processes();
+  perform_managed_teardown_();
   return LifecycleNodeInterface::CallbackReturn::SUCCESS;
 }
 
 void StateNodeBase::stop_managed_processes_for_exit()
 {
+  mark_shutdown_requested_();
+  perform_managed_teardown_();
+}
+
+bool StateNodeBase::shutdown_requested_() const
+{
+  return shutdown_requested_flag_.load(std::memory_order_acquire);
+}
+
+void StateNodeBase::mark_shutdown_requested_()
+{
+  shutdown_requested_flag_.store(true, std::memory_order_release);
+}
+
+void StateNodeBase::perform_managed_teardown_()
+{
+  if (teardown_started_.exchange(true, std::memory_order_acq_rel)) {
+    return;
+  }
+
   rosout_sub_.reset();
   stop_process_monitoring_();
   stop_state_processes();
@@ -1712,7 +1744,7 @@ bool StateNodeBase::wait_for_readiness(std::string & why_not)
 
   rclcpp::WallRate rate(10.0);
 
-  while (rclcpp::ok()) {
+  while (rclcpp::ok() && !shutdown_requested_()) {
     bool waiting = false;
     const auto now = std::chrono::steady_clock::now();
 
@@ -1909,7 +1941,7 @@ bool StateNodeBase::wait_for_readiness(std::string & why_not)
     rate.sleep();
   }
 
-  why_not = "rclcpp shutdown";
+  why_not = shutdown_requested_() ? "shutdown requested" : "rclcpp shutdown";
   return false;
 }
 
@@ -2304,6 +2336,9 @@ std::string StateNodeBase::resolve_placeholders(std::string cmd) const
 {
   auto append_runtime_overrides = [this, &cmd](const std::vector<std::string> & keys) {
     for (const auto & key : keys) {
+      if (cmd.find(key + ":=") != std::string::npos) {
+        continue;
+      }
       std::string value;
       this->get_parameter("runtime." + key, value);
       if (value.empty()) {
@@ -2565,7 +2600,7 @@ bool StateNodeBase::wait_for_profile_process_readiness_(
   const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(pp.window_ms);
   rclcpp::WallRate rate(10.0);
 
-  while (rclcpp::ok()) {
+  while (rclcpp::ok() && !shutdown_requested_()) {
     if (profile_process_readiness_satisfied_(pp, why_not)) {
       return true;
     }
@@ -2596,7 +2631,7 @@ bool StateNodeBase::wait_for_profile_process_readiness_(
     rate.sleep();
   }
 
-  why_not = "rclcpp shutdown";
+  why_not = shutdown_requested_() ? "shutdown requested" : "rclcpp shutdown";
   return false;
 }
 
@@ -2604,9 +2639,19 @@ bool StateNodeBase::start_state_processes(std::string & why_not)
 {
   why_not.clear();
 
+  if (shutdown_requested_() || !rclcpp::ok()) {
+    why_not = "shutdown requested";
+    return false;
+  }
+
   // Prefer profile metadata when available so startup can be gated in process order.
   if (!profile_processes_.empty()) {
     for (const auto & pp : profile_processes_) {
+      if (shutdown_requested_() || !rclcpp::ok()) {
+        why_not = "shutdown requested";
+        return false;
+      }
+
       const auto cmd = resolve_placeholders(pp.command);
       const std::string pname = pp.name.empty() ? cmd : pp.name;
       const bool has_process_readiness =
@@ -2638,6 +2683,11 @@ bool StateNodeBase::start_state_processes(std::string & why_not)
         return false;
       }
 
+      if (shutdown_requested_() || !rclcpp::ok()) {
+        why_not = "shutdown requested";
+        return false;
+      }
+
       if (has_process_readiness) {
         RCLCPP_INFO(
           get_logger(),
@@ -2651,6 +2701,11 @@ bool StateNodeBase::start_state_processes(std::string & why_not)
 
   // Backwards compatible: no profile metadata, just start each command best-effort.
   for (const auto & raw : processes_) {
+    if (shutdown_requested_() || !rclcpp::ok()) {
+      why_not = "shutdown requested";
+      return false;
+    }
+
     const auto cmd = resolve_placeholders(raw);
     std::string err;
 

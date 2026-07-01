@@ -53,6 +53,7 @@ class MissionExecutorNode : public rclcpp::Node
 {
 public:
   explicit MissionExecutorNode(const rclcpp::NodeOptions & options = rclcpp::NodeOptions());
+  void shutdownForExit();
 
 private:
   void handleListExecutableMissions(

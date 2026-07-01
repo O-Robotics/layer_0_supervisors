@@ -407,7 +407,7 @@ SupervisorNode::SupervisorNode()
   last_message_ = "Startup";
 
   // Drive engine + poll label
-  tick_timer_ = this->create_wall_timer(std::chrono::milliseconds(tick_period_ms_), std::bind(&SupervisorNode::tick, this));
+  tick_timer_ = this->create_timer(std::chrono::milliseconds(tick_period_ms_), std::bind(&SupervisorNode::tick, this));
 }
 
 void SupervisorNode::init_clients()
@@ -1229,7 +1229,7 @@ void SupervisorNode::init_publish_rules()
 
     // Create an independent timer for this rule. Publishing is decoupled from tick().
     const auto period = std::chrono::milliseconds(rule.period_ms);
-    rule.timer = this->create_wall_timer(period, [this, idx = publish_rules_.size()]() {
+    rule.timer = this->create_timer(period, [this, idx = publish_rules_.size()]() {
       // Snapshot under lock to avoid publishing torn state.
       const auto snap = snapshot_status();
       publish_from_rule(publish_rules_[idx], snap);

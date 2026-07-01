@@ -40,7 +40,6 @@ profiles:
             exec: "ros2 launch amr_sweeper_vda5050_parser amr_sweeper_vda5050_parser.launch.py"
             args:
               - "namespace:={ns}"
-              - "use_sim_time:=false"
               - "missions_directory:=missions/database"
               - "auto_build_on_start:=true"
               - "watch_for_updates:=true"
@@ -74,7 +73,6 @@ profiles:
             exec: "ros2 launch amr_sweeper_scheduler amr_sweeper_scheduler.launch.py"
             args:
               - "namespace:={ns}"
-              - "use_sim_time:=false"
               - "missions_directory:=missions/database"
               - "trigger_running_on_work_window:=false"
             ready:
@@ -208,7 +206,6 @@ profiles:
             exec: "ros2 launch amr_sweeper_layer_2_controllers_bringup amr_sweeper_layer_2_controllers_bringup.launch.py"
             args:
               - "namespace:={ns}"
-              - "use_sim_time:=false"
               - "use_amr_sweeper_drive_controller:=true"
               - "use_amr_sweeper_tool_controller:=true"
               - "use_amr_sweeper_teleop:=false"
@@ -274,7 +271,6 @@ profiles:
             exec: "ros2 launch amr_sweeper_layer_3_navigation_bringup amr_sweeper_layer_3_navigation_bringup.launch.py"
             args:
               - "namespace:={ns}"
-              - "use_sim_time:=false"
               - "use_amr_sweeper_visual_odometry:=false"
               - "use_amr_sweeper_localization:=true"
               - "use_amr_sweeper_mapping:=true"
@@ -353,7 +349,6 @@ profiles:
             exec: "ros2 launch amr_sweeper_vda5050_parser amr_sweeper_vda5050_parser.launch.py"
             args:
               - "namespace:={ns}"
-              - "use_sim_time:=false"
               - "missions_directory:=missions/database"
               - "auto_build_on_start:=true"
               - "watch_for_updates:=true"
@@ -387,7 +382,6 @@ profiles:
             exec: "ros2 launch amr_sweeper_scheduler amr_sweeper_scheduler.launch.py"
             args:
               - "namespace:={ns}"
-              - "use_sim_time:=false"
               - "missions_directory:=missions/database"
               - "trigger_running_on_work_window:=false"
             ready:
@@ -513,7 +507,6 @@ profiles:
             exec: "ros2 launch amr_sweeper_layer_2_controllers_bringup amr_sweeper_layer_2_controllers_bringup.launch.py"
             args:
               - "namespace:={ns}"
-              - "use_sim_time:=false"
               - "use_amr_sweeper_drive_controller:=true"
               - "use_amr_sweeper_tool_controller:=true"
               - "use_amr_sweeper_teleop:=false"
@@ -579,7 +572,6 @@ profiles:
             exec: "ros2 launch amr_sweeper_layer_3_navigation_bringup amr_sweeper_layer_3_navigation_bringup.launch.py"
             args:
               - "namespace:={ns}"
-              - "use_sim_time:=false"
               - "use_amr_sweeper_visual_odometry:=false"
               - "use_amr_sweeper_localization:=true"
               - "use_amr_sweeper_mapping:=true"
@@ -659,7 +651,6 @@ profiles:
             exec: "ros2 launch amr_sweeper_vda5050_parser amr_sweeper_vda5050_parser.launch.py"
             args:
               - "namespace:={ns}"
-              - "use_sim_time:=false"
               - "missions_directory:=missions/database"
               - "auto_build_on_start:=true"
               - "watch_for_updates:=true"

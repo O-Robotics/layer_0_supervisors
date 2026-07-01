@@ -3,6 +3,7 @@
 #include "amr_sweeper_fsm/srv/request_state.hpp"
 
 #include <cstdint>
+#include <atomic>
 #include <map>
 #include <memory>
 #include <set>
@@ -291,6 +292,9 @@ static std::string target_state_from_profile_id(uint16_t profile_id);
 
 
 private:
+  bool shutdown_requested_() const;
+  void mark_shutdown_requested_();
+  void perform_managed_teardown_();
   std::vector<std::string> read_string_array_param_(const std::string & name) const;
   int64_t read_int64_param_(const std::string & name, int64_t default_value) const;
   // ----- Rosout trigger parsing helpers -----
@@ -369,6 +373,8 @@ uint16_t fault_transition_profile_{400};
 
   rclcpp::TimerBase::SharedPtr proc_monitor_timer_;
   std::vector<MonitoredProcess> monitored_processes_;
+  std::atomic<bool> shutdown_requested_flag_{false};
+  std::atomic<bool> teardown_started_{false};
 
 };
 
