@@ -214,6 +214,38 @@ namespace {
     return args;
   }
 
+  void set_launch_argument_in_command(
+    std::string & command,
+    const std::string & key,
+    const std::string & value)
+  {
+    std::stringstream ss(command);
+    std::vector<std::string> tokens;
+    std::string token;
+    bool replaced = false;
+    const std::string prefix = key + ":=";
+
+    while (ss >> token) {
+      if (token.rfind(prefix, 0) == 0) {
+        token = prefix + value;
+        replaced = true;
+      }
+      tokens.push_back(token);
+    }
+
+    if (!replaced) {
+      tokens.push_back(prefix + value);
+    }
+
+    command.clear();
+    for (size_t i = 0; i < tokens.size(); ++i) {
+      if (i > 0) {
+        command += " ";
+      }
+      command += tokens[i];
+    }
+  }
+
   bool launch_arg_enabled(
     const LaunchArgMap & args,
     const std::string & key,
@@ -2336,15 +2368,12 @@ std::string StateNodeBase::resolve_placeholders(std::string cmd) const
 {
   auto append_runtime_overrides = [this, &cmd](const std::vector<std::string> & keys) {
     for (const auto & key : keys) {
-      if (cmd.find(key + ":=") != std::string::npos) {
-        continue;
-      }
       std::string value;
       this->get_parameter("runtime." + key, value);
       if (value.empty()) {
         continue;
       }
-      cmd += " " + key + ":=" + value;
+      set_launch_argument_in_command(cmd, key, value);
     }
   };
   auto replace_launch_argument_placeholder =
