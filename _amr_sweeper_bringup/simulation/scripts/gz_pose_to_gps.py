@@ -291,8 +291,22 @@ class GzPoseToGps(Node):
 
 def main():
     rclpy.init()
-    rclpy.spin(GzPoseToGps())
-    rclpy.shutdown()
+    node = GzPoseToGps()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        try:
+            node.destroy_node()
+        except (KeyboardInterrupt, RuntimeError):
+            pass
+
+        try:
+            if rclpy.ok():
+                rclpy.shutdown()
+        except RuntimeError:
+            pass
 
 
 if __name__ == "__main__":

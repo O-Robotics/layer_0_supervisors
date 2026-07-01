@@ -3415,10 +3415,19 @@ def main(args: list[str] | None = None) -> int:
         node.get_logger().error(f"Mission frontend HTTP startup failed: {exc}")
         return 1
     finally:
-        node.stop_http_server()
-        executor.shutdown()
+        try:
+            node.stop_http_server()
+        except RuntimeError:
+            pass
+        try:
+            executor.shutdown()
+        except RuntimeError:
+            pass
         spin_thread.join(timeout=2.0)
-        node.destroy_node()
+        try:
+            node.destroy_node()
+        except (KeyboardInterrupt, RuntimeError, AttributeError):
+            pass
         rclpy.try_shutdown()
     return 0
 

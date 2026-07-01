@@ -187,28 +187,33 @@ def _start_fault_shutdown_watcher(context, *args, **kwargs):
         output="screen",
     )
 
+    def _handle_watcher_exit(event, _context):
+        if int(getattr(event, "returncode", 0)) != 42:
+            return []
+        return [
+            LogInfo(
+                msg=(
+                    "[amr_sweeper_bringup] Simulation fault watcher exited after "
+                    f"detecting FSM {shutdown_fault_state}/{shutdown_fault_profile}; "
+                    "requesting launch shutdown."
+                )
+            ),
+            EmitEvent(
+                event=Shutdown(
+                    reason=(
+                        "Simulation shutdown requested after FSM entered "
+                        f"{shutdown_fault_state}/{shutdown_fault_profile}"
+                    )
+                )
+            ),
+        ]
+
     return [
         watcher,
         RegisterEventHandler(
             OnProcessExit(
                 target_action=watcher,
-                on_exit=[
-                    LogInfo(
-                        msg=(
-                            "[amr_sweeper_bringup] Simulation fault watcher exited after "
-                            f"detecting FSM {shutdown_fault_state}/{shutdown_fault_profile}; "
-                            "requesting launch shutdown."
-                        )
-                    ),
-                    EmitEvent(
-                        event=Shutdown(
-                            reason=(
-                                "Simulation shutdown requested after FSM entered "
-                                f"{shutdown_fault_state}/{shutdown_fault_profile}"
-                            )
-                        )
-                    ),
-                ],
+                on_exit=_handle_watcher_exit,
             )
         ),
     ]

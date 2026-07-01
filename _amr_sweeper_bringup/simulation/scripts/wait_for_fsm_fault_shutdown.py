@@ -13,11 +13,19 @@ class FaultWatcher(Node):
         self._target_state = target_state
         self._target_profile = target_profile
         self._matched = False
+        self._interrupted = False
         self.create_subscription(FSMState, topic, self._on_state, 10)
 
     @property
     def matched(self) -> bool:
         return self._matched
+
+    @property
+    def interrupted(self) -> bool:
+        return self._interrupted
+
+    def mark_interrupted(self) -> None:
+        self._interrupted = True
 
     def _on_state(self, msg: FSMState) -> None:
         if msg.current_state == self._target_state and int(msg.current_profile) == self._target_profile:
@@ -41,14 +49,21 @@ def main() -> int:
         while rclpy.ok() and not node.matched:
             rclpy.spin_once(node, timeout_sec=0.5)
     except KeyboardInterrupt:
-        pass
+        node.mark_interrupted()
     finally:
         matched = node.matched
+        interrupted = node.interrupted
         if not matched:
-            node.destroy_node()
-        if rclpy.ok():
-            rclpy.shutdown()
-    return 0 if matched else 1
+            try:
+                node.destroy_node()
+            except (KeyboardInterrupt, RuntimeError):
+                pass
+        try:
+            if rclpy.ok():
+                rclpy.shutdown()
+        except RuntimeError:
+            pass
+    return 42 if matched else 0 if interrupted else 1
 
 
 if __name__ == '__main__':

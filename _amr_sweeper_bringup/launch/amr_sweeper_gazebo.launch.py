@@ -94,6 +94,12 @@ def _launch_setup(context, *args, **kwargs):
 
     simulation_config = config["simulation"]
     namespace = LaunchConfiguration("namespace").perform(context)
+    override_timestamps_with_wall_time = (
+        LaunchConfiguration("override_timestamps_with_wall_time")
+        .perform(context)
+        .strip()
+        .lower() in {"1", "true", "yes", "on"}
+    )
     world_name = simulation_config["world_name"]
     entity_name = simulation_config["entity_name"]
     world = os.path.join(bringup_pkg, "simulation", "worlds", simulation_config["world_file"])
@@ -144,7 +150,10 @@ def _launch_setup(context, *args, **kwargs):
         name="gz_bridge",
         output="screen",
         parameters=[{
-            "override_timestamps_with_wall_time": True,
+            # Preserve Gazebo's simulated message stamps by default so the rest of the
+            # stack can consume bridged sensor data under /clock without mixing
+            # wall-clock headers into TF, odometry, IMU, and scan streams.
+            "override_timestamps_with_wall_time": override_timestamps_with_wall_time,
             "expand_gz_topic_names": False,
         }],
         arguments=bridge_arguments,
@@ -181,5 +190,9 @@ def generate_launch_description():
         DeclareLaunchArgument("enable_gnss", default_value="true"),
         DeclareLaunchArgument("enable_imu", default_value="true"),
         DeclareLaunchArgument("enable_depth_camera", default_value="true"),
+        DeclareLaunchArgument(
+            "override_timestamps_with_wall_time",
+            default_value="false",
+        ),
         OpaqueFunction(function=_launch_setup),
     ])

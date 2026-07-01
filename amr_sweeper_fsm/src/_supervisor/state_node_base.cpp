@@ -1222,6 +1222,17 @@ StateNodeBase::on_activate(const rclcpp_lifecycle::State &)
   // Start external processes/launch files associated with this state.
   std::string process_start_why;
   if (!start_state_processes(process_start_why)) {
+    if (shutdown_requested_() || !rclcpp::ok() ||
+      process_start_why == "shutdown requested" ||
+      process_start_why == "rclcpp shutdown")
+    {
+      RCLCPP_INFO(
+        get_logger(),
+        "Activation interrupted by shutdown while starting managed processes");
+      stop_state_processes();
+      return LifecycleNodeInterface::CallbackReturn::SUCCESS;
+    }
+
     RCLCPP_ERROR(get_logger(), "Process startup failed: %s", process_start_why.c_str());
 
     if (!profile_processes_.empty()) {
@@ -1249,6 +1260,17 @@ StateNodeBase::on_activate(const rclcpp_lifecycle::State &)
   // bring-up is actually present in the ROS graph.
   std::string why;
   if (!wait_for_readiness(why)) {
+    if (shutdown_requested_() || !rclcpp::ok() ||
+      why == "shutdown requested" ||
+      why == "rclcpp shutdown")
+    {
+      RCLCPP_INFO(
+        get_logger(),
+        "Activation interrupted by shutdown while waiting for readiness");
+      stop_state_processes();
+      return LifecycleNodeInterface::CallbackReturn::SUCCESS;
+    }
+
     RCLCPP_ERROR(get_logger(), "Ready timeout: %s", why.c_str());
 
     // If the readiness failure corresponds to a profile process, honor its `errors` policy.
@@ -1274,9 +1296,9 @@ StateNodeBase::on_activate(const rclcpp_lifecycle::State &)
   }
 
   if (shutdown_requested_() || !rclcpp::ok()) {
-    RCLCPP_WARN(get_logger(), "Activation aborted because shutdown began during startup");
+    RCLCPP_INFO(get_logger(), "Activation interrupted because shutdown began during startup");
     stop_state_processes();
-    return LifecycleNodeInterface::CallbackReturn::FAILURE;
+    return LifecycleNodeInterface::CallbackReturn::SUCCESS;
   }
 
 
@@ -2754,8 +2776,11 @@ void StateNodeBase::stop_state_processes()
   // Stop is best-effort and intentionally ignores errors (common during teardown).
   // Prefer per-profile process specs so we can honor per-process shutdown policies.
   // Stop in reverse bring-up order so higher-level dependents exit before providers.
+  const bool allow_teardown_logging = rclcpp::ok() && !shutdown_requested_();
   if (!profile_processes_.empty()) {
-    RCLCPP_INFO(get_logger(), "FSM state transition stopping proccesses");
+    if (allow_teardown_logging) {
+      RCLCPP_INFO(get_logger(), "FSM state transition stopping proccesses");
+    }
     for (auto it = profile_processes_.rbegin(); it != profile_processes_.rend(); ++it) {
       const auto & pp = *it;
       const auto cmd = resolve_placeholders(pp.command);
@@ -2778,7 +2803,9 @@ void StateNodeBase::stop_state_processes()
   }
 
   // Backwards compatible: no profile metadata. Preserve the same reverse-order shutdown.
-  RCLCPP_INFO(get_logger(), "FSM state transition stopping proccesses");
+  if (allow_teardown_logging) {
+    RCLCPP_INFO(get_logger(), "FSM state transition stopping proccesses");
+  }
   for (auto it = processes_.rbegin(); it != processes_.rend(); ++it) {
     const auto cmd = resolve_placeholders(*it);
     std::string err;
