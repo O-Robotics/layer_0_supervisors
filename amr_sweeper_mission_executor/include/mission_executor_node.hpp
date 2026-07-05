@@ -92,6 +92,7 @@ private:
   [[nodiscard]] std::filesystem::path resolvePath(const std::string & configured_path) const;
   [[nodiscard]] std::filesystem::path resolveMissionsFromDbDirectory() const;
   [[nodiscard]] std::filesystem::path resolveMissionsLogDirectory() const;
+  [[nodiscard]] std::filesystem::path resolveRosbagDirectory() const;
   [[nodiscard]] std::filesystem::path resolveManualMissionsDirectory() const;
   [[nodiscard]] std::vector<std::filesystem::path> executionContextFiles() const;
   [[nodiscard]] std::optional<ManualMissionInfo> findStagedScheduledMission(
@@ -173,6 +174,7 @@ private:
   std::string manual_missions_directory_;
   std::string mission_file_extension_;
   std::string schedule_ics_path_;
+  std::string rosbag_directory_;
   std::string robot_id_;
   std::string safety_stop_topic_;
   std::string teleop_odometry_topic_;

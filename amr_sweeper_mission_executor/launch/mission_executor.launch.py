@@ -19,6 +19,7 @@ def generate_launch_description():
     teleop_odometry_topic = LaunchConfiguration("teleop_odometry_topic")
     manual_mapping_odometry_topic = LaunchConfiguration("manual_mapping_odometry_topic")
     record_mission_rosbag = LaunchConfiguration("record_mission_rosbag")
+    rosbag_directory = LaunchConfiguration("rosbag_directory")
     rosbag_topics_file = LaunchConfiguration("rosbag_topics_file")
     manual_mission_inactivity_timeout_seconds = LaunchConfiguration("manual_mission_inactivity_timeout_seconds")
     idling_profile_id = LaunchConfiguration("idling_profile_id")
@@ -43,6 +44,7 @@ def generate_launch_description():
         DeclareLaunchArgument("teleop_odometry_topic", default_value="drive_controller/odom"),
         DeclareLaunchArgument("manual_mapping_odometry_topic", default_value="localization/odometry_fused"),
         DeclareLaunchArgument("record_mission_rosbag", default_value="false"),
+        DeclareLaunchArgument("rosbag_directory", default_value="missions/logs"),
         DeclareLaunchArgument(
             "rosbag_topics_file",
             default_value=PathJoinSubstitution(
@@ -71,6 +73,7 @@ def generate_launch_description():
                 "teleop_odometry_topic": teleop_odometry_topic,
                 "manual_mapping_odometry_topic": manual_mapping_odometry_topic,
                 "record_mission_rosbag": record_mission_rosbag,
+                "rosbag_directory": rosbag_directory,
                 "rosbag_topics_file": rosbag_topics_file,
                 "manual_mission_inactivity_timeout_seconds": manual_mission_inactivity_timeout_seconds,
                 "idling_profile_id": idling_profile_id,

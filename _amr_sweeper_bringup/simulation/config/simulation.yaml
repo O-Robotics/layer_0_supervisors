@@ -1,7 +1,12 @@
-simulation:
+﻿simulation:
   world_name: amr_sweeper_test
   world_file: amr_sweeper_test.sdf
   entity_name: amr_sweeper
+  georeference:
+    latitude_deg: 56.164520029
+    longitude_deg: 10.1453534275
+    elevation_m: 100.0
+    heading_deg: 0.0
   spawn_pose:
     x: 0.0
     y: 0.0
@@ -14,7 +19,29 @@ simulation:
     gpsfix_topic: gnss/fix
     odometry_topic: gnss/odometry
     status_marker_topic: gnss/status_marker
+    rtcm_topic: ntrip_client/rtcm
     frame_id: gnss_link
+    publish_rate_hz: 5.0
+    noise_correlation_tau_s: 12.0
+    autonomous_noise_h_m: 1.25
+    autonomous_noise_v_m: 2.5
+    dgps_noise_h_m: 0.7
+    dgps_noise_v_m: 1.3
+    rtk_float_noise_h_m: 0.45
+    rtk_float_noise_v_m: 0.9
+    rtk_fixed_noise_h_m: 0.3
+    rtk_fixed_noise_v_m: 0.6
+    min_horizontal_stddev_m: 0.75
+    min_vertical_stddev_m: 1.5
+    horizontal_covariance_scale: 4.0
+    vertical_covariance_scale: 4.0
+    autonomous_satellites: 10
+    corrected_satellites: 14
+    correction_timeout_s: 3.0
+    dgps_warmup_s: 2.0
+    rtk_float_warmup_s: 8.0
+    simulated_ntrip_publish_rate_hz: 1.0
+    simulated_ntrip_startup_delay_s: 1.5
 
 bridges:
   - ros_topic_name: /clock

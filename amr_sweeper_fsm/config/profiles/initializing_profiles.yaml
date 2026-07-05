@@ -298,9 +298,6 @@ profiles:
               - type: "lifecycle"
                 target: "bt_navigator"
                 required: true
-              - type: "lifecycle"
-                target: "waypoint_follower"
-                required: true
               - type: "service"
                 target: "gaussian_node/get_parameters"
                 required: true
@@ -598,9 +595,6 @@ profiles:
                 required: true
               - type: "lifecycle"
                 target: "bt_navigator"
-                required: true
-              - type: "lifecycle"
-                target: "waypoint_follower"
                 required: true
               - type: "service"
                 target: "gaussian_node/get_parameters"
@@ -926,9 +920,6 @@ profiles:
                 required: true
               - type: "lifecycle"
                 target: "bt_navigator"
-                required: true
-              - type: "lifecycle"
-                target: "waypoint_follower"
                 required: true
               - type: "service"
                 target: "gaussian_node/get_parameters"

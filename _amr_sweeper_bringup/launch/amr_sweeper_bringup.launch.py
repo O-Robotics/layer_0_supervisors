@@ -102,6 +102,29 @@ def _write_runtime_rosbag_qos_overrides(rosbag_output_directory: str) -> str:
     return overrides_path
 
 
+def _resolve_runtime_rosbag_settings(context, *args, **kwargs):
+    del args, kwargs
+
+    actions = []
+    effective_missions_log_directory = LaunchConfiguration("missions_log_directory").perform(context).strip()
+    if _as_bool(LaunchConfiguration("use_simulation").perform(context)):
+        effective_missions_log_directory = LaunchConfiguration(
+            "missions_simulations_directory"
+        ).perform(context).strip()
+        actions.append(
+            SetLaunchConfiguration("missions_log_directory", effective_missions_log_directory)
+        )
+
+    if _as_bool(LaunchConfiguration("record_rosbag").perform(context)):
+        actions.extend([
+            SetLaunchConfiguration("record_system_rosbag", "true"),
+            SetLaunchConfiguration("record_mission_rosbag", "true"),
+        ])
+
+    actions.append(SetLaunchConfiguration("rosbag_directory", effective_missions_log_directory))
+    return actions
+
+
 def _start_bringup_rosbag(context, *args, **kwargs):
     del args, kwargs
 
@@ -109,15 +132,16 @@ def _start_bringup_rosbag(context, *args, **kwargs):
     if record_system_rosbag != "true":
         return []
 
-    missions_log_directory = _resolve_workspace_path(
-        LaunchConfiguration("missions_log_directory").perform(context)
-    )
+    rosbag_directory = LaunchConfiguration("rosbag_directory").perform(context).strip()
+    if not rosbag_directory:
+        rosbag_directory = LaunchConfiguration("missions_log_directory").perform(context)
+    rosbag_directory = _resolve_workspace_path(rosbag_directory)
     use_profile = LaunchConfiguration("use_profile").perform(context)
     rosbag_topics_file = LaunchConfiguration("rosbag_topics_file").perform(context)
     mission_id = f"amr_sweeper_bringup_profile_{use_profile}"
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     rosbag_output_directory = os.path.join(
-        missions_log_directory,
+        rosbag_directory,
         mission_id,
         timestamp,
         "artifacts",
@@ -276,6 +300,7 @@ def generate_launch_description():
     test_schedule_ics_path = LaunchConfiguration("test_schedule_ics_path")
     record_system_rosbag = LaunchConfiguration("record_system_rosbag")
     record_mission_rosbag = LaunchConfiguration("record_mission_rosbag")
+    rosbag_directory = LaunchConfiguration("rosbag_directory")
     rosbag_topics_file = LaunchConfiguration("rosbag_topics_file")
     mission_file_extension = LaunchConfiguration("mission_file_extension")
     mission_executor_execute_service = LaunchConfiguration("mission_executor_execute_service")
@@ -344,6 +369,7 @@ def generate_launch_description():
         DeclareLaunchArgument("tick_period_ms", default_value="100"),
         DeclareLaunchArgument("missions_from_db_directory", default_value="missions/database"),
         DeclareLaunchArgument("missions_log_directory", default_value="missions/logs"),
+        DeclareLaunchArgument("missions_simulations_directory", default_value="missions/simulations"),
         DeclareLaunchArgument("manual_missions_directory", default_value=default_manual_missions_directory),
         DeclareLaunchArgument("fsm_request_service", default_value="request_state"),
         DeclareLaunchArgument("schedule_ics_path", default_value=""),
@@ -361,6 +387,7 @@ def generate_launch_description():
             "test_schedule_ics_path",
             default_value="src/layer_0_supervisors/tests/schedule_20260000T000000Z.ics",
         ),
+        DeclareLaunchArgument("record_rosbag", default_value="false"),
         DeclareLaunchArgument("record_system_rosbag", default_value="false"),
         DeclareLaunchArgument("record_mission_rosbag", default_value="false"),
         DeclareLaunchArgument(
@@ -390,6 +417,7 @@ def generate_launch_description():
         DeclareLaunchArgument("shutdown_fault_state", default_value="FAULT"),
         DeclareLaunchArgument("shutdown_fault_profile", default_value="400"),
         *extra_fsm_override_declarations,
+        OpaqueFunction(function=_resolve_runtime_rosbag_settings),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(_launch_file("amr_sweeper_bringup", "amr_sweeper_gazebo.launch.py")),
             launch_arguments={
@@ -397,6 +425,8 @@ def generate_launch_description():
                 "enable_gnss": "true",
                 "enable_imu": "true",
                 "enable_depth_camera": "true",
+                "use_ntrip_client": fsm_override_args["use_ntrip_client"],
+                "launch_gnss_stack": "false",
             }.items(),
             condition=IfCondition(use_simulation),
         ),
@@ -419,6 +449,7 @@ def generate_launch_description():
                 "teleop_odometry_topic": teleop_odometry_topic,
                 "manual_mapping_odometry_topic": manual_mapping_odometry_topic,
                 "record_mission_rosbag": record_mission_rosbag,
+                "rosbag_directory": rosbag_directory,
                 "rosbag_topics_file": rosbag_topics_file,
                 "manual_mission_inactivity_timeout_seconds": manual_mission_inactivity_timeout_seconds,
                 "idling_profile_id": idling_profile_id,

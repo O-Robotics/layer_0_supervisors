@@ -33,9 +33,47 @@ topics:
 
 # Controller and safety status topics for overall system behavior.
   - /amr_sweeper/attitude_controller/status
+  - /amr_sweeper/drive_controller/cmd_vel
   - /amr_sweeper/drive_controller/odom
   - /amr_sweeper/collision_detector/impact_detected
   - /amr_sweeper/collision_detector/status
   - /amr_sweeper/safety_controller/status
   - /amr_sweeper/safety_controller/web_status
+  - /amr_sweeper/sweeping_controller/cmd_vel_drive
+  - /amr_sweeper/sweeping_controller/cmd_vel_tools
   - /amr_sweeper/sweeping_controller/status
+  - /amr_sweeper/teleop/cmd_vel_drive
+  - /amr_sweeper/teleop/cmd_vel_tools
+  - /amr_sweeper/tool_controller/commands
+
+# Localization and mission-performance traces.
+  - /amr_sweeper/localization/odometry_body
+  - /amr_sweeper/localization/odometry_fused
+  - /amr_sweeper/localization/pose
+  - /amr_sweeper/localization/fusioncore/transition_event
+  - /amr_sweeper/localization/debug/filter_health
+  - /amr_sweeper/localization/debug/gnss_status
+  - /amr_sweeper/visual_odometry/odom
+  - /amr_sweeper/visual_odometry/status
+
+# Navigation planner and controller traces needed to verify replanning.
+  - /amr_sweeper/navigation/cmd_vel
+  - /amr_sweeper/navigation/cmd_vel_raw
+  - /amr_sweeper/navigation/bt_navigator/goal_pose
+  - /amr_sweeper/navigation/bt_navigator/transition_event
+  - /amr_sweeper/navigation/controller_server/local_plan
+  - /amr_sweeper/navigation/controller_server/cost_cloud
+  - /amr_sweeper/navigation/controller_server/transition_event
+  - /amr_sweeper/navigation/planner_server/plan
+  - /amr_sweeper/navigation/planner_server/transition_event
+  - /amr_sweeper/navigation/waypoint_follower/transition_event
+
+# Runtime mapping and costmap topics visible to Nav2.
+  - /amr_sweeper/mapping/global_costmap
+  - /amr_sweeper/mapping/waypoint_path
+  - /amr_sweeper/mapping/map_pose_status
+  - /amr_sweeper/mapping/status
+  - /amr_sweeper/local_costmap/costmap_raw
+  - /amr_sweeper/local_costmap/costmap_updates
+  - /amr_sweeper/global_costmap/costmap_raw
+  - /amr_sweeper/global_costmap/costmap_updates

@@ -11,17 +11,14 @@ from sensor_msgs.msg import NavSatFix, NavSatStatus
 from tf2_msgs.msg import TFMessage
 from visualization_msgs.msg import Marker
 
-ORIGIN_LAT = 43.2557
-ORIGIN_LON = -79.8711
-ORIGIN_ALT = 100.0
 A = 6378137.0
 E2 = 0.00669437999014
 
 
-def enu_to_lla(x, y, z):
-    lat0 = math.radians(ORIGIN_LAT)
-    lon0 = math.radians(ORIGIN_LON)
-    alt0 = ORIGIN_ALT
+def enu_to_lla(x, y, z, origin_lat, origin_lon, origin_alt):
+    lat0 = math.radians(origin_lat)
+    lon0 = math.radians(origin_lon)
+    alt0 = origin_alt
     sl = math.sin(lat0)
     cl = math.cos(lat0)
     sn = math.sin(lon0)
@@ -60,6 +57,8 @@ class GzPoseToGps(Node):
         self.declare_parameter("world_name", "amr_sweeper_test")
         self.declare_parameter("noise_h", 0.5)
         self.declare_parameter("noise_v", 0.3)
+        self.declare_parameter("noise_correlation_tau_s", 2.0)
+        self.declare_parameter("publish_rate_hz", 5.0)
         self.declare_parameter("spike_at_s", -1.0)
         self.declare_parameter("spike_duration_s", 8.0)
         self.declare_parameter("spike_dx_m", 60.0)
@@ -75,6 +74,10 @@ class GzPoseToGps(Node):
         self.declare_parameter("odometry_topic", "/amr_sweeper/gnss/odometry")
         self.declare_parameter("status_marker_topic", "/amr_sweeper/gnss/status_marker")
         self.declare_parameter("frame_id", "gnss_link")
+        self.declare_parameter("origin_lat", 43.2557)
+        self.declare_parameter("origin_lon", -79.8711)
+        self.declare_parameter("origin_alt", 100.0)
+        self.declare_parameter("gpsfix_status", 0)
 
         world = self.get_parameter("world_name").get_parameter_value().string_value
         navsat_topic = self.get_parameter("navsat_topic").get_parameter_value().string_value
@@ -82,6 +85,10 @@ class GzPoseToGps(Node):
         odometry_topic = self.get_parameter("odometry_topic").get_parameter_value().string_value
         status_marker_topic = self.get_parameter("status_marker_topic").get_parameter_value().string_value
         self.frame_id = self.get_parameter("frame_id").get_parameter_value().string_value
+        self.origin_lat = self.get_parameter("origin_lat").get_parameter_value().double_value
+        self.origin_lon = self.get_parameter("origin_lon").get_parameter_value().double_value
+        self.origin_alt = self.get_parameter("origin_alt").get_parameter_value().double_value
+        self.gpsfix_status = self.get_parameter("gpsfix_status").get_parameter_value().integer_value
 
         self.pub_navsat = self.create_publisher(NavSatFix, navsat_topic, 10)
         self.pub_fix = self.create_publisher(GPSFix, gpsfix_topic, 10)
@@ -93,10 +100,17 @@ class GzPoseToGps(Node):
         self.body_frame_id = None
         self.ref_published = False
         self.start_ns = None
+        self.last_publish_ns = None
         self._last_status = ""
+        self._noise_x = 0.0
+        self._noise_y = 0.0
+        self._noise_z = 0.0
 
         self.get_logger().info(
-            f"GPS publisher ready (world={world}, navsat={navsat_topic}, gpsfix={gpsfix_topic})")
+            "GPS publisher ready "
+            f"(world={world}, navsat={navsat_topic}, gpsfix={gpsfix_topic}, "
+            f"origin=({self.origin_lat:.6f}, {self.origin_lon:.6f}, {self.origin_alt:.1f}), "
+            f"gpsfix_status={self.gpsfix_status})")
 
     def _elapsed(self):
         if self.start_ns is None:
@@ -172,6 +186,15 @@ class GzPoseToGps(Node):
         marker.text = label
         self.pub_marker.publish(marker)
 
+    def _sample_correlated_noise(self, dt: float, sigma_h: float, sigma_v: float):
+        tau = self.get_parameter("noise_correlation_tau_s").get_parameter_value().double_value
+        tau = max(tau, 1e-3)
+        alpha = math.exp(-dt / tau)
+        beta = math.sqrt(max(0.0, 1.0 - alpha * alpha))
+        self._noise_x = alpha * self._noise_x + beta * random.gauss(0.0, sigma_h)
+        self._noise_y = alpha * self._noise_y + beta * random.gauss(0.0, sigma_h)
+        self._noise_z = alpha * self._noise_z + beta * random.gauss(0.0, sigma_v)
+
     def pose_cb(self, msg):
         best = self._find_body(msg)
         if best is None:
@@ -180,8 +203,17 @@ class GzPoseToGps(Node):
         if self.start_ns is None:
             self.start_ns = self.get_clock().now().nanoseconds
 
+        publish_rate_hz = self.get_parameter("publish_rate_hz").get_parameter_value().double_value
+        publish_period_ns = int(1e9 / max(publish_rate_hz, 1e-3))
+        now_ns = self.get_clock().now().nanoseconds
+        if self.last_publish_ns is not None and (now_ns - self.last_publish_ns) < publish_period_ns:
+            return
+
         noise_h = self.get_parameter("noise_h").get_parameter_value().double_value
         noise_v = self.get_parameter("noise_v").get_parameter_value().double_value
+        dt = 0.0 if self.last_publish_ns is None else max(0.0, (now_ns - self.last_publish_ns) * 1e-9)
+        self._sample_correlated_noise(dt, noise_h, noise_v)
+        self.last_publish_ns = now_ns
 
         outage = self._outage_active()
         spike1 = self._spike_active()
@@ -223,12 +255,12 @@ class GzPoseToGps(Node):
             self._publish_status("  GPS OK  ", 0.1, 0.9, 0.1)
             dx, dy = 0.0, 0.0
 
-        x = best.x + random.gauss(0, noise_h) + dx
-        y = best.y + random.gauss(0, noise_h) + dy
-        z = best.z if not self.ref_published else best.z + random.gauss(0, noise_v)
+        x = best.x + self._noise_x + dx
+        y = best.y + self._noise_y + dy
+        z = best.z if not self.ref_published else best.z + self._noise_z
 
         now = self.get_clock().now().to_msg()
-        lat, lon, alt = enu_to_lla(x, y, z)
+        lat, lon, alt = enu_to_lla(x, y, z, self.origin_lat, self.origin_lon, self.origin_alt)
         covariance = [
             noise_h ** 2, 0.0, 0.0,
             0.0, noise_h ** 2, 0.0,
@@ -252,7 +284,7 @@ class GzPoseToGps(Node):
         gpsfix.header.frame_id = self.frame_id
         gpsfix.status.header.stamp = now
         gpsfix.status.header.frame_id = self.frame_id
-        gpsfix.status.status = 0
+        gpsfix.status.status = int(self.gpsfix_status)
         gpsfix.status.motion_source = 1
         gpsfix.status.position_source = 1
         gpsfix.status.satellites_used = 10

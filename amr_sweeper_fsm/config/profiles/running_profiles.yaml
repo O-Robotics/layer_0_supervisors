@@ -238,16 +238,13 @@ profiles:
               - type: "lifecycle"
                 target: "bt_navigator"
                 required: true
-              - type: "lifecycle"
-                target: "waypoint_follower"
-                required: true
               - type: "service"
                 target: "mapping_node/get_parameters"
                 required: true
               - type: "topic"
                 target: "mapping/status"
                 required: true
-            window_ms: 120000
+            window_ms: 60000
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "level>=ERROR;action=FAULT"
@@ -484,9 +481,6 @@ profiles:
                 required: true
               - type: "lifecycle"
                 target: "bt_navigator"
-                required: true
-              - type: "lifecycle"
-                target: "waypoint_follower"
                 required: true
               - type: "lifecycle"
                 target: "velocity_smoother"
@@ -769,9 +763,6 @@ profiles:
                 target: "bt_navigator"
                 required: true
               - type: "lifecycle"
-                target: "waypoint_follower"
-                required: true
-              - type: "lifecycle"
                 target: "velocity_smoother"
                 required: true
               - type: "service"
@@ -783,7 +774,7 @@ profiles:
               - type: "topic"
                 target: "mapping/status"
                 required: true
-            window_ms: 120000
+            window_ms: 60000
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "level>=ERROR;action=FAULT"
@@ -915,7 +906,7 @@ profiles:
               - type: "controller"
                 target: "joint_broad"
                 required: true
-            window_ms: 120000
+            window_ms: 60000
           rosout_triggers:
             - "node=system_info_node;level>=ERROR;action=FAULT"
             - "node=system_info_node;level>=WARN;action=DEGRADED"
@@ -1050,9 +1041,6 @@ profiles:
                 required: true
               - type: "lifecycle"
                 target: "bt_navigator"
-                required: true
-              - type: "lifecycle"
-                target: "waypoint_follower"
                 required: true
               - type: "lifecycle"
                 target: "velocity_smoother"
@@ -1198,7 +1186,7 @@ profiles:
               - type: "controller"
                 target: "joint_broad"
                 required: true
-            window_ms: 120000
+            window_ms: 60000
           rosout_triggers:
             - "node=system_info_node;level>=ERROR;action=FAULT"
             - "node=system_info_node;level>=WARN;action=DEGRADED"
@@ -1670,7 +1658,7 @@ profiles:
               - type: "topic"
                 target: "localization/odometry_fused"
                 required: true
-            window_ms: 120000
+            window_ms: 60000
           errors:
             on_readiness_fail: "DEGRADED"
             on_unexpected_exit: "DEGRADED"

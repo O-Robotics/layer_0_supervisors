@@ -35,7 +35,7 @@ namespace
 
 constexpr char kManualMappingExecutionMode[] = "manual_mapping";
 constexpr char kTeleoperationExecutionMode[] = "teleoperation";
-constexpr char kFollowWaypointsExecutionMode[] = "follow_waypoints";
+constexpr char kNavigateThroughPosesExecutionMode[] = "navigate_through_poses";
 constexpr char kBuiltinManualMappingMissionType[] = "builtin_manual_mapping";
 constexpr char kBuiltinLocalPatternMissionType[] = "builtin_local_pattern";
 constexpr char kBuiltinTeleopMissionType[] = "builtin_teleop";
@@ -1845,6 +1845,7 @@ MissionExecutorNode::MissionExecutorNode(const rclcpp::NodeOptions & options)
   missions_log_directory_ = declare_parameter<std::string>(
     "missions_log_directory",
     "missions/logs");
+  rosbag_directory_ = declare_parameter<std::string>("rosbag_directory", "missions/logs");
   manual_missions_directory_ = declare_parameter<std::string>("manual_missions_directory", "");
   mission_file_extension_ = declare_parameter<std::string>("mission_file_extension", ".json");
   schedule_ics_path_ = declare_parameter<std::string>("schedule_ics_path", "");
@@ -2724,6 +2725,11 @@ std::filesystem::path MissionExecutorNode::resolveMissionsLogDirectory() const
   return resolvePath(missions_log_directory_);
 }
 
+std::filesystem::path MissionExecutorNode::resolveRosbagDirectory() const
+{
+  return resolvePath(rosbag_directory_);
+}
+
 std::filesystem::path MissionExecutorNode::resolveManualMissionsDirectory() const
 {
   if (!manual_missions_directory_.empty()) {
@@ -2982,7 +2988,7 @@ std::optional<ManualMissionInfo> MissionExecutorNode::classifyMissionFile(
     document.contains("mission_type") && document.at("mission_type").is_string() ?
     document.at("mission_type").get<std::string>() :
     kScheduledMissionType;
-  mission.execution_mode = kFollowWaypointsExecutionMode;
+  mission.execution_mode = kNavigateThroughPosesExecutionMode;
 
   if (document.contains("execution_mode") && document.at("execution_mode").is_string()) {
     mission.execution_mode = toLower(document.at("execution_mode").get<std::string>());
@@ -4439,6 +4445,14 @@ bool MissionExecutorNode::startMissionRosbagRecording(
     context_document.value("collected_artifacts_directory", std::string{}));
   if (artifacts_directory.empty()) {
     artifacts_directory = std::filesystem::path(context.mission_execution_directory) / "artifacts";
+  }
+  if (use_simulation_) {
+    const std::filesystem::path rosbag_root_directory = resolveRosbagDirectory();
+    const std::string mission_id = context_document.value("mission_id", std::string{});
+    const std::string run_started_at = context_document.value("run_started_at", std::string{});
+    if (!mission_id.empty() && !run_started_at.empty()) {
+      artifacts_directory = rosbag_root_directory / mission_id / run_started_at / "artifacts";
+    }
   }
   std::filesystem::create_directories(artifacts_directory);
   const std::string mission_id = context_document.value("mission_id", std::string{});
