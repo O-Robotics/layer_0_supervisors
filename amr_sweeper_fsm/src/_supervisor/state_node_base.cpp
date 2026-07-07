@@ -2219,7 +2219,7 @@ void StateNodeBase::on_rosout(const rcl_interfaces::msg::Log::SharedPtr msg)
         msg->name.c_str(),
         msg->msg.c_str());
 
-      continue;
+      return;
     }
 
     if (t.action == RosoutAction::DEGRADED) {

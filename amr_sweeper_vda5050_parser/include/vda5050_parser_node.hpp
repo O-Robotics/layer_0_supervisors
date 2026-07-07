@@ -44,7 +44,8 @@ struct Vda5050MissionBuildConfig
   std::string working_zone_value{"working_zone"};
   std::string no_go_zone_value{"no_go"};
   double edge_band_meters{1.0};
-  int edge_band_cost{180};
+  double coverage_path_clearance_meters{1.0};
+  int edge_band_cost{252};
   int inside_cost{0};
   int outside_cost{254};
   int no_go_cost{254};
@@ -139,6 +140,7 @@ private:
     const MapPoint & start,
     const MapPoint & end) const;
   [[nodiscard]] unsigned char costForPoint(const MapPoint & point) const;
+  void clearCoveragePathCorridor(RasterizedMap & map) const;
   [[nodiscard]] std::string resolveMissionPath(const std::string & configured_path) const;
   [[nodiscard]] MissionIdentity extractMissionIdentity(const nlohmann::json & document) const;
   [[nodiscard]] static std::string sanitizeTimestamp(const std::string & timestamp);
@@ -190,6 +192,7 @@ private:
   std::string mission_file_extension_;
   double mission_build_resolution_{0.1};
   double mission_build_padding_meters_{2.0};
+  double mission_build_coverage_path_clearance_meters_{1.0};
   bool auto_build_on_start_{true};
   bool watch_for_updates_{true};
   bool waiting_for_active_mission_logged_{false};

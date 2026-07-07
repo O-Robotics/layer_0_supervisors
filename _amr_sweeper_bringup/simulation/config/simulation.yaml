@@ -52,9 +52,13 @@ bridges:
     ros_type_name: sensor_msgs/msg/Imu
     gz_type_name: gz.msgs.IMU
     direction: gz_to_ros
-  - ros_topic_name: depth_camera/scan_gz
-    ros_type_name: sensor_msgs/msg/LaserScan
-    gz_type_name: gz.msgs.LaserScan
+  - ros_topic_name: depth_camera/input/depth/image_rect_raw
+    ros_type_name: sensor_msgs/msg/Image
+    gz_type_name: gz.msgs.Image
+    direction: gz_to_ros
+  - ros_topic_name: depth_camera/input/depth/camera_info
+    ros_type_name: sensor_msgs/msg/CameraInfo
+    gz_type_name: gz.msgs.CameraInfo
     direction: gz_to_ros
   - ros_topic_name: drive_controller/odom
     ros_type_name: nav_msgs/msg/Odometry

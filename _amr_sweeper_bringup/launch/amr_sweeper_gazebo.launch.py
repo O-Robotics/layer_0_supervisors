@@ -135,7 +135,7 @@ def _launch_setup(context, *args, **kwargs):
 
     spawn_pose = simulation_config["spawn_pose"]
     gazebo = ExecuteProcess(
-        cmd=["gz", "sim", "-r", world],
+        cmd=["gz", "sim", "-r", "-s", world],
         additional_env={
             "GZ_SIM_RESOURCE_PATH": os.pathsep.join([
                 os.path.dirname(bringup_pkg),

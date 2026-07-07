@@ -8,5 +8,6 @@
     # -- Build controls -------------------------------------------------------
     mission_build_resolution:           0.1                  # Costmap raster resolution in meters per cell.
     mission_build_padding_meters:       2.0                  # Extra padding around the polygon envelope when exporting the costmap.
+    mission_build_coverage_path_clearance_meters: 1.0                 # Keep the declared coverage path corridor free in the generated Nav2 costmap while preserving standard PGM semantics.
     auto_build_on_start:                true                 # Build the active mission immediately when the node starts.
     watch_for_updates:                  true                 # Keep scanning for new or changed mission files while IDLING.

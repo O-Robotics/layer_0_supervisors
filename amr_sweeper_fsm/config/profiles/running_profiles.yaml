@@ -178,6 +178,7 @@ profiles:
             window_ms: 30000
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
+            - "node=bt_navigator;level>=ERROR;match=Goal failed;action=WARN_ONLY"
             - "level>=ERROR;action=FAULT"
           errors:
             on_readiness_fail: "FAULT"
@@ -247,6 +248,7 @@ profiles:
             window_ms: 60000
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
+            - "node=bt_navigator;level>=ERROR;match=Goal failed;action=WARN_ONLY"
             - "level>=ERROR;action=FAULT"
           errors:
             on_readiness_fail: "DEGRADED"
@@ -421,6 +423,7 @@ profiles:
             window_ms: 30000
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
+            - "node=bt_navigator;level>=ERROR;match=Goal failed;action=WARN_ONLY"
             - "level>=ERROR;action=FAULT"
           errors:
             on_readiness_fail: "FAULT"
@@ -497,6 +500,7 @@ profiles:
             window_ms: 60000
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
+            - "node=bt_navigator;level>=ERROR;match=Goal failed;action=WARN_ONLY"
             - "level>=ERROR;action=FAULT"
           errors:
             on_readiness_fail: "DEGRADED"
@@ -700,6 +704,7 @@ profiles:
             window_ms: 30000
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
+            - "node=bt_navigator;level>=ERROR;match=Goal failed;action=WARN_ONLY"
             - "level>=ERROR;action=FAULT"
           errors:
             on_readiness_fail: "FAULT"
@@ -777,6 +782,7 @@ profiles:
             window_ms: 60000
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
+            - "node=bt_navigator;level>=ERROR;match=Goal failed;action=WARN_ONLY"
             - "level>=ERROR;action=FAULT"
           errors:
             on_readiness_fail: "DEGRADED"
@@ -980,6 +986,7 @@ profiles:
             window_ms: 30000
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
+            - "node=bt_navigator;level>=ERROR;match=Goal failed;action=WARN_ONLY"
             - "level>=ERROR;action=FAULT"
           errors:
             on_readiness_fail: "FAULT"
@@ -1057,6 +1064,7 @@ profiles:
             window_ms: 90000
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
+            - "node=bt_navigator;level>=ERROR;match=Goal failed;action=WARN_ONLY"
             - "level>=ERROR;action=FAULT"
           errors:
             on_readiness_fail: "DEGRADED"
@@ -1261,6 +1269,7 @@ profiles:
             window_ms: 30000
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
+            - "node=bt_navigator;level>=ERROR;match=Goal failed;action=WARN_ONLY"
             - "level>=ERROR;action=FAULT"
           errors:
             on_readiness_fail: "FAULT"
@@ -2205,6 +2214,7 @@ profiles:
             window_ms: 30000
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
+            - "node=bt_navigator;level>=ERROR;match=Goal failed;action=WARN_ONLY"
             - "level>=ERROR;action=FAULT"
           errors:
             on_readiness_fail: "FAULT"
@@ -2256,6 +2266,7 @@ profiles:
             window_ms: 45000
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
+            - "node=bt_navigator;level>=ERROR;match=Goal failed;action=WARN_ONLY"
             - "level>=ERROR;action=FAULT"
           errors:
             on_readiness_fail: "FAULT"

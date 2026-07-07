@@ -418,6 +418,7 @@ RasterizedMap Vda5050MissionParser::buildGlobalCostmap(
     }
   }
 
+
   if (projection_initialized_) {
     double latitude_at_origin = 0.0;
     double longitude_at_origin = 0.0;
@@ -446,6 +447,8 @@ RasterizedMap Vda5050MissionParser::buildGlobalCostmap(
       latitude_at_unit_y - latitude_at_origin,
       latitude_at_origin};
   }
+
+  clearCoveragePathCorridor(result);
 
   return result;
 }
@@ -507,9 +510,9 @@ void Vda5050MissionParser::saveGlobalCostmapArtifacts(
     << "resolution: " << map.resolution << "\n"
     << "origin: [" << map.origin_x << ", " << map.origin_y << ", 0.0]\n"
     << "negate: 0\n"
-    << "occupied_thresh: 0.65\n"
-    << "free_thresh: 0.196\n"
-    << "mode: trinary\n";
+    << "occupied_thresh: 0.99\n"
+    << "free_thresh: 0.01\n"
+    << "mode: scale\n";
   if (map.georeference_valid) {
     yaml_stream
       << "georeference_type: "
@@ -680,6 +683,116 @@ double Vda5050MissionParser::distanceToSegment(
   return std::sqrt((distance_x * distance_x) + (distance_y * distance_y));
 }
 
+void Vda5050MissionParser::clearCoveragePathCorridor(RasterizedMap & map) const
+{
+  if (mission_waypoints_.size() < 2U || config_.coverage_path_clearance_meters <= 0.0) {
+    return;
+  }
+
+  const unsigned char free_cost = static_cast<unsigned char>(
+    std::clamp(config_.inside_cost, 0, 254));
+  const int8_t free_occupancy = static_cast<int8_t>(
+    std::lround((static_cast<double>(free_cost) / 254.0) * 100.0));
+
+  const int clearance_cells = static_cast<int>(std::ceil(
+    config_.coverage_path_clearance_meters / std::max(map.resolution, std::numeric_limits<double>::epsilon())));
+
+  const auto clear_cell_if_allowed = [&](const int grid_x, const int grid_y) {
+    if (grid_x < 0 || grid_y < 0 ||
+      grid_x >= static_cast<int>(map.width_cells) ||
+      grid_y >= static_cast<int>(map.height_cells))
+    {
+      return;
+    }
+
+    const MapPoint point{
+      map.origin_x + (static_cast<double>(grid_x) + 0.5) * map.resolution,
+      map.origin_y + (static_cast<double>(grid_y) + 0.5) * map.resolution};
+    for (const auto & no_go_zone : no_go_zones_) {
+      if (pointInPolygon(point, no_go_zone)) {
+        return;
+      }
+    }
+
+    const std::size_t index = static_cast<std::size_t>(grid_y) * map.width_cells +
+      static_cast<std::size_t>(grid_x);
+    map.costs.at(index) = free_cost;
+    map.occupancy.at(index) = free_occupancy;
+  };
+  std::vector<MapPoint> corridor_waypoints;
+  corridor_waypoints.reserve(mission_waypoints_.size() * 2U);
+  for (const auto & waypoint : mission_waypoints_) {
+    corridor_waypoints.push_back(waypoint.map_point);
+    if (map.georeference_valid && !waypoint.use_local_frame) {
+      const double a = map.longitude_coefficients[0];
+      const double b = map.longitude_coefficients[1];
+      const double c = map.longitude_coefficients[2];
+      const double d = map.latitude_coefficients[0];
+      const double e = map.latitude_coefficients[1];
+      const double f = map.latitude_coefficients[2];
+      const double determinant = (a * e) - (b * d);
+      if (std::abs(determinant) > std::numeric_limits<double>::epsilon()) {
+        const double longitude_delta = waypoint.geo_point.longitude - c;
+        const double latitude_delta = waypoint.geo_point.latitude - f;
+        corridor_waypoints.push_back(MapPoint{
+          ((e * longitude_delta) - (b * latitude_delta)) / determinant,
+          ((a * latitude_delta) - (d * longitude_delta)) / determinant});
+      }
+    }
+  }
+
+
+
+  for (const auto & waypoint : corridor_waypoints) {
+    const int center_x = static_cast<int>(std::floor((waypoint.x - map.origin_x) / map.resolution));
+    const int center_y = static_cast<int>(std::floor((waypoint.y - map.origin_y) / map.resolution));
+    for (int dy = -clearance_cells; dy <= clearance_cells; ++dy) {
+      for (int dx = -clearance_cells; dx <= clearance_cells; ++dx) {
+        clear_cell_if_allowed(center_x + dx, center_y + dy);
+      }
+    }
+  }
+
+  for (unsigned int iy = 0; iy < map.height_cells; ++iy) {
+    for (unsigned int ix = 0; ix < map.width_cells; ++ix) {
+      const MapPoint point{
+        map.origin_x + (static_cast<double>(ix) + 0.5) * map.resolution,
+        map.origin_y + (static_cast<double>(iy) + 0.5) * map.resolution};
+
+      bool inside_no_go_zone = false;
+      for (const auto & no_go_zone : no_go_zones_) {
+        if (pointInPolygon(point, no_go_zone)) {
+          inside_no_go_zone = true;
+          break;
+        }
+      }
+      if (inside_no_go_zone) {
+        continue;
+      }
+
+      bool inside_coverage_corridor = false;
+      for (std::size_t waypoint_index = 1U; waypoint_index < corridor_waypoints.size(); ++waypoint_index) {
+        const double distance = distanceToSegment(
+          point,
+          corridor_waypoints.at(waypoint_index - 1U),
+          corridor_waypoints.at(waypoint_index));
+        if (distance <= config_.coverage_path_clearance_meters) {
+          inside_coverage_corridor = true;
+          break;
+        }
+      }
+
+      if (!inside_coverage_corridor) {
+        continue;
+      }
+
+      const std::size_t index = static_cast<std::size_t>(iy) * map.width_cells + ix;
+      map.costs.at(index) = free_cost;
+      map.occupancy.at(index) = free_occupancy;
+    }
+  }
+}
+
 unsigned char Vda5050MissionParser::costForPoint(const MapPoint & point) const
 {
   bool inside_any_working_zone = false;
@@ -697,15 +810,25 @@ unsigned char Vda5050MissionParser::costForPoint(const MapPoint & point) const
         return static_cast<unsigned char>(config_.no_go_cost);
       }
     }
-    if (nearest_working_zone_distance <= config_.edge_band_meters) {
-      return static_cast<unsigned char>(config_.edge_band_cost);
+    if (config_.edge_band_meters > std::numeric_limits<double>::epsilon() &&
+      nearest_working_zone_distance <= config_.edge_band_meters)
+    {
+      const double edge_ratio = clampToUnitInterval(
+        (config_.edge_band_meters - nearest_working_zone_distance) /
+        config_.edge_band_meters);
+      const int inside_cost = std::clamp(config_.inside_cost, 0, 254);
+      const int max_traversable_edge_cost = std::min({
+          std::clamp(config_.edge_band_cost, 0, 254),
+          std::max(inside_cost, std::clamp(config_.outside_cost, 0, 254) - 2),
+          252});
+      const double scaled_cost =
+        static_cast<double>(inside_cost) +
+        (static_cast<double>(max_traversable_edge_cost - inside_cost) * edge_ratio);
+      return static_cast<unsigned char>(std::lround(scaled_cost));
     }
     return static_cast<unsigned char>(config_.inside_cost);
   }
 
-  if (nearest_working_zone_distance >= -config_.edge_band_meters) {
-    return static_cast<unsigned char>(config_.edge_band_cost);
-  }
   return static_cast<unsigned char>(config_.outside_cost);
 }
 
@@ -782,6 +905,8 @@ MissionParserNode::MissionParserNode(const rclcpp::NodeOptions & options)
   mission_file_extension_ = declare_parameter<std::string>("mission_file_extension", ".json");
   mission_build_resolution_ = declare_parameter<double>("mission_build_resolution", 0.1);
   mission_build_padding_meters_ = declare_parameter<double>("mission_build_padding_meters", 2.0);
+  mission_build_coverage_path_clearance_meters_ = declare_parameter<double>(
+    "mission_build_coverage_path_clearance_meters", 1.0);
   auto_build_on_start_ = declare_parameter<bool>("auto_build_on_start", true);
   watch_for_updates_ = declare_parameter<bool>("watch_for_updates", true);
 
@@ -979,6 +1104,7 @@ bool MissionParserNode::buildArtifactsForMission(const std::filesystem::path & m
     const std::filesystem::path staged_mission_path = stageMissionFile(mission_path);
     Vda5050MissionBuildConfig config;
     config.mission_path = staged_mission_path.string();
+    config.coverage_path_clearance_meters = mission_build_coverage_path_clearance_meters_;
     mission_parser_->loadMission(config);
     const RasterizedMap rasterized_map = mission_parser_->buildSuggestedGlobalCostmap(
       mission_build_resolution_,
