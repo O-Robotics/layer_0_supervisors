@@ -194,6 +194,14 @@ def _start_fault_shutdown_watcher(context, *args, **kwargs):
     shutdown_fault_state = LaunchConfiguration("shutdown_fault_state").perform(context)
     shutdown_fault_profile = LaunchConfiguration("shutdown_fault_profile").perform(context)
     qualified_topic = _absolute_topic(namespace, fsm_state_topic)
+    watcher_script = os.path.join(
+        os.path.dirname(__file__),
+        ..,
+        simulation,
+        scripts,
+        wait_for_fsm_fault_shutdown.py,
+    )
+    watcher_script = os.path.abspath(watcher_script)
 
     watcher = ExecuteProcess(
         cmd=[
