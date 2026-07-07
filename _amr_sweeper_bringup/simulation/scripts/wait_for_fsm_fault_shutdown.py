@@ -63,7 +63,7 @@ def main() -> int:
                 rclpy.shutdown()
         except RuntimeError:
             pass
-    return 42 if matched else 0
+    return 42 if matched else 0 if interrupted else 1
 
 
 if __name__ == '__main__':
