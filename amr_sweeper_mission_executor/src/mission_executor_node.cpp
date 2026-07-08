@@ -2851,8 +2851,13 @@ std::filesystem::path MissionExecutorNode::artifactsDirectoryForMission(
 
 std::string MissionExecutorNode::missionStemForPath(const std::filesystem::path & mission_path) const
 {
-  if (mission_path.has_parent_path() && mission_path.parent_path() != resolveMissionsFromDbDirectory()) {
-    return mission_path.parent_path().filename().string();
+  const std::filesystem::path missions_database_directory = resolveMissionsFromDbDirectory();
+  if (mission_path.has_parent_path() && mission_path.parent_path() != missions_database_directory) {
+    const std::filesystem::path parent = mission_path.parent_path();
+    if (parent.filename() == "simulations" && parent.parent_path() == missions_database_directory) {
+      return mission_path.stem().string();
+    }
+    return parent.filename().string();
   }
   return mission_path.stem().string();
 }

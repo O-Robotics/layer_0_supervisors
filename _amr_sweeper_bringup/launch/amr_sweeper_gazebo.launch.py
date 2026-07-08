@@ -1,3 +1,4 @@
+import copy
 import os
 import re
 import subprocess
@@ -6,7 +7,7 @@ import tempfile
 import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription, OpaqueFunction
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription, LogInfo, OpaqueFunction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
@@ -32,13 +33,77 @@ def _child_namespace(namespace: str, child: str) -> str:
     return normalized_child
 
 
-def _bridge_argument(bridge: dict, namespace: str) -> str:
-    ros_topic_name = bridge["ros_topic_name"]
+def _deep_merge_dict(base: dict, override: dict) -> dict:
+    result = copy.deepcopy(base)
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(result.get(key), dict):
+            result[key] = _deep_merge_dict(result[key], value)
+        else:
+            result[key] = copy.deepcopy(value)
+    return result
+
+
+def _resolve_simulation_profile(config: dict, profile_name: str) -> tuple[str, dict]:
+    simulation_config = config["simulation"]
+    default_profile = simulation_config.get("default_profile", "empty1")
+    selected_profile = (profile_name or default_profile).strip() or default_profile
+    profiles = simulation_config.get("profiles", {})
+    if selected_profile not in profiles:
+        available_profiles = ", ".join(sorted(profiles))
+        raise ValueError(
+            f"Unknown simulation profile '{selected_profile}'. "
+            f"Available profiles: {available_profiles}"
+        )
+
+    defaults = {
+        key: value
+        for key, value in simulation_config.items()
+        if key not in {"default_profile", "profiles"}
+    }
+    resolved = _deep_merge_dict(defaults, profiles[selected_profile])
+    resolved.setdefault("world_name", selected_profile)
+    resolved.setdefault("world_file", f"{selected_profile}.sdf")
+    return selected_profile, resolved
+
+
+def _resolve_world_path(bringup_pkg: str, world_file: str) -> str:
+    if os.path.isabs(world_file):
+        return world_file
+    return os.path.join(bringup_pkg, "simulation", "worlds", world_file)
+
+
+def _simulation_resource_paths(bringup_pkg: str, description_share: str) -> list[str]:
+    worlds_dir = os.path.join(bringup_pkg, "simulation", "worlds")
+    model_collection = os.path.join(worlds_dir, "gazebo_models_worlds_collection")
+    citysim_collection = os.path.join(worlds_dir, "citysim")
+    candidates = [
+        os.path.dirname(bringup_pkg),
+        os.path.dirname(description_share),
+        worlds_dir,
+        os.path.join(model_collection, "models"),
+        os.path.join(model_collection, "worlds"),
+        model_collection,
+        os.path.join(citysim_collection, "models"),
+        os.path.join(citysim_collection, "media"),
+    ]
+    resource_paths = []
+    for candidate in candidates:
+        if os.path.exists(candidate) and candidate not in resource_paths:
+            resource_paths.append(candidate)
+    existing_resource_path = os.environ.get("GZ_SIM_RESOURCE_PATH", "").strip()
+    if existing_resource_path:
+        resource_paths.append(existing_resource_path)
+    return resource_paths
+
+
+def _bridge_argument(bridge: dict, namespace: str, world_name: str) -> str:
+    ros_topic_name = bridge["ros_topic_name"].replace("{world_name}", world_name)
     if not ros_topic_name.startswith("/"):
         ros_topic_name = _absolute_topic(namespace, ros_topic_name)
     direction = bridge["direction"].strip().lower()
     separator = "[" if direction == "gz_to_ros" else "]"
-    return f"{ros_topic_name}@{bridge['ros_type_name']}{separator}{bridge['gz_type_name']}"
+    gz_type_name = bridge["gz_type_name"].replace("{world_name}", world_name)
+    return f"{ros_topic_name}@{bridge['ros_type_name']}{separator}{gz_type_name}"
 
 
 def _render_simulation_robot(namespace: str, entity_name: str) -> str:
@@ -72,9 +137,51 @@ def _render_simulation_robot(namespace: str, entity_name: str) -> str:
     return urdf_file.name
 
 
-def _render_world_with_georeference(world_path: str, georeference: dict) -> str:
+def _rename_world(world_sdf: str, world_name: str) -> str:
+    def replace_name(match):
+        return f"{match.group(1)}{match.group(2)}{world_name}{match.group(4)}"
+
+    world_sdf = re.sub(
+        r"(<world\s+name=)(['\"])([^'\"]+)(['\"])",
+        replace_name,
+        world_sdf,
+        count=1,
+    )
+    world_sdf = re.sub(
+        r"(<state\s+world_name=)(['\"])([^'\"]+)(['\"])",
+        replace_name,
+        world_sdf,
+    )
+    return world_sdf
+
+
+def _ensure_gz_sim_system_plugins(world_sdf: str) -> str:
+    if "gz-sim-physics-system" in world_sdf:
+        return world_sdf
+
+    plugins = """
+    <plugin filename="gz-sim-physics-system"
+            name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-user-commands-system"
+            name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system"
+            name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="gz-sim-sensors-system"
+            name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+    <plugin filename="gz-sim-imu-system"
+            name="gz::sim::systems::Imu"/>
+"""
+    return re.sub(r"(<world\b[^>]*>)", r"\1\n" + plugins, world_sdf, count=1)
+
+
+def _render_world_with_georeference(world_path: str, world_name: str, georeference: dict) -> str:
     with open(world_path, "r", encoding="utf-8") as stream:
         world_sdf = stream.read()
+
+    world_sdf = _rename_world(world_sdf, world_name)
+    world_sdf = _ensure_gz_sim_system_plugins(world_sdf)
 
     replacements = {
         "latitude_deg": georeference["latitude_deg"],
@@ -125,11 +232,13 @@ def _launch_setup(context, *args, **kwargs):
         LaunchConfiguration("override_timestamps_with_wall_time").perform(context).strip().lower()
         in {"1", "true", "yes", "on"}
     )
+    simulation_profile = LaunchConfiguration("simulation_profile").perform(context).strip()
+    selected_profile, simulation_config = _resolve_simulation_profile(config, simulation_profile)
     world_name = simulation_config["world_name"]
     entity_name = simulation_config["entity_name"]
-    base_world = os.path.join(bringup_pkg, "simulation", "worlds", simulation_config["world_file"])
+    base_world = _resolve_world_path(bringup_pkg, simulation_config["world_file"])
     georeference = simulation_config["georeference"]
-    world = _render_world_with_georeference(base_world, georeference)
+    world = _render_world_with_georeference(base_world, world_name, georeference)
     description_share = get_package_share_directory("amr_sweeper_description")
     robot_urdf = _render_simulation_robot(namespace, entity_name)
 
@@ -137,10 +246,9 @@ def _launch_setup(context, *args, **kwargs):
     gazebo = ExecuteProcess(
         cmd=["gz", "sim", "-r", world],
         additional_env={
-            "GZ_SIM_RESOURCE_PATH": os.pathsep.join([
-                os.path.dirname(bringup_pkg),
-                os.path.dirname(description_share),
-            ]),
+            "GZ_SIM_RESOURCE_PATH": os.pathsep.join(
+                _simulation_resource_paths(bringup_pkg, description_share)
+            ),
         },
         output="screen",
     )
@@ -164,7 +272,10 @@ def _launch_setup(context, *args, **kwargs):
         ],
     )
 
-    bridge_arguments = [_bridge_argument(bridge, namespace) for bridge in config["bridges"]]
+    bridge_arguments = [
+        _bridge_argument(bridge, namespace, world_name)
+        for bridge in config["bridges"]
+    ]
     bridge = Node(
         package="ros_gz_bridge",
         executable="parameter_bridge",
@@ -177,7 +288,17 @@ def _launch_setup(context, *args, **kwargs):
         arguments=bridge_arguments,
     )
 
-    actions = [gazebo, spawn_robot, bridge]
+    actions = [
+        gazebo,
+        LogInfo(
+            msg=(
+                "[amr_sweeper_gazebo] Launching simulation profile "
+                f"'{selected_profile}' in world '{world_name}'"
+            )
+        ),
+        spawn_robot,
+        bridge,
+    ]
 
     if launch_gnss_stack.strip().lower() in {"1", "true", "yes", "on"}:
         actions.append(
@@ -234,6 +355,7 @@ def generate_launch_description():
         DeclareLaunchArgument("namespace", default_value="amr_sweeper"),
         DeclareLaunchArgument("use_ntrip_client", default_value="true"),
         DeclareLaunchArgument("launch_gnss_stack", default_value="true"),
+        DeclareLaunchArgument("simulation_profile", default_value="empty1"),
         DeclareLaunchArgument("enable_gnss", default_value="true"),
         DeclareLaunchArgument("enable_imu", default_value="true"),
         DeclareLaunchArgument("enable_depth_camera", default_value="true"),

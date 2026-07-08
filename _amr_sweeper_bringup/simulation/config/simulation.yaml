@@ -1,6 +1,7 @@
-﻿simulation:
-  world_name: amr_sweeper_test
-  world_file: amr_sweeper_test.sdf
+simulation:
+  default_profile: empty1
+  world_name: empty1
+  world_file: empty1.sdf
   entity_name: amr_sweeper
   georeference:
     latitude_deg: 56.164520029
@@ -14,6 +15,55 @@
     roll: 0.0
     pitch: 0.0
     yaw: 0.0
+  profiles:
+    empty1:
+      world_name: empty1
+      world_file: empty1.sdf
+      mission_id: empty1
+      schedule_ics_path: missions/database/simulations/empty1.ics
+      spawn_pose:
+        x: 0.0
+        y: 0.0
+        z: 0.15
+        roll: 0.0
+        pitch: 0.0
+        yaw: 0.0
+    test_city:
+      world_name: test_city
+      world_file: gazebo_models_worlds_collection/worlds/test_city.world
+      mission_id: test_city
+      schedule_ics_path: missions/database/simulations/test_city.ics
+      spawn_pose:
+        x: 0.0
+        y: 0.0
+        z: 0.15
+        roll: 0.0
+        pitch: 0.0
+        yaw: 0.0
+    neighborhood:
+      world_name: neighborhood
+      world_file: gazebo_models_worlds_collection/worlds/neighborhood.world
+      mission_id: neighborhood
+      schedule_ics_path: missions/database/simulations/neighborhood.ics
+      spawn_pose:
+        x: 15.0
+        y: 7.0
+        z: 0.15
+        roll: 0.0
+        pitch: 0.0
+        yaw: 0.0
+    small_city:
+      world_name: small_city
+      world_file: gazebo_models_worlds_collection/worlds/small_city.world
+      mission_id: small_city
+      schedule_ics_path: missions/database/simulations/small_city.ics
+      spawn_pose:
+        x: -15.0
+        y: 0.0
+        z: 0.15
+        roll: 0.0
+        pitch: 0.0
+        yaw: 0.0
   gnss:
     navsat_topic: gnss/navsat
     gpsfix_topic: gnss/fix
@@ -68,7 +118,7 @@ bridges:
     ros_type_name: geometry_msgs/msg/Twist
     gz_type_name: gz.msgs.Twist
     direction: ros_to_gz
-  - ros_topic_name: /world/amr_sweeper_test/pose/info
+  - ros_topic_name: /world/{world_name}/pose/info
     ros_type_name: tf2_msgs/msg/TFMessage
     gz_type_name: gz.msgs.Pose_V
     direction: gz_to_ros

@@ -47,6 +47,17 @@ def _as_bool(value: str) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _simulation_enabled(value: str) -> bool:
+    return value.strip().lower() not in {"", "0", "false", "no", "off"}
+
+
+def _simulation_profile_from_value(value: str) -> str:
+    stripped = value.strip()
+    if stripped.lower() in {"", "1", "true", "yes", "on"}:
+        return "empty1"
+    return stripped
+
+
 def _normalize_namespace(namespace: str) -> str:
     return namespace.strip().strip("/")
 
@@ -100,6 +111,45 @@ def _write_runtime_rosbag_qos_overrides(rosbag_output_directory: str) -> str:
             "  depth: 5\n"
         )
     return overrides_path
+
+
+def _resolve_simulation_launch_settings(context, *args, **kwargs):
+    del args, kwargs
+
+    raw_use_simulation = LaunchConfiguration("use_simulation").perform(context)
+    enabled = _simulation_enabled(raw_use_simulation)
+    actions = [SetLaunchConfiguration("use_simulation", "true" if enabled else "false")]
+    if not enabled:
+        actions.append(SetLaunchConfiguration("simulation_profile", ""))
+        return actions
+
+    raw_profile = _simulation_profile_from_value(raw_use_simulation)
+    configured_profile = LaunchConfiguration("simulation_profile").perform(context).strip()
+    if raw_use_simulation.strip().lower() in {"1", "true", "yes", "on"} and configured_profile:
+        simulation_profile = configured_profile
+    else:
+        simulation_profile = raw_profile
+
+    actions.append(SetLaunchConfiguration("simulation_profile", simulation_profile))
+
+    schedule_ics_path = LaunchConfiguration("schedule_ics_path").perform(context).strip()
+    if not schedule_ics_path:
+        actions.append(
+            SetLaunchConfiguration(
+                "schedule_ics_path",
+                f"missions/database/simulations/{simulation_profile}.ics",
+            )
+        )
+
+    actions.append(
+        LogInfo(
+            msg=(
+                "[amr_sweeper_bringup] Simulation enabled with profile "
+                f"'{simulation_profile}'"
+            )
+        )
+    )
+    return actions
 
 
 def _resolve_runtime_rosbag_settings(context, *args, **kwargs):
@@ -281,6 +331,7 @@ def generate_launch_description():
     test_output_directory = LaunchConfiguration("test_output_directory")
     use_profile = LaunchConfiguration("use_profile")
     use_simulation = LaunchConfiguration("use_simulation")
+    simulation_profile = LaunchConfiguration("simulation_profile")
     tick_period_ms = LaunchConfiguration("tick_period_ms")
     missions_from_db_directory = LaunchConfiguration("missions_from_db_directory")
     missions_log_directory = LaunchConfiguration("missions_log_directory")
@@ -362,7 +413,14 @@ def generate_launch_description():
         DeclareLaunchArgument("namespace", default_value="amr_sweeper"),
         DeclareLaunchArgument("use_simulation", default_value="false"),
         DeclareLaunchArgument("use_sim_time", default_value="false"),
-        SetLaunchConfiguration("use_sim_time", "true", condition=IfCondition(use_simulation)),
+        DeclareLaunchArgument(
+            "simulation_profile",
+            default_value="",
+            description=(
+                "Named simulation profile. When use_simulation is a name, that value wins; "
+                "use_simulation:=true defaults to empty1."
+            ),
+        ),
         DeclareLaunchArgument("state_params_file", default_value=default_state_params_file),
         DeclareLaunchArgument("test_output_directory", default_value="src/layer_3_navigation/tests"),
         DeclareLaunchArgument("use_profile", default_value="001"),
@@ -417,6 +475,8 @@ def generate_launch_description():
         DeclareLaunchArgument("shutdown_fault_state", default_value="FAULT"),
         DeclareLaunchArgument("shutdown_fault_profile", default_value="400"),
         *extra_fsm_override_declarations,
+        OpaqueFunction(function=_resolve_simulation_launch_settings),
+        SetLaunchConfiguration("use_sim_time", "true", condition=IfCondition(use_simulation)),
         OpaqueFunction(function=_resolve_runtime_rosbag_settings),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(_launch_file("amr_sweeper_bringup", "amr_sweeper_gazebo.launch.py")),
@@ -427,6 +487,7 @@ def generate_launch_description():
                 "enable_depth_camera": "true",
                 "use_ntrip_client": fsm_override_args["use_ntrip_client"],
                 "launch_gnss_stack": "false",
+                "simulation_profile": simulation_profile,
             }.items(),
             condition=IfCondition(use_simulation),
         ),

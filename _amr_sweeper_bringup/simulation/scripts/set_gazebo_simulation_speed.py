@@ -44,6 +44,6 @@ def _run(speed: float, world: str) -> int:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--speed", type=float, required=True)
-    parser.add_argument("--world", default="amr_sweeper_test")
+    parser.add_argument("--world", default="empty1")
     args = parser.parse_args()
     raise SystemExit(_run(args.speed, args.world))

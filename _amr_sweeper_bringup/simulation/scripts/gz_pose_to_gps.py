@@ -54,7 +54,7 @@ class GzPoseToGps(Node):
     def __init__(self):
         super().__init__("gz_pose_to_gps")
 
-        self.declare_parameter("world_name", "amr_sweeper_test")
+        self.declare_parameter("world_name", "empty1")
         self.declare_parameter("noise_h", 0.5)
         self.declare_parameter("noise_v", 0.3)
         self.declare_parameter("noise_correlation_tau_s", 2.0)
