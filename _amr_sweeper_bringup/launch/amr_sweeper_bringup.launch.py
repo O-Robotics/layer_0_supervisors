@@ -362,6 +362,7 @@ def generate_launch_description():
     mission_path = LaunchConfiguration("mission_path")
     auto_build_on_start = LaunchConfiguration("auto_build_on_start")
     watch_for_updates = LaunchConfiguration("watch_for_updates")
+    build_discovered_missions = LaunchConfiguration("build_discovered_missions")
     http_host = LaunchConfiguration("http_host")
     http_port = LaunchConfiguration("http_port")
     gnss_topic = LaunchConfiguration("gnss_topic")
@@ -463,6 +464,7 @@ def generate_launch_description():
         DeclareLaunchArgument("mission_path", default_value=""),
         DeclareLaunchArgument("auto_build_on_start", default_value="true"),
         DeclareLaunchArgument("watch_for_updates", default_value="true"),
+        DeclareLaunchArgument("build_discovered_missions", default_value="false"),
         DeclareLaunchArgument("http_host", default_value="0.0.0.0"),
         DeclareLaunchArgument("http_port", default_value="8080"),
         DeclareLaunchArgument("gnss_topic", default_value="gnss/navsat"),
@@ -545,6 +547,7 @@ def generate_launch_description():
                 "missions_log_directory": missions_log_directory,
                 "auto_build_on_start": auto_build_on_start,
                 "watch_for_updates": watch_for_updates,
+                "build_discovered_missions": build_discovered_missions,
             }.items(),
             condition=IfCondition(launch_vda5050_parser),
         ),

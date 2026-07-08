@@ -195,6 +195,7 @@ private:
   double mission_build_coverage_path_clearance_meters_{1.0};
   bool auto_build_on_start_{true};
   bool watch_for_updates_{true};
+  bool build_discovered_missions_{false};
   bool waiting_for_active_mission_logged_{false};
   std::string last_build_error_key_;
   std::map<std::string, std::filesystem::file_time_type> mission_build_stamps_;

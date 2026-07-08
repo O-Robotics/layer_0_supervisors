@@ -2,18 +2,19 @@
 
 Builds mission artifacts from VDA5050 mission files in `/missions/database`.
 
-This package is intended to run asynchronously in `IDLING` so the robot can keep its
-mission artifacts up to date before the scheduler asks the FSM to enter `RUNNING`.
+This package is intended to run asynchronously in `IDLING`, but the default behavior
+is lazy: source missions are discovered without staging artifacts, and artifacts are
+built when a mission is selected or when the mission executor requests a rebuild.
 
 ## What It Does
 
 - Watches `/missions/database` for VDA5050 mission `.json` files
-- Stages each valid mission into its own subfolder at `/missions/database/<order_id>_<timestamp>/`
-- Builds per-mission artifacts:
-  - `/missions/database/<order_id>_<timestamp>/<order_id>_<timestamp>.json`
-  - `/missions/database/<order_id>_<timestamp>/<order_id>_<timestamp>_costmap.pgm`
-  - `/missions/database/<order_id>_<timestamp>/<order_id>_<timestamp>_costmap.yaml`
-  - `/missions/database/<order_id>_<timestamp>/<order_id>_<timestamp>_path.geojson`
+- Stages the selected mission into its own subfolder under the configured `missions_log_directory`
+- Builds selected per-mission artifacts:
+  - `<missions_log_directory>/<order_id>/<order_id>_vda5050.json`
+  - `<missions_log_directory>/<order_id>/<order_id>_costmap.pgm`
+  - `<missions_log_directory>/<order_id>/<order_id>_costmap.yaml`
+  - `<missions_log_directory>/<order_id>/<order_id>_path_planned.geojson`
 - Leaves runtime selection to the exact per-mission artifacts referenced from `execution_context.json`
 - Exposes `build_current_mission` so the mission executor can force-parse and build the selected mission
 
@@ -44,4 +45,5 @@ YAML style guide for package config:
 - `missions_directory`: folder containing incoming VDA5050 mission files and per-mission subfolders
 - `mission_file_extension`: mission file suffix to scan for
 - `auto_build_on_start`: build the active mission immediately on startup
-- `watch_for_updates`: keep scanning for new or changed mission files
+- `watch_for_updates`: keep checking the selected mission for updates
+- `build_discovered_missions`: opt in to eagerly building every discovered mission; default is `false`

@@ -11,3 +11,4 @@
     mission_build_coverage_path_clearance_meters: 1.0                 # Keep the declared coverage path corridor free in the generated Nav2 costmap while preserving standard PGM semantics.
     auto_build_on_start:                true                 # Build the active mission immediately when the node starts.
     watch_for_updates:                  true                 # Keep scanning for new or changed mission files while IDLING.
+    build_discovered_missions:          false                # When false, discovered source missions are built lazily only after a mission is selected/prepared.

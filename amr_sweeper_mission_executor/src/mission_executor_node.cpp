@@ -2280,7 +2280,6 @@ void MissionExecutorNode::handleExecuteMission(
 
   try {
     const auto resolved_mission = *mission;
-    const auto executable_mission = resolveExecutableMissionSource(resolved_mission);
     PreparedMissionContext context;
     if (!request->mission_execution_directory.empty()) {
       context.mission_execution_directory = request->mission_execution_directory;
@@ -2297,6 +2296,7 @@ void MissionExecutorNode::handleExecuteMission(
         }
         return;
       }
+      const auto executable_mission = resolveExecutableMissionSource(resolved_mission);
       context = prepareMissionArtifacts(
         executable_mission,
         request->mission_window_start,
@@ -2839,10 +2839,14 @@ std::filesystem::path MissionExecutorNode::artifactsDirectoryForMission(
 {
   if (toLower(mission.mission_type) == kScheduledMissionType) {
     const std::filesystem::path mission_path(mission.mission_path);
-    if (mission_path.has_parent_path() &&
-      mission_path.parent_path() != resolveMissionsFromDbDirectory())
-    {
-      return mission_path.parent_path();
+    if (mission_path.has_parent_path()) {
+      const std::filesystem::path parent = mission_path.parent_path();
+      const std::filesystem::path missions_database_directory = resolveMissionsFromDbDirectory();
+      if (parent != missions_database_directory &&
+        !(parent.filename() == "simulations" && parent.parent_path() == missions_database_directory))
+      {
+        return parent;
+      }
     }
     return resolveMissionsLogDirectory() / mission.mission_id;
   }

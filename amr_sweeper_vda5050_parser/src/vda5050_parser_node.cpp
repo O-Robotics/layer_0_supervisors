@@ -909,6 +909,7 @@ MissionParserNode::MissionParserNode(const rclcpp::NodeOptions & options)
     "mission_build_coverage_path_clearance_meters", 1.0);
   auto_build_on_start_ = declare_parameter<bool>("auto_build_on_start", true);
   watch_for_updates_ = declare_parameter<bool>("watch_for_updates", true);
+  build_discovered_missions_ = declare_parameter<bool>("build_discovered_missions", false);
 
   mission_parser_ = std::make_unique<Vda5050MissionParser>();
   status_publisher_ = create_publisher<std_msgs::msg::String>("vda5050_parser/status", 10);
@@ -925,10 +926,11 @@ MissionParserNode::MissionParserNode(const rclcpp::NodeOptions & options)
 
   RCLCPP_INFO(
     get_logger(),
-    "MissionParserNode watching %s, reading source JSON from %s, and writing staged mission artifacts to %s",
+    "MissionParserNode watching %s, reading source JSON from %s, writing staged mission artifacts to %s, and %s discovered missions",
     mission_path_.empty() ? "<auto-discovery>" : mission_path_.c_str(),
     missions_directory_.c_str(),
-    missions_log_directory_.c_str());
+    missions_log_directory_.c_str(),
+    build_discovered_missions_ ? "eagerly building" : "lazily building");
 
   if (auto_build_on_start_) {
     buildIfNeeded();
@@ -941,7 +943,9 @@ void MissionParserNode::buildIfNeeded()
     return;
   }
 
-  buildDiscoveredMissionArtifacts();
+  if (build_discovered_missions_) {
+    buildDiscoveredMissionArtifacts();
+  }
   (void)buildCurrentMissionArtifacts();
 }
 
@@ -1008,7 +1012,7 @@ std::vector<std::filesystem::path> MissionParserNode::discoverMissionPaths()
         if (!isValidVda5050MissionDocument(document)) {
           return;
         }
-        mission_paths.push_back(stageMissionFile(candidate_path));
+        mission_paths.push_back(candidate_path);
       } catch (const std::exception &) {
         return;
       }
@@ -1139,6 +1143,7 @@ bool MissionParserNode::buildArtifactsForMission(const std::filesystem::path & m
       std::filesystem::remove(legacy_coverage_path);
     }
 
+    mission_build_stamps_[mission_path.string()] = currentMissionStamp(mission_path);
     mission_build_stamps_[staged_mission_path.string()] = currentMissionStamp(staged_mission_path);
     last_build_error_key_.clear();
     publishStatus("built", staged_mission_path.string());
@@ -1212,8 +1217,13 @@ std::filesystem::path MissionParserNode::missionFolderPath(
 
 std::string MissionParserNode::missionStemForPath(const std::filesystem::path & mission_path) const
 {
-  if (mission_path.has_parent_path() && mission_path.parent_path() != resolvePath(missions_directory_)) {
-    return mission_path.parent_path().filename().string();
+  const std::filesystem::path missions_directory = resolvePath(missions_directory_);
+  if (mission_path.has_parent_path() && mission_path.parent_path() != missions_directory) {
+    const std::filesystem::path parent = mission_path.parent_path();
+    if (parent.filename() == "simulations" && parent.parent_path() == missions_directory) {
+      return mission_path.stem().string();
+    }
+    return parent.filename().string();
   }
   return mission_path.stem().string();
 }

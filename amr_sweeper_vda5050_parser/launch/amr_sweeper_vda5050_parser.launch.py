@@ -14,6 +14,7 @@ def generate_launch_description():
     missions_log_directory = LaunchConfiguration("missions_log_directory")
     auto_build_on_start = LaunchConfiguration("auto_build_on_start")
     watch_for_updates = LaunchConfiguration("watch_for_updates")
+    build_discovered_missions = LaunchConfiguration("build_discovered_missions")
     config_file = PathJoinSubstitution(
         [FindPackageShare("amr_sweeper_vda5050_parser"), "config", "amr_sweeper_vda5050_parser.yaml"]
     )
@@ -26,6 +27,7 @@ def generate_launch_description():
         DeclareLaunchArgument("missions_log_directory", default_value="missions/logs"),
         DeclareLaunchArgument("auto_build_on_start", default_value="true"),
         DeclareLaunchArgument("watch_for_updates", default_value="true"),
+        DeclareLaunchArgument("build_discovered_missions", default_value="false"),
         Node(
             package="amr_sweeper_vda5050_parser",
             executable="vda5050_parser_node",
@@ -41,6 +43,7 @@ def generate_launch_description():
                     "missions_log_directory": missions_log_directory,
                     "auto_build_on_start": auto_build_on_start,
                     "watch_for_updates": watch_for_updates,
+                    "build_discovered_missions": build_discovered_missions,
                 },
             ],
         ),
