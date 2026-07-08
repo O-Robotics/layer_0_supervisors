@@ -1,6 +1,6 @@
-[submodule "_amr_sweeper_bringup/simulation/worlds/gazebo_models_worlds_collection"]
-	path = _amr_sweeper_bringup/simulation/worlds/gazebo_models_worlds_collection
+[submodule "amr_sweeper_simulation/simulation/worlds/gazebo_models_worlds_collection"]
+	path = amr_sweeper_simulation/simulation/worlds/gazebo_models_worlds_collection
 	url = https://github.com/leonhartyao/gazebo_models_worlds_collection.git
-[submodule "_amr_sweeper_bringup/simulation/worlds/citysim"]
-	path = _amr_sweeper_bringup/simulation/worlds/citysim
+[submodule "amr_sweeper_simulation/simulation/worlds/citysim"]
+	path = amr_sweeper_simulation/simulation/worlds/citysim
 	url = https://github.com/osrf/citysim.git
