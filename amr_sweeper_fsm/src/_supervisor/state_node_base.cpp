@@ -526,6 +526,8 @@ namespace {
             pp.ready_nodes.push_back(target);
           } else if (type == "topic") {
             pp.ready_topics.push_back(target);
+          } else if (type == "topic_message") {
+            pp.ready_message_topics.push_back(target);
           } else if (type == "service") {
             pp.ready_services.push_back(target);
           } else if (type == "controller") {
@@ -1520,10 +1522,14 @@ auto read_int = [this](const std::string & name, int default_value) -> int {
   }
 
   readiness_.topics = read_string_array("ready.topics");
+  readiness_.message_topics = read_string_array("ready.message_topics");
   readiness_.services = read_string_array("ready.services");
 
   // Qualify relative topic/service names into this node's namespace.
   for (auto & t : readiness_.topics) {
+    t = qualify_to_ns(t);
+  }
+  for (auto & t : readiness_.message_topics) {
     t = qualify_to_ns(t);
   }
   for (auto & s : readiness_.services) {
@@ -1587,6 +1593,69 @@ bool StateNodeBase::graph_has_service(const std::string & service_name)
       return true;
     }
   }
+  return false;
+}
+
+bool StateNodeBase::topic_has_message(const std::string & topic_name, std::string & why_not)
+{
+  if (ready_message_topics_seen_.count(topic_name) > 0U) {
+    why_not.clear();
+    return true;
+  }
+
+  const auto publishers = this->get_publishers_info_by_topic(topic_name);
+  if (publishers.empty()) {
+    why_not = "topic not discovered: '" + topic_name + "'";
+    return false;
+  }
+
+  const auto & publisher = publishers.front();
+  const auto topic_type = publisher.topic_type();
+  if (topic_type.empty()) {
+    why_not = "topic discovered without type information: '" + topic_name + "'";
+    return false;
+  }
+
+  auto probe = std::make_shared<rclcpp::Node>(
+    "fsm_topic_probe_" + std::to_string(g_probe_seq.fetch_add(1U)),
+    "",
+    rclcpp::NodeOptions()
+      .context(this->get_node_base_interface()->get_context())
+      .enable_rosout(false)
+      .start_parameter_services(false)
+      .start_parameter_event_publisher(false));
+
+  bool received = false;
+  const auto probe_qos = rclcpp::SensorDataQoS();
+  auto subscription = probe->create_generic_subscription(
+    topic_name,
+    topic_type,
+    probe_qos,
+    [&received](std::shared_ptr<rclcpp::SerializedMessage>) {
+      received = true;
+    });
+
+  rclcpp::executors::SingleThreadedExecutor exec;
+  exec.add_node(probe);
+
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(100);
+  while (rclcpp::ok(this->get_node_base_interface()->get_context()) &&
+    !received &&
+    std::chrono::steady_clock::now() < deadline)
+  {
+    exec.spin_once(std::chrono::milliseconds(20));
+  }
+
+  exec.remove_node(probe);
+  subscription.reset();
+
+  if (received) {
+    ready_message_topics_seen_.insert(topic_name);
+    why_not.clear();
+    return true;
+  }
+
+  why_not = "topic discovered without messages: '" + topic_name + "'";
   return false;
 }
 
@@ -1762,6 +1831,7 @@ bool StateNodeBase::wait_for_readiness(std::string & why_not)
   const bool has_global_reqs =
     !(readiness_.nodes.empty() &&
       readiness_.topics.empty() &&
+      readiness_.message_topics.empty() &&
       readiness_.services.empty() &&
       readiness_.lifecycle_nodes.empty());
 
@@ -1773,6 +1843,7 @@ bool StateNodeBase::wait_for_readiness(std::string & why_not)
         pp.window_ms > 0 &&
         (!pp.ready_nodes.empty() ||
         !pp.ready_topics.empty() ||
+        !pp.ready_message_topics.empty() ||
         !pp.ready_services.empty() ||
         !pp.ready_active_controllers.empty() ||
         !pp.ready_hardware_components.empty() ||
@@ -2506,6 +2577,17 @@ bool StateNodeBase::profile_process_readiness_satisfied_(
     }
   }
 
+  for (const auto & t : pp.ready_message_topics) {
+    if (!is_profile_requirement_enabled(resolved_command, "topic_message", t)) {
+      continue;
+    }
+    std::string topic_why;
+    if (!topic_has_message(t, topic_why)) {
+      why_not = missing_reason_for("topic message", t);
+      return false;
+    }
+  }
+
   for (const auto & s : pp.ready_services) {
     if (!is_profile_requirement_enabled(resolved_command, "service", s)) {
       continue;
@@ -2561,6 +2643,7 @@ std::vector<std::string> StateNodeBase::collect_profile_process_readiness_failur
   failures.reserve(
     pp.ready_nodes.size() +
     pp.ready_topics.size() +
+    pp.ready_message_topics.size() +
     pp.ready_services.size() +
     pp.ready_lifecycle_nodes.size() +
     pp.ready_hardware_components.size() +
@@ -2582,6 +2665,16 @@ std::vector<std::string> StateNodeBase::collect_profile_process_readiness_failur
     }
     if (!graph_has_topic(t)) {
       failures.push_back("missing topic '" + t + "'");
+    }
+  }
+
+  for (const auto & t : pp.ready_message_topics) {
+    if (!is_profile_requirement_enabled(resolved_command, "topic_message", t)) {
+      continue;
+    }
+    std::string topic_why;
+    if (!topic_has_message(t, topic_why)) {
+      failures.push_back(topic_why);
     }
   }
 
@@ -2634,6 +2727,7 @@ bool StateNodeBase::wait_for_profile_process_readiness_(
   if (
     pp.ready_nodes.empty() &&
     pp.ready_topics.empty() &&
+    pp.ready_message_topics.empty() &&
     pp.ready_services.empty() &&
     pp.ready_lifecycle_nodes.empty() &&
     pp.ready_hardware_components.empty() &&
@@ -2689,6 +2783,7 @@ bool StateNodeBase::wait_for_profile_process_readiness_(
 bool StateNodeBase::start_state_processes(std::string & why_not)
 {
   why_not.clear();
+  ready_message_topics_seen_.clear();
 
   if (shutdown_requested_() || !rclcpp::ok()) {
     why_not = "shutdown requested";
@@ -2708,6 +2803,7 @@ bool StateNodeBase::start_state_processes(std::string & why_not)
       const bool has_process_readiness =
         !pp.ready_nodes.empty() ||
         !pp.ready_topics.empty() ||
+        !pp.ready_message_topics.empty() ||
         !pp.ready_services.empty() ||
         !pp.ready_lifecycle_nodes.empty() ||
         !pp.ready_hardware_components.empty() ||

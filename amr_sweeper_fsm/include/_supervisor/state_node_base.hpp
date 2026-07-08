@@ -58,6 +58,7 @@ struct ProfileProcess
   int restart_delay_ms{0};
 
   std::vector<std::string> ready_topics;
+  std::vector<std::string> ready_message_topics;
   std::vector<std::string> ready_services;
   std::vector<std::string> ready_active_controllers;
   std::vector<LifecycleNodeRequirement> ready_lifecycle_nodes;
@@ -187,6 +188,9 @@ protected:
     // Graph-discovered topics (names must match exactly; absolute or relative).
     std::vector<std::string> topics;
 
+    // Topics that must both exist in the graph and deliver at least one message during readiness gating.
+    std::vector<std::string> message_topics;
+
     // Graph-discovered services (names must match exactly; absolute or relative).
     std::vector<std::string> services;
 
@@ -206,6 +210,9 @@ protected:
 
   // Helper: true if topic exists in ROS graph.
   bool graph_has_topic(const std::string & topic_name);
+
+  // Helper: true if a topic has delivered at least one message during readiness gating.
+  bool topic_has_message(const std::string & topic_name, std::string & why_not);
 
   // Helper: true if service exists in ROS graph.
   bool graph_has_service(const std::string & service_name);
@@ -352,6 +359,9 @@ uint16_t fault_transition_profile_{400};
 
   // Track which non-critical process readiness warnings have already been logged.
   std::set<std::string> warned_noncritical_readiness_;
+
+  // Topic-message readiness cache populated during activation.
+  std::set<std::string> ready_message_topics_seen_;
 
   // State-specific readiness spec.
   ReadySpec readiness_;

@@ -47,19 +47,19 @@ profiles:
               - "use_amr_sweeper_gnss:=true"
               - "use_ntrip_client:=true"
             ready:
-              - type: "topic"
+              - type: "topic_message"
                 target: "system_info/system_info"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "imu/data_raw"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "imu/data_acc_gyro"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "imu/data_heading"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "gnss/navsat"
                 required: true
               - type: "topic"
@@ -71,10 +71,10 @@ profiles:
               - type: "topic"
                 target: "usb_cameras/tools_camera/image_raw/compressed"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "depth_camera/depth/camera_info"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "depth_camera/scan"
                 required: true
               - type: "topic"
@@ -148,16 +148,16 @@ profiles:
               - type: "topic"
                 target: "sweeping_controller/cmd_vel_tools"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "attitude_controller/roll_pitch"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "drive_controller/odom"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "safety_controller/status"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "collision_detector/impact_detected"
                 required: true
               - type: "service"
@@ -290,19 +290,19 @@ profiles:
               - "use_amr_sweeper_gnss:=true"
               - "use_ntrip_client:=true"
             ready:
-              - type: "topic"
+              - type: "topic_message"
                 target: "system_info/system_info"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "imu/data_raw"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "imu/data_acc_gyro"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "imu/data_heading"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "gnss/navsat"
                 required: true
               - type: "topic"
@@ -314,10 +314,10 @@ profiles:
               - type: "topic"
                 target: "usb_cameras/tools_camera/image_raw/compressed"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "depth_camera/depth/camera_info"
                 required: false
-              - type: "topic"
+              - type: "topic_message"
                 target: "depth_camera/scan"
                 required: false
               - type: "topic"
@@ -393,16 +393,16 @@ profiles:
               - type: "topic"
                 target: "sweeping_controller/cmd_vel_tools"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "attitude_controller/roll_pitch"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "drive_controller/odom"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "safety_controller/status"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "collision_detector/impact_detected"
                 required: true
               - type: "service"
@@ -571,19 +571,19 @@ profiles:
               - "use_amr_sweeper_gnss:=true"
               - "use_ntrip_client:=true"
             ready:
-              - type: "topic"
+              - type: "topic_message"
                 target: "system_info/system_info"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "imu/data_raw"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "imu/data_acc_gyro"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "imu/data_heading"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "gnss/navsat"
                 required: true
               - type: "topic"
@@ -595,10 +595,10 @@ profiles:
               - type: "topic"
                 target: "usb_cameras/tools_camera/image_raw/compressed"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "depth_camera/depth/camera_info"
                 required: false
-              - type: "topic"
+              - type: "topic_message"
                 target: "depth_camera/scan"
                 required: false
               - type: "topic"
@@ -674,16 +674,16 @@ profiles:
               - type: "topic"
                 target: "sweeping_controller/cmd_vel_tools"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "attitude_controller/roll_pitch"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "drive_controller/odom"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "safety_controller/status"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "collision_detector/impact_detected"
                 required: true
               - type: "service"
@@ -853,19 +853,19 @@ profiles:
               - "use_amr_sweeper_gnss:=true"
               - "use_ntrip_client:=true"
             ready:
-              - type: "topic"
+              - type: "topic_message"
                 target: "system_info/system_info"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "imu/data_raw"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "imu/data_acc_gyro"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "imu/data_heading"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "gnss/navsat"
                 required: true
               - type: "topic"
@@ -877,10 +877,10 @@ profiles:
               - type: "topic"
                 target: "usb_cameras/tools_camera/image_raw/compressed"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "depth_camera/depth/camera_info"
                 required: false
-              - type: "topic"
+              - type: "topic_message"
                 target: "depth_camera/scan"
                 required: false
               - type: "topic"
@@ -956,16 +956,16 @@ profiles:
               - type: "topic"
                 target: "sweeping_controller/cmd_vel_tools"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "attitude_controller/roll_pitch"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "drive_controller/odom"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "safety_controller/status"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "collision_detector/impact_detected"
                 required: true
               - type: "service"
@@ -1135,19 +1135,19 @@ profiles:
               - "use_amr_sweeper_gnss:=true"
               - "use_ntrip_client:=true"
             ready:
-              - type: "topic"
+              - type: "topic_message"
                 target: "system_info/system_info"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "imu/data_raw"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "imu/data_acc_gyro"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "imu/data_heading"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "gnss/navsat"
                 required: true
               - type: "topic"
@@ -1159,10 +1159,10 @@ profiles:
               - type: "topic"
                 target: "usb_cameras/tools_camera/image_raw/compressed"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "depth_camera/depth/camera_info"
                 required: false
-              - type: "topic"
+              - type: "topic_message"
                 target: "depth_camera/scan"
                 required: false
               - type: "topic"
@@ -1239,16 +1239,16 @@ profiles:
               - type: "topic"
                 target: "sweeping_controller/cmd_vel_tools"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "attitude_controller/roll_pitch"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "drive_controller/odom"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "safety_controller/status"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "collision_detector/impact_detected"
                 required: true
               - type: "service"
@@ -1312,19 +1312,19 @@ profiles:
               - "use_amr_sweeper_gnss:=true"
               - "use_ntrip_client:=true"
             ready:
-              - type: "topic"
+              - type: "topic_message"
                 target: "system_info/system_info"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "imu/data_raw"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "imu/data_acc_gyro"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "imu/data_heading"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "gnss/navsat"
                 required: true
               - type: "topic"
@@ -1336,10 +1336,10 @@ profiles:
               - type: "topic"
                 target: "usb_cameras/tools_camera/image_raw/compressed"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "depth_camera/depth/camera_info"
                 required: false
-              - type: "topic"
+              - type: "topic_message"
                 target: "depth_camera/scan"
                 required: false
               - type: "topic"
@@ -1435,7 +1435,7 @@ profiles:
               - "use_amr_sweeper_gnss:=false"
               - "use_ntrip_client:=false"
             ready:
-              - type: "topic"
+              - type: "topic_message"
                 target: "system_info/system_info"
                 required: true
               - type: "topic"
@@ -1492,7 +1492,7 @@ profiles:
               - "use_amr_sweeper_safety_controller:=true"
               - "use_sweeping_mode:=cmd_vel_sweeping"
             ready:
-              - type: "topic"
+              - type: "topic_message"
                 target: "drive_controller/odom"
                 required: true
               - type: "topic"
@@ -1501,13 +1501,13 @@ profiles:
               - type: "topic"
                 target: "sweeping_controller/cmd_vel_tools"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "attitude_controller/roll_pitch"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "safety_controller/status"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "collision_detector/impact_detected"
                 required: true
             window_ms: 60000
@@ -1585,7 +1585,7 @@ profiles:
               - "use_amr_sweeper_gnss:=false"
               - "use_ntrip_client:=false"
             ready:
-              - type: "topic"
+              - type: "topic_message"
                 target: "system_info/system_info"
                 required: true
               - type: "topic"
@@ -1633,7 +1633,7 @@ profiles:
               - "use_amr_sweeper_safety_controller:=true"
               - "use_sweeping_mode:=cmd_vel_sweeping"
             ready:
-              - type: "topic"
+              - type: "topic_message"
                 target: "drive_controller/odom"
                 required: true
             window_ms: 120000
@@ -1711,7 +1711,7 @@ profiles:
               - "use_amr_sweeper_gnss:=false"
               - "use_ntrip_client:=false"
             ready:
-              - type: "topic"
+              - type: "topic_message"
                 target: "system_info/system_info"
                 required: true
               - type: "topic"
@@ -1751,7 +1751,7 @@ profiles:
               - "use_amr_sweeper_safety_controller:=true"
               - "use_sweeping_mode:=cmd_vel_sweeping"
             ready:
-              - type: "topic"
+              - type: "topic_message"
                 target: "drive_controller/odom"
                 required: true
             window_ms: 180000
@@ -1830,7 +1830,7 @@ profiles:
               - "use_amr_sweeper_gnss:=false"
               - "use_ntrip_client:=false"
             ready:
-              - type: "topic"
+              - type: "topic_message"
                 target: "system_info/system_info"
                 required: true
               - type: "topic"
@@ -1870,7 +1870,7 @@ profiles:
               - "use_amr_sweeper_safety_controller:=true"
               - "use_sweeping_mode:=cmd_vel_sweeping"
             ready:
-              - type: "topic"
+              - type: "topic_message"
                 target: "drive_controller/odom"
                 required: true
             window_ms: 45000
@@ -1949,7 +1949,7 @@ profiles:
               - "use_amr_sweeper_gnss:=false"
               - "use_ntrip_client:=false"
             ready:
-              - type: "topic"
+              - type: "topic_message"
                 target: "system_info/system_info"
                 required: true
               - type: "topic"
@@ -1989,7 +1989,7 @@ profiles:
               - "use_amr_sweeper_safety_controller:=true"
               - "use_sweeping_mode:=cmd_vel_sweeping"
             ready:
-              - type: "topic"
+              - type: "topic_message"
                 target: "drive_controller/odom"
                 required: true
               - type: "topic"
@@ -2072,7 +2072,7 @@ profiles:
               - "use_amr_sweeper_gnss:=false"
               - "use_ntrip_client:=false"
             ready:
-              - type: "topic"
+              - type: "topic_message"
                 target: "system_info/system_info"
                 required: true
               - type: "topic"
@@ -2112,7 +2112,7 @@ profiles:
               - "use_amr_sweeper_safety_controller:=true"
               - "use_sweeping_mode:=cmd_vel_sweeping"
             ready:
-              - type: "topic"
+              - type: "topic_message"
                 target: "drive_controller/odom"
                 required: true
             window_ms: 45000
@@ -2184,16 +2184,16 @@ profiles:
               - type: "topic"
                 target: "sweeping_controller/cmd_vel_tools"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "attitude_controller/roll_pitch"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "drive_controller/odom"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "safety_controller/status"
                 required: true
-              - type: "topic"
+              - type: "topic_message"
                 target: "collision_detector/impact_detected"
                 required: true
               - type: "service"

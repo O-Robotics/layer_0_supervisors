@@ -288,6 +288,17 @@ def _launch_setup(context, *args, **kwargs):
         arguments=bridge_arguments,
     )
 
+    world_pose_relay = Node(
+        package="amr_sweeper_simulation",
+        executable="world_pose_to_sim_pose.py",
+        name="world_pose_to_sim_pose",
+        output="screen",
+        parameters=[{
+            "input_topic": _absolute_topic("", f"world/{world_name}/pose/info"),
+            "output_topic": _absolute_topic(namespace, "simulation/pose/info"),
+        }],
+    )
+
     actions = [
         gazebo,
         LogInfo(
@@ -298,6 +309,7 @@ def _launch_setup(context, *args, **kwargs):
         ),
         spawn_robot,
         bridge,
+        world_pose_relay,
     ]
 
     if launch_gnss_stack.strip().lower() in {"1", "true", "yes", "on"}:

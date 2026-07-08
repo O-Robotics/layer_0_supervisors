@@ -21,6 +21,7 @@ install(PROGRAMS
 install(PROGRAMS
   simulation/scripts/set_gazebo_simulation_speed.py
   simulation/scripts/wait_for_fsm_fault_shutdown.py
+  simulation/scripts/world_pose_to_sim_pose.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

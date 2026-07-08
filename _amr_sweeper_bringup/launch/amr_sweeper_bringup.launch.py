@@ -109,6 +109,22 @@ def _write_runtime_rosbag_qos_overrides(rosbag_output_directory: str) -> str:
             "  reliability: best_effort\n"
             "  history: keep_last\n"
             "  depth: 5\n"
+            "/amr_sweeper/simulation/pose/info:\n"
+            "  reliability: best_effort\n"
+            "  history: keep_last\n"
+            "  depth: 10\n"
+            "/amr_sweeper/imu/data_raw:\n"
+            "  reliability: best_effort\n"
+            "  history: keep_last\n"
+            "  depth: 10\n"
+            "/amr_sweeper/imu/data_acc_gyro:\n"
+            "  reliability: best_effort\n"
+            "  history: keep_last\n"
+            "  depth: 10\n"
+            "/amr_sweeper/imu/data_heading:\n"
+            "  reliability: best_effort\n"
+            "  history: keep_last\n"
+            "  depth: 10\n"
         )
     return overrides_path
 
