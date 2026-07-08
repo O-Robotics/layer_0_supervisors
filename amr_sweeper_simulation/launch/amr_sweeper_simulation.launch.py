@@ -69,11 +69,11 @@ def _resolve_simulation_profile(config: dict, profile_name: str) -> tuple[str, d
 def _resolve_world_path(simulation_pkg: str, world_file: str) -> str:
     if os.path.isabs(world_file):
         return world_file
-    return os.path.join(simulation_pkg, "simulation", "worlds", world_file)
+    return os.path.join(simulation_pkg, "worlds", world_file)
 
 
 def _simulation_resource_paths(simulation_pkg: str, description_share: str) -> list[str]:
-    worlds_dir = os.path.join(simulation_pkg, "simulation", "worlds")
+    worlds_dir = os.path.join(simulation_pkg, "worlds")
     model_collection = os.path.join(worlds_dir, "gazebo_models_worlds_collection")
     citysim_collection = os.path.join(worlds_dir, "citysim")
     candidates = [
@@ -219,7 +219,7 @@ def _gnss_launch_file() -> str:
 
 def _launch_setup(context, *args, **kwargs):
     simulation_pkg = get_package_share_directory("amr_sweeper_simulation")
-    config_path = os.path.join(simulation_pkg, "simulation", "config", "simulation.yaml")
+    config_path = os.path.join(simulation_pkg, "config", "simulation.yaml")
     with open(config_path, "r", encoding="utf-8") as config_file:
         config = yaml.safe_load(config_file)
 
@@ -374,4 +374,5 @@ def generate_launch_description():
         DeclareLaunchArgument("override_timestamps_with_wall_time", default_value="false"),
         OpaqueFunction(function=_launch_setup),
     ])
+
 

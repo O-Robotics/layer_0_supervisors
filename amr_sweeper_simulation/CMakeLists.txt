@@ -8,7 +8,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 
 install(
-  DIRECTORY launch simulation
+  DIRECTORY launch config worlds missions
   DESTINATION share/${PROJECT_NAME}
 )
 
@@ -31,3 +31,4 @@ if(BUILD_TESTING)
 endif()
 
 ament_package()
+
