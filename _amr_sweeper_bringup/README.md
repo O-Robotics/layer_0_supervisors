@@ -1,8 +1,9 @@
-# amr_sweeper_bringup
+﻿# amr_sweeper_bringup
 
 Launches the AMR Sweeper layer 0 supervisor stack from a single entrypoint.
 
 Packages started by this bringup:
+- `amr_sweeper_simulation` when `use_simulation:=true`
 - `amr_sweeper_fsm`
 - `amr_sweeper_mission_executor`
 - `amr_sweeper_scheduler`
@@ -17,6 +18,10 @@ Rosbag recording:
 - its default topic allowlist lives in `config/record_system_rosbag.yaml` and focuses on FSM, supervisor, hardware health, and whole-system status topics.
 - launch it with `record_system_rosbag:=true` to capture a bringup-level system bag.
 - pass `record_mission_rosbag:=true` to make mission execution record bags by default.
+
+Simulation ownership:
+- `amr_sweeper_bringup` includes `amr_sweeper_simulation` when `use_simulation:=true`.
+- Gazebo worlds, bridge mappings, and simulation helper scripts now live in `../amr_sweeper_simulation`.
 
 Test schedule mode:
 - `use_test:=false` by default keeps `missions/database` free of checked-in test fixtures.

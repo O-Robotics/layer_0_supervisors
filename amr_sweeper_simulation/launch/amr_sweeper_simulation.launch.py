@@ -1,4 +1,4 @@
-import copy
+﻿import copy
 import os
 import re
 import subprocess
@@ -66,18 +66,18 @@ def _resolve_simulation_profile(config: dict, profile_name: str) -> tuple[str, d
     return selected_profile, resolved
 
 
-def _resolve_world_path(bringup_pkg: str, world_file: str) -> str:
+def _resolve_world_path(simulation_pkg: str, world_file: str) -> str:
     if os.path.isabs(world_file):
         return world_file
-    return os.path.join(bringup_pkg, "simulation", "worlds", world_file)
+    return os.path.join(simulation_pkg, "simulation", "worlds", world_file)
 
 
-def _simulation_resource_paths(bringup_pkg: str, description_share: str) -> list[str]:
-    worlds_dir = os.path.join(bringup_pkg, "simulation", "worlds")
+def _simulation_resource_paths(simulation_pkg: str, description_share: str) -> list[str]:
+    worlds_dir = os.path.join(simulation_pkg, "simulation", "worlds")
     model_collection = os.path.join(worlds_dir, "gazebo_models_worlds_collection")
     citysim_collection = os.path.join(worlds_dir, "citysim")
     candidates = [
-        os.path.dirname(bringup_pkg),
+        os.path.dirname(simulation_pkg),
         os.path.dirname(description_share),
         worlds_dir,
         os.path.join(model_collection, "models"),
@@ -218,8 +218,8 @@ def _gnss_launch_file() -> str:
 
 
 def _launch_setup(context, *args, **kwargs):
-    bringup_pkg = get_package_share_directory("amr_sweeper_bringup")
-    config_path = os.path.join(bringup_pkg, "simulation", "config", "simulation.yaml")
+    simulation_pkg = get_package_share_directory("amr_sweeper_simulation")
+    config_path = os.path.join(simulation_pkg, "simulation", "config", "simulation.yaml")
     with open(config_path, "r", encoding="utf-8") as config_file:
         config = yaml.safe_load(config_file)
 
@@ -236,7 +236,7 @@ def _launch_setup(context, *args, **kwargs):
     selected_profile, simulation_config = _resolve_simulation_profile(config, simulation_profile)
     world_name = simulation_config["world_name"]
     entity_name = simulation_config["entity_name"]
-    base_world = _resolve_world_path(bringup_pkg, simulation_config["world_file"])
+    base_world = _resolve_world_path(simulation_pkg, simulation_config["world_file"])
     georeference = simulation_config["georeference"]
     world = _render_world_with_georeference(base_world, world_name, georeference)
     description_share = get_package_share_directory("amr_sweeper_description")
@@ -247,7 +247,7 @@ def _launch_setup(context, *args, **kwargs):
         cmd=["gz", "sim", "-r", world],
         additional_env={
             "GZ_SIM_RESOURCE_PATH": os.pathsep.join(
-                _simulation_resource_paths(bringup_pkg, description_share)
+                _simulation_resource_paths(simulation_pkg, description_share)
             ),
         },
         output="screen",
@@ -292,7 +292,7 @@ def _launch_setup(context, *args, **kwargs):
         gazebo,
         LogInfo(
             msg=(
-                "[amr_sweeper_gazebo] Launching simulation profile "
+                "[amr_sweeper_simulation] Launching simulation profile "
                 f"'{selected_profile}' in world '{world_name}'"
             )
         ),
@@ -313,7 +313,7 @@ def _launch_setup(context, *args, **kwargs):
                     "gnss_frame_id": gnss_config["frame_id"],
                     "fix_topic": "navsat",
                     "world_name": world_name,
-                    "pose_topic": _absolute_topic("", f"world/{world_name}/pose/info"),
+                    "pose_topic": _absolute_topic(namespace, "simulation/pose/info"),
                     "navsat_topic": gnss_config["navsat_topic"],
                     "gpsfix_topic": gnss_config["gpsfix_topic"],
                     "odometry_topic": gnss_config["odometry_topic"],
@@ -362,3 +362,4 @@ def generate_launch_description():
         DeclareLaunchArgument("override_timestamps_with_wall_time", default_value="false"),
         OpaqueFunction(function=_launch_setup),
     ])
+

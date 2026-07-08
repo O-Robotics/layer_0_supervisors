@@ -1,4 +1,4 @@
-simulation:
+﻿simulation:
   default_profile: empty1
   world_name: empty1
   world_file: empty1.sdf
@@ -98,15 +98,15 @@ bridges:
     ros_type_name: rosgraph_msgs/msg/Clock
     gz_type_name: gz.msgs.Clock
     direction: gz_to_ros
-  - ros_topic_name: imu/data_raw_gz
+  - ros_topic_name: simulation/imu/data_raw
     ros_type_name: sensor_msgs/msg/Imu
     gz_type_name: gz.msgs.IMU
     direction: gz_to_ros
-  - ros_topic_name: depth_camera/input/depth/image_rect_raw
+  - ros_topic_name: simulation/depth_camera/input/depth/image_rect_raw
     ros_type_name: sensor_msgs/msg/Image
     gz_type_name: gz.msgs.Image
     direction: gz_to_ros
-  - ros_topic_name: depth_camera/input/depth/camera_info
+  - ros_topic_name: simulation/depth_camera/input/depth/camera_info
     ros_type_name: sensor_msgs/msg/CameraInfo
     gz_type_name: gz.msgs.CameraInfo
     direction: gz_to_ros
@@ -118,7 +118,8 @@ bridges:
     ros_type_name: geometry_msgs/msg/Twist
     gz_type_name: gz.msgs.Twist
     direction: ros_to_gz
-  - ros_topic_name: /world/{world_name}/pose/info
+  - ros_topic_name: simulation/pose/info
     ros_type_name: tf2_msgs/msg/TFMessage
     gz_type_name: gz.msgs.Pose_V
     direction: gz_to_ros
+

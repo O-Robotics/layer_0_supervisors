@@ -1,4 +1,4 @@
-"""Launch the AMR Sweeper layer 0 supervisor stack from one bringup entrypoint."""
+﻿"""Launch the AMR Sweeper layer 0 supervisor stack from one bringup entrypoint."""
 
 import os
 import re
@@ -249,7 +249,7 @@ def _start_fault_shutdown_watcher(context, *args, **kwargs):
         cmd=[
             "ros2",
             "run",
-            "amr_sweeper_bringup",
+            "amr_sweeper_simulation",
             "wait_for_fsm_fault_shutdown.py",
             "--topic",
             qualified_topic,
@@ -481,7 +481,7 @@ def generate_launch_description():
         SetLaunchConfiguration("use_sim_time", "true", condition=IfCondition(use_simulation)),
         OpaqueFunction(function=_resolve_runtime_rosbag_settings),
         IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(_launch_file("amr_sweeper_bringup", "amr_sweeper_gazebo.launch.py")),
+            PythonLaunchDescriptionSource(_launch_file("amr_sweeper_simulation", "amr_sweeper_simulation.launch.py")),
             launch_arguments={
                 "namespace": namespace,
                 "enable_gnss": "true",
@@ -570,3 +570,4 @@ def generate_launch_description():
         ),
         OpaqueFunction(function=_start_fault_shutdown_watcher),
     ])
+

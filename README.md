@@ -1,4 +1,4 @@
-# layer_0_supervisors
+﻿# layer_0_supervisors
 
 ```
 ros2 launch amr_sweeper_bringup amr_sweeper_bringup.launch.py
@@ -6,6 +6,7 @@ ros2 launch amr_sweeper_bringup amr_sweeper_bringup.launch.py
 
 Dependencies to other AMR Sweeper packages:
 - `amr_sweeper_bringup`
+- `amr_sweeper_simulation`
 - `amr_sweeper_fsm`
 - `amr_sweeper_mission_executor`
 - `amr_sweeper_scheduler`
@@ -30,6 +31,7 @@ Layer 0 sits above layers 1, 2, and 3. It decides which stack profile should be 
 
 The main packages in this layer are:
 - `amr_sweeper_bringup`: top-level layer 0 launch that starts the FSM, mission executor, scheduler, VDA5050 parser, and web server
+- `amr_sweeper_simulation`: Gazebo simulation package with worlds, bridge mappings, and simulation helper scripts
 - `amr_sweeper_fsm`: robot-level supervisor plus the `INITIALIZING`, `IDLING`, `RUNNING`, `CHARGING`, and `FAULT` lifecycle state nodes
 - `amr_sweeper_mission_executor`: mission APIs, built-in manual mission routing, execution-folder preparation, and mission finalization back to `IDLING`
 - `amr_sweeper_scheduler`: iCalendar-based work scheduling and scheduled mission handoff into the mission executor
