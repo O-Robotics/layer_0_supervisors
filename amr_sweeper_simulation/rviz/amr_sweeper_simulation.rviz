@@ -88,7 +88,7 @@ Visualization Manager:
       Topic:
         Depth: 5
         Durability Policy: Volatile
-        Filter size: 10
+        Filter size: 30
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: __NS_PREFIX__/drive_controller/odom
@@ -110,7 +110,7 @@ Visualization Manager:
       Topic:
         Depth: 5
         Durability Policy: Volatile
-        Filter size: 10
+        Filter size: 30
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: __NS_PREFIX__/localization/odometry_fused
@@ -263,6 +263,7 @@ Window Geometry:
   Width: 1700
   X: 60
   Y: 60
+
 
 
 
