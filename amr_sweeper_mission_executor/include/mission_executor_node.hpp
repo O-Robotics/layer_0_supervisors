@@ -145,7 +145,10 @@ private:
     const ManualMissionInfo & mission,
     const PreparedMissionContext & context) const;
   [[nodiscard]] bool missionArtifactsReady(const ManualMissionInfo & mission) const;
-  [[nodiscard]] bool ensureMissionArtifactsReady(const ManualMissionInfo & mission);
+  [[nodiscard]] bool ensureMissionArtifactsReady(
+    const ManualMissionInfo & mission,
+    const std::string & requester = std::string{},
+    const std::string & reason = std::string{});
   [[nodiscard]] bool requestRunningState(
     const PreparedMissionContext & context,
     const srv::ExecuteMission::Request & request,

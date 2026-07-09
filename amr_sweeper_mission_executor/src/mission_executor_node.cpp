@@ -1904,7 +1904,11 @@ MissionExecutorNode::MissionExecutorNode(const rclcpp::NodeOptions & options)
 
   client_callback_group_ = create_callback_group(rclcpp::CallbackGroupType::Reentrant);
   mission_parser_parameter_client_ =
-    std::make_shared<rclcpp::AsyncParametersClient>(this, mission_parser_node_name_);
+    std::make_shared<rclcpp::AsyncParametersClient>(
+    this,
+    mission_parser_node_name_,
+    rmw_qos_profile_parameters,
+    client_callback_group_);
   mission_parser_build_client_ = create_client<std_srvs::srv::Trigger>(
     mission_parser_build_service_,
     rclcpp::ServicesQoS(),
@@ -2271,6 +2275,16 @@ void MissionExecutorNode::handleExecuteMission(
   const std::shared_ptr<srv::ExecuteMission::Request> request,
   std::shared_ptr<srv::ExecuteMission::Response> response)
 {
+  RCLCPP_INFO(
+    get_logger(),
+    "Received execute_mission request: mission_id=%s requester=%s priority=%u force=%s record_rosbag=%s reason=%s",
+    request->mission_id.c_str(),
+    request->requester.c_str(),
+    request->priority,
+    request->force ? "true" : "false",
+    request->record_rosbag ? "true" : "false",
+    request->reason.c_str());
+
   const auto mission = findManualMission(request->mission_id);
   if (!mission) {
     response->success = false;
@@ -2287,7 +2301,7 @@ void MissionExecutorNode::handleExecuteMission(
         resolveExecutionContextPath(request->mission_execution_directory).string();
       context.running_profile_id = resolved_mission.running_profile_id;
     } else {
-      if (!ensureMissionArtifactsReady(resolved_mission)) {
+      if (!ensureMissionArtifactsReady(resolved_mission, request->requester, request->reason)) {
         response->success = false;
         response->message = "Mission artifacts are not ready for mission_id=" + resolved_mission.mission_id;
         if (const auto staged_directory = newestScheduledArtifactDirectory(resolved_mission.mission_id)) {
@@ -4224,7 +4238,10 @@ bool MissionExecutorNode::missionArtifactsReady(const ManualMissionInfo & missio
          std::filesystem::exists(resolveMissionRoutePath(executable_mission, mission_file));
 }
 
-bool MissionExecutorNode::ensureMissionArtifactsReady(const ManualMissionInfo & mission)
+bool MissionExecutorNode::ensureMissionArtifactsReady(
+  const ManualMissionInfo & mission,
+  const std::string & requester,
+  const std::string & reason)
 {
   if (missionArtifactsReady(mission)) {
     return true;
@@ -4247,8 +4264,10 @@ bool MissionExecutorNode::ensureMissionArtifactsReady(const ManualMissionInfo & 
   if (parameter_future.wait_for(std::chrono::seconds(10)) != std::future_status::ready) {
     RCLCPP_WARN(
       get_logger(),
-      "Timed out setting mission_path on the VDA5050 mission builder for %s",
-      mission.mission_id.c_str());
+      "Timed out setting mission_path on the VDA5050 mission builder for %s; requester=%s; reason=%s",
+      mission.mission_id.c_str(),
+      requester.c_str(),
+      reason.c_str());
     return false;
   }
 
@@ -4645,6 +4664,29 @@ bool MissionExecutorNode::startMissionRosbagRecording(
 
 void MissionExecutorNode::stopMissionRosbagRecording()
 {
+  auto process_group_alive = [](pid_t pgid) {
+      if (pgid <= 0) {
+        return false;
+      }
+      if (::kill(-pgid, 0) == 0) {
+        return true;
+      }
+      return errno == EPERM;
+    };
+
+  auto wait_process_group_dead = [&process_group_alive](pid_t pgid, std::chrono::milliseconds timeout) {
+      const auto deadline = std::chrono::steady_clock::now() + timeout;
+      while (std::chrono::steady_clock::now() < deadline) {
+        int status = 0;
+        (void)::waitpid(pgid, &status, WNOHANG);
+        if (!process_group_alive(pgid)) {
+          return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+      }
+      return !process_group_alive(pgid);
+    };
+
   pid_t child_pid = -1;
   std::string rosbag_output_directory;
   std::string rosbag_context_file;
@@ -4679,15 +4721,26 @@ void MissionExecutorNode::stopMissionRosbagRecording()
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
 
-  if (!clean_shutdown) {
-    shutdown_reason = "recorder did not exit after SIGINT; terminating with SIGTERM";
+  if (!wait_process_group_dead(child_pid, std::chrono::milliseconds(0))) {
+    shutdown_reason =
+      clean_shutdown ?
+      "recorder root exited but descendant processes remained; terminating process group with SIGTERM" :
+      "recorder did not exit after SIGINT; terminating process group with SIGTERM";
     RCLCPP_WARN(get_logger(), "%s", shutdown_reason.c_str());
     ::kill(-child_pid, SIGTERM);
-    (void)::waitpid(child_pid, nullptr, 0);
+    if (!wait_process_group_dead(child_pid, std::chrono::seconds(5))) {
+      shutdown_reason += "; process group survived SIGTERM and required SIGKILL";
+      RCLCPP_WARN(get_logger(), "%s", shutdown_reason.c_str());
+      ::kill(-child_pid, SIGKILL);
+      if (!wait_process_group_dead(child_pid, std::chrono::seconds(1))) {
+        shutdown_reason += "; process group still appears alive after SIGKILL";
+      }
+    }
   }
 
-  const std::filesystem::path metadata_path =
-    std::filesystem::path(rosbag_output_directory) / "metadata.yaml";
+  clean_shutdown = !process_group_alive(child_pid);
+
+  const std::filesystem::path metadata_path =    std::filesystem::path(rosbag_output_directory) / "metadata.yaml";
   bool metadata_present = std::filesystem::exists(metadata_path);
   for (int attempt = 0; attempt < 100 && !metadata_present; ++attempt) {
     std::this_thread::sleep_for(std::chrono::milliseconds(100));

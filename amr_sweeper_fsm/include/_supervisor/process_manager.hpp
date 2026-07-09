@@ -18,9 +18,10 @@ namespace fsm_layer_0
  * via /bin/sh -c "<command>" to allow typical ROS usage (ros2 launch ... args).
  *
  * Stop behavior:
- *   - SIGINT, wait sigint_timeout
- *   - SIGTERM, wait sigterm_timeout
- *   - SIGKILL, wait sigkill_timeout
+ *   - ask the managed root process to stop first so launch can tear its own
+ *     children down cleanly
+ *   - escalate to the full process group only if the root process does not exit
+ *   - finally SIGKILL the full process group as a last resort
  */
 class ProcessManager
 {

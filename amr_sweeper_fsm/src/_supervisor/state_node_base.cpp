@@ -2893,7 +2893,13 @@ void StateNodeBase::stop_state_processes()
       }
 
       std::string err;
-      (void)procman_.stop(cmd, err, pol);
+      if (!procman_.stop(cmd, err, pol)) {
+        RCLCPP_WARN(
+          get_logger(),
+          "Managed process did not stop cleanly during state transition: '%s' (%s)",
+          cmd.c_str(),
+          err.empty() ? "unknown shutdown failure" : err.c_str());
+      }
     }
     return;
   }
@@ -2905,7 +2911,13 @@ void StateNodeBase::stop_state_processes()
   for (auto it = processes_.rbegin(); it != processes_.rend(); ++it) {
     const auto cmd = resolve_placeholders(*it);
     std::string err;
-    (void)procman_.stop(cmd, err);
+    if (!procman_.stop(cmd, err)) {
+      RCLCPP_WARN(
+        get_logger(),
+        "Managed process did not stop cleanly during state transition: '%s' (%s)",
+        cmd.c_str(),
+        err.empty() ? "unknown shutdown failure" : err.c_str());
+    }
   }
 }
 

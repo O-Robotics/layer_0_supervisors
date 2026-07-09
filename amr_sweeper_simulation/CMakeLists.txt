@@ -1,4 +1,4 @@
-﻿cmake_minimum_required(VERSION 3.8)
+cmake_minimum_required(VERSION 3.8)
 project(amr_sweeper_simulation)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
@@ -8,7 +8,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 
 install(
-  DIRECTORY launch config worlds missions
+  DIRECTORY launch config rviz worlds missions
   DESTINATION share/${PROJECT_NAME}
 )
 
@@ -22,6 +22,7 @@ install(PROGRAMS
   scripts/set_gazebo_simulation_speed.py
   scripts/wait_for_fsm_fault_shutdown.py
   scripts/world_pose_to_sim_pose.py
+  scripts/ros_gz_bridge_wrapper.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

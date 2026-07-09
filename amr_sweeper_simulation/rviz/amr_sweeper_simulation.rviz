@@ -1,0 +1,252 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+    Property Tree Widget:
+      Expanded:
+        - /Global Options1
+        - /Grid1
+        - /RobotModel1
+        - /TF1
+        - /Wheel Odometry1
+        - /Localization Odometry1
+        - /Depth Scan1
+        - /Mission Costmap1
+        - /Global Footprint1
+        - /Local Footprint1
+        - /Global Plan1
+        - /Local Plan1
+      Splitter Ratio: 0.58
+    Tree Height: 860
+  - Class: rviz_common/Views
+    Expanded:
+      - /Current View1
+    Name: Views
+    Splitter Ratio: 0.5
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Alpha: 0.35
+      Cell Size: 1
+      Class: rviz_default_plugins/Grid
+      Color: 120; 120; 120
+      Enabled: true
+      Line Style:
+        Line Width: 0.029999999329447746
+        Value: Lines
+      Name: Grid
+      Normal Cell Count: 0
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Plane: XY
+      Plane Cell Count: 60
+      Reference Frame: <Fixed Frame>
+      Value: true
+    - Alpha: 1
+      Class: rviz_default_plugins/RobotModel
+      Collision Enabled: false
+      Description File: ""
+      Description Source: Topic
+      Description Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: __NS_PREFIX__/description/robot_description
+      Enabled: true
+      Name: RobotModel
+      TF Prefix: ""
+      Update Interval: 0
+      Value: true
+      Visual Enabled: true
+    - Class: rviz_default_plugins/TF
+      Enabled: true
+      Frame Timeout: 15
+      Marker Scale: 0.30000001192092896
+      Name: TF
+      Show Arrows: true
+      Show Axes: true
+      Show Names: false
+      Update Interval: 0
+      Value: true
+    - Class: rviz_default_plugins/Odometry
+      Angle Tolerance: 0.1
+      Color: 52; 152; 219
+      Color Style: Unique
+      Enabled: true
+      Keep: 1
+      Length: 1
+      Name: Wheel Odometry
+      Position Tolerance: 0.1
+      Shaft Length: 0.6
+      Shaft Radius: 0.05000000074505806
+      Head Length: 0.30000001192092896
+      Head Radius: 0.10000000149011612
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: __NS_PREFIX__/drive_controller/odom
+      Value: true
+    - Class: rviz_default_plugins/Odometry
+      Angle Tolerance: 0.1
+      Color: 46; 204; 113
+      Color Style: Unique
+      Enabled: true
+      Keep: 1
+      Length: 1
+      Name: Localization Odometry
+      Position Tolerance: 0.1
+      Shaft Length: 0.6
+      Shaft Radius: 0.05000000074505806
+      Head Length: 0.30000001192092896
+      Head Radius: 0.10000000149011612
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: __NS_PREFIX__/localization/odometry_fused
+      Value: true
+    - Alpha: 1
+      Class: rviz_default_plugins/LaserScan
+      Color: 255; 170; 0
+      Enabled: true
+      Name: Depth Scan
+      Size (Pixels): 3
+      Size (m): 0.029999999329447746
+      Style: Flat Squares
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 30
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+        Value: __NS_PREFIX__/depth_camera/scan
+      Use Fixed Frame: true
+      Use rainbow: false
+      Value: true
+    - Alpha: 0.7
+      Class: rviz_default_plugins/Map
+      Color Scheme: raw
+      Draw Behind: false
+      Enabled: true
+      Name: Mission Costmap
+      Topic:
+        Depth: 5
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: __NS_PREFIX__/mapping/global_costmap
+      Use Timestamp: false
+      Value: true
+    - Alpha: 1
+      Class: rviz_default_plugins/Polygon
+      Color: 235; 87; 87
+      Enabled: true
+      Name: Global Footprint
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: __NS_PREFIX__/global_costmap/published_footprint
+      Value: true
+    - Alpha: 1
+      Class: rviz_default_plugins/Polygon
+      Color: 52; 152; 219
+      Enabled: true
+      Name: Local Footprint
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: __NS_PREFIX__/local_costmap/published_footprint
+      Value: true
+    - Class: rviz_default_plugins/Path
+      Color: 39; 174; 96
+      Enabled: true
+      Line Style: Lines
+      Line Width: 0.09000000357627869
+      Name: Global Plan
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0.03
+      Pose Color: 39; 174; 96
+      Pose Style: None
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 30
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: __NS_PREFIX__/navigation/planner_server/plan
+      Value: true
+    - Class: rviz_default_plugins/Path
+      Color: 241; 196; 15
+      Enabled: true
+      Line Style: Lines
+      Line Width: 0.09000000357627869
+      Name: Local Plan
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0.05
+      Pose Color: 241; 196; 15
+      Pose Style: None
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 30
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: __NS_PREFIX__/navigation/controller_server/local_plan
+      Value: true
+  Enabled: true
+  Global Options:
+    Background Color: 30; 30; 30
+    Default Light: true
+    Fixed Frame: map
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/Interact
+      Hide Inactive Objects: true
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/FocusCamera
+    - Class: rviz_default_plugins/Measure
+      Line color: 128; 128; 0
+  Transformation:
+    Current:
+      Class: rviz_default_plugins/TF
+  Value: true
+  Views:
+    Current:
+      Class: rviz_default_plugins/TopDownOrtho
+      Invert Z Axis: false
+      Name: Current View
+      Near Clip Distance: 0.009999999776482582
+      Scale: 18
+      Target Frame: base_link
+      Value: TopDownOrtho (rviz_default_plugins)
+      X: 0
+      Y: 0
+    Saved: ~
+Window Geometry:
+  Displays:
+    collapsed: false
+  Height: 1000
+  Hide Left Dock: false
+  Hide Right Dock: true
+  Views:
+    collapsed: false
+  Width: 1700
+  X: 60
+  Y: 60

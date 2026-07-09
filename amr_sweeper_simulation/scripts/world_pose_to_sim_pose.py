@@ -1,9 +1,20 @@
 #!/usr/bin/env python3
 
+import signal
+
 import rclpy
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPolicy
 from tf2_msgs.msg import TFMessage
+
+
+_shutdown_requested = False
+
+
+def _request_shutdown(_signum, _frame) -> None:
+    global _shutdown_requested
+    _shutdown_requested = True
 
 
 class WorldPoseRelay(Node):
@@ -35,17 +46,40 @@ class WorldPoseRelay(Node):
         )
 
     def _handle_message(self, msg: TFMessage) -> None:
+        if _shutdown_requested:
+            return
         self._publisher.publish(msg)
 
 
 def main() -> None:
+    global _shutdown_requested
+
+    signal.signal(signal.SIGINT, _request_shutdown)
+    signal.signal(signal.SIGTERM, _request_shutdown)
+
     rclpy.init()
     node = WorldPoseRelay()
     try:
-        rclpy.spin(node)
+        while rclpy.ok() and not _shutdown_requested:
+            try:
+                rclpy.spin_once(node, timeout_sec=0.5)
+            except KeyboardInterrupt:
+                _shutdown_requested = True
+            except ExternalShutdownException:
+                if _shutdown_requested or not rclpy.ok():
+                    break
+                raise
+            except RuntimeError as exc:
+                if _shutdown_requested or not rclpy.ok():
+                    node.get_logger().debug(
+                        f"Suppressing shutdown race while relaying world pose: {exc}"
+                    )
+                    break
+                raise
     except KeyboardInterrupt:
         pass
     finally:
+        _shutdown_requested = True
         try:
             node.destroy_node()
         except (KeyboardInterrupt, RuntimeError):

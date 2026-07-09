@@ -1,8 +1,9 @@
-﻿import copy
+import copy
 import os
 import re
 import subprocess
 import tempfile
+import xml.etree.ElementTree as ET
 
 import yaml
 from ament_index_python.packages import get_package_share_directory
@@ -92,18 +93,79 @@ def _simulation_resource_paths(simulation_pkg: str, description_share: str) -> l
             resource_paths.append(candidate)
     existing_resource_path = os.environ.get("GZ_SIM_RESOURCE_PATH", "").strip()
     if existing_resource_path:
-        resource_paths.append(existing_resource_path)
+        for candidate in existing_resource_path.split(os.pathsep):
+            normalized = candidate.strip()
+            if normalized and normalized not in resource_paths:
+                resource_paths.append(normalized)
     return resource_paths
 
 
-def _bridge_argument(bridge: dict, namespace: str, world_name: str) -> str:
+def _available_model_names(resource_paths: list[str]) -> set[str]:
+    model_names = set()
+    for resource_path in resource_paths:
+        if not os.path.isdir(resource_path):
+            continue
+        try:
+            for entry in os.scandir(resource_path):
+                if entry.is_dir():
+                    model_names.add(entry.name)
+        except OSError:
+            continue
+    return model_names
+
+
+def _iter_model_references(element: ET.Element):
+    for descendant in element.iter():
+        text = (descendant.text or "").strip()
+        if text.startswith("model://"):
+            yield text
+
+
+def _missing_model_names(element: ET.Element, available_model_names: set[str]) -> set[str]:
+    missing = set()
+    for reference in _iter_model_references(element):
+        match = re.match(r"model://([^/]+)", reference)
+        if match:
+            model_name = match.group(1)
+            if model_name not in available_model_names:
+                missing.add(model_name)
+    return missing
+
+
+def _strip_missing_model_elements(world_sdf: str, available_model_names: set[str]) -> tuple[str, set[str]]:
+    root = ET.fromstring(world_sdf)
+    parent_map = {child: parent for parent in root.iter() for child in parent}
+    removed_model_names = set()
+
+    for element in list(root.iter()):
+        if element.tag not in {"include", "model"}:
+            continue
+        missing_model_names = _missing_model_names(element, available_model_names)
+        if not missing_model_names:
+            continue
+        parent = parent_map.get(element)
+        if parent is None:
+            continue
+        parent.remove(element)
+        removed_model_names.update(missing_model_names)
+
+    return ET.tostring(root, encoding="unicode"), removed_model_names
+
+
+def _bridge_config(bridge: dict, namespace: str, world_name: str) -> dict:
     ros_topic_name = bridge["ros_topic_name"].replace("{world_name}", world_name)
     if not ros_topic_name.startswith("/"):
         ros_topic_name = _absolute_topic(namespace, ros_topic_name)
-    direction = bridge["direction"].strip().lower()
-    separator = "[" if direction == "gz_to_ros" else "]"
-    gz_type_name = bridge["gz_type_name"].replace("{world_name}", world_name)
-    return f"{ros_topic_name}@{bridge['ros_type_name']}{separator}{gz_type_name}"
+    gz_topic_name = bridge.get("gz_topic_name", bridge["ros_topic_name"]).replace("{world_name}", world_name)
+    if not gz_topic_name.startswith("/"):
+        gz_topic_name = "/" + gz_topic_name.lstrip("/")
+    return {
+        "ros_topic_name": ros_topic_name,
+        "gz_topic_name": gz_topic_name,
+        "ros_type_name": bridge["ros_type_name"],
+        "gz_type_name": bridge["gz_type_name"].replace("{world_name}", world_name),
+        "direction": bridge["direction"],
+    }
 
 
 def _render_simulation_robot(namespace: str, entity_name: str) -> str:
@@ -176,12 +238,25 @@ def _ensure_gz_sim_system_plugins(world_sdf: str) -> str:
     return re.sub(r"(<world\b[^>]*>)", r"\1\n" + plugins, world_sdf, count=1)
 
 
-def _render_world_with_georeference(world_path: str, world_name: str, georeference: dict) -> str:
+def _render_world_with_georeference(
+    world_path: str,
+    world_name: str,
+    georeference: dict,
+    available_model_names: set[str],
+) -> str:
     with open(world_path, "r", encoding="utf-8") as stream:
         world_sdf = stream.read()
 
     world_sdf = _rename_world(world_sdf, world_name)
     world_sdf = _ensure_gz_sim_system_plugins(world_sdf)
+    world_sdf, removed_model_names = _strip_missing_model_elements(
+        world_sdf, available_model_names
+    )
+    if removed_model_names:
+        print(
+            "[amr_sweeper_simulation] Removed missing world models: "
+            + ", ".join(sorted(removed_model_names))
+        )
 
     replacements = {
         "latitude_deg": georeference["latitude_deg"],
@@ -209,6 +284,28 @@ def _render_world_with_georeference(world_path: str, world_name: str, georeferen
     return world_file.name
 
 
+def _render_rviz_config(rviz_config_path: str, namespace: str) -> str:
+    with open(rviz_config_path, "r", encoding="utf-8") as stream:
+        rviz_config = stream.read()
+
+    namespace_prefix = ""
+    normalized_namespace = _normalize_namespace(namespace)
+    if normalized_namespace:
+        namespace_prefix = f"/{normalized_namespace}"
+    rviz_config = rviz_config.replace("__NS_PREFIX__", namespace_prefix)
+
+    rendered_rviz_config = tempfile.NamedTemporaryFile(
+        mode="w",
+        prefix="amr_sweeper_sim_rviz_",
+        suffix=".rviz",
+        delete=False,
+        encoding="utf-8",
+    )
+    with rendered_rviz_config:
+        rendered_rviz_config.write(rviz_config)
+    return rendered_rviz_config.name
+
+
 def _gnss_launch_file() -> str:
     return os.path.join(
         get_package_share_directory("amr_sweeper_gnss"),
@@ -228,6 +325,14 @@ def _launch_setup(context, *args, **kwargs):
     namespace = LaunchConfiguration("namespace").perform(context)
     use_ntrip_client = LaunchConfiguration("use_ntrip_client").perform(context)
     launch_gnss_stack = LaunchConfiguration("launch_gnss_stack").perform(context)
+    launch_rviz = LaunchConfiguration("launch_rviz").perform(context)
+    rviz_config = LaunchConfiguration("rviz_config").perform(context).strip()
+    if not rviz_config:
+        rviz_config = os.path.join(
+            simulation_pkg,
+            "rviz",
+            "amr_sweeper_simulation.rviz",
+        )
     override_timestamps_with_wall_time = (
         LaunchConfiguration("override_timestamps_with_wall_time").perform(context).strip().lower()
         in {"1", "true", "yes", "on"}
@@ -238,17 +343,22 @@ def _launch_setup(context, *args, **kwargs):
     entity_name = simulation_config["entity_name"]
     base_world = _resolve_world_path(simulation_pkg, simulation_config["world_file"])
     georeference = simulation_config["georeference"]
-    world = _render_world_with_georeference(base_world, world_name, georeference)
     description_share = get_package_share_directory("amr_sweeper_description")
+    resource_paths = _simulation_resource_paths(simulation_pkg, description_share)
+    world = _render_world_with_georeference(
+        base_world,
+        world_name,
+        georeference,
+        _available_model_names(resource_paths),
+    )
     robot_urdf = _render_simulation_robot(namespace, entity_name)
+    rendered_rviz_config = _render_rviz_config(rviz_config, namespace)
 
     spawn_pose = simulation_config["spawn_pose"]
     gazebo = ExecuteProcess(
         cmd=["gz", "sim", "-r", world],
         additional_env={
-            "GZ_SIM_RESOURCE_PATH": os.pathsep.join(
-                _simulation_resource_paths(simulation_pkg, description_share)
-            ),
+            "GZ_SIM_RESOURCE_PATH": os.pathsep.join(resource_paths),
         },
         output="screen",
     )
@@ -272,20 +382,22 @@ def _launch_setup(context, *args, **kwargs):
         ],
     )
 
-    bridge_arguments = [
-        _bridge_argument(bridge, namespace, world_name)
-        for bridge in config["bridges"]
-    ]
+    bridge_configs = {
+        f"bridge_{index}": _bridge_config(bridge, namespace, world_name)
+        for index, bridge in enumerate(config["bridges"])
+    }
     bridge = Node(
-        package="ros_gz_bridge",
-        executable="parameter_bridge",
+        package="amr_sweeper_simulation",
+        executable="ros_gz_bridge_wrapper.py",
         name="gz_bridge",
         output="screen",
         parameters=[{
             "override_timestamps_with_wall_time": override_timestamps_with_wall_time,
             "expand_gz_topic_names": False,
+            "bridge_names": sorted(bridge_configs.keys()),
+            "bridges": bridge_configs,
         }],
-        arguments=bridge_arguments,
+        arguments=['--ros-args', '--log-level', 'info'],
     )
 
     world_pose_relay = Node(
@@ -297,6 +409,14 @@ def _launch_setup(context, *args, **kwargs):
             "input_topic": _absolute_topic("", f"world/{world_name}/pose/info"),
             "output_topic": _absolute_topic(namespace, "simulation/pose/info"),
         }],
+    )
+    rviz = Node(
+        package="rviz2",
+        executable="rviz2",
+        name="rviz2",
+        output="screen",
+        arguments=["-d", rendered_rviz_config],
+        parameters=[{"use_sim_time": True}],
     )
 
     actions = [
@@ -311,6 +431,9 @@ def _launch_setup(context, *args, **kwargs):
         bridge,
         world_pose_relay,
     ]
+
+    if launch_rviz.strip().lower() in {"1", "true", "yes", "on"}:
+        actions.append(rviz)
 
     if launch_gnss_stack.strip().lower() in {"1", "true", "yes", "on"}:
         actions.append(
@@ -367,6 +490,15 @@ def generate_launch_description():
         DeclareLaunchArgument("namespace", default_value="amr_sweeper"),
         DeclareLaunchArgument("use_ntrip_client", default_value="true"),
         DeclareLaunchArgument("launch_gnss_stack", default_value="true"),
+        DeclareLaunchArgument("launch_rviz", default_value="true"),
+        DeclareLaunchArgument(
+            "rviz_config",
+            default_value=os.path.join(
+                get_package_share_directory("amr_sweeper_simulation"),
+                "rviz",
+                "amr_sweeper_simulation.rviz",
+            ),
+        ),
         DeclareLaunchArgument("simulation_profile", default_value="empty1"),
         DeclareLaunchArgument("enable_gnss", default_value="true"),
         DeclareLaunchArgument("enable_imu", default_value="true"),

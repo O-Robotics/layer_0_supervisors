@@ -5,9 +5,105 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <cerrno>
+#include <chrono>
 #include <cstring>
 #include <cstdlib>
 #include <filesystem>
+#include <string>
+
+namespace {
+volatile sig_atomic_t g_wrapper_stop_signal = 0;
+
+bool process_group_alive_unscoped(pid_t pgid)
+{
+  if (pgid <= 0) {
+    return false;
+  }
+  if (::kill(-pgid, 0) == 0) {
+    return true;
+  }
+  return errno == EPERM;
+}
+
+void wrapper_signal_handler(int sig)
+{
+  if (g_wrapper_stop_signal == 0) {
+    g_wrapper_stop_signal = sig;
+  }
+}
+
+int exit_code_from_status(int status)
+{
+  if (WIFEXITED(status)) {
+    return WEXITSTATUS(status);
+  }
+  if (WIFSIGNALED(status)) {
+    return 128 + WTERMSIG(status);
+  }
+  return 1;
+}
+
+int supervise_managed_command(const std::string & command)
+{
+  const pid_t wrapper_pid = ::getpid();
+  g_wrapper_stop_signal = 0;
+
+  struct sigaction action;
+  std::memset(&action, 0, sizeof(action));
+  action.sa_handler = wrapper_signal_handler;
+  ::sigemptyset(&action.sa_mask);
+  action.sa_flags = 0;
+  (void)::sigaction(SIGINT, &action, nullptr);
+  (void)::sigaction(SIGTERM, &action, nullptr);
+  (void)::sigaction(SIGHUP, &action, nullptr);
+
+  const pid_t launch_pid = ::fork();
+  if (launch_pid < 0) {
+    return 125;
+  }
+
+  if (launch_pid == 0) {
+    (void)::setpgid(0, wrapper_pid);
+    const std::string exec_command = "exec " + command;
+    ::execl("/bin/sh", "sh", "-c", exec_command.c_str(), (char *)nullptr);
+    _exit(127);
+  }
+
+  (void)::setpgid(launch_pid, wrapper_pid);
+
+  while (true) {
+    int status = 0;
+    const pid_t wait_result = ::waitpid(launch_pid, &status, WNOHANG);
+    if (wait_result == launch_pid) {
+      return exit_code_from_status(status);
+    }
+
+    if (g_wrapper_stop_signal != 0) {
+      (void)::signal(SIGINT, SIG_IGN);
+      (void)::signal(SIGTERM, SIG_IGN);
+      (void)::signal(SIGHUP, SIG_IGN);
+
+      ::kill(-wrapper_pid, SIGTERM);
+      const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+      while (std::chrono::steady_clock::now() < deadline) {
+        int child_status = 0;
+        const pid_t child_wait = ::waitpid(launch_pid, &child_status, WNOHANG);
+        if (child_wait == launch_pid || !process_group_alive_unscoped(wrapper_pid)) {
+          return 128 + g_wrapper_stop_signal;
+        }
+        ::usleep(20 * 1000);
+      }
+
+      ::kill(-wrapper_pid, SIGKILL);
+      ::usleep(100 * 1000);
+      return 128 + g_wrapper_stop_signal;
+    }
+
+    ::usleep(20 * 1000);
+  }
+}
+}  // namespace
 
 namespace fsm_layer_0
 {
@@ -22,7 +118,6 @@ bool ProcessManager::pid_alive(pid_t pid)
   if (pid <= 0) {
     return false;
   }
-  // kill(pid,0) checks existence/permission without sending a signal.
   if (::kill(pid, 0) == 0) {
     return true;
   }
@@ -98,39 +193,26 @@ bool ProcessManager::start(const std::string & command, std::string & err_out)
     return false;
   }
   if (pid == 0) {
-    // Child: new process group so we can signal the whole tree.
     ::setpgid(0, 0);
 
-    // Ensure abrupt FSM/state-node death tears down the managed launch process too.
-    (void)::prctl(PR_SET_PDEATHSIG, SIGKILL);
+    (void)::prctl(PR_SET_PDEATHSIG, SIGTERM);
     if (::getppid() == 1) {
       _exit(1);
     }
 
-    // Give each FSM-managed launch tree an isolated ROS log directory so concurrent
-    // `ros2 launch` invocations do not race on ~/.ros/log/latest.
     const std::filesystem::path ros_log_dir =
       std::filesystem::temp_directory_path() /
       ("amr_sweeper_fsm_roslog_" + std::to_string(::getpid()));
     std::error_code ec;
     std::filesystem::create_directories(ros_log_dir, ec);
     ::setenv("ROS_LOG_DIR", ros_log_dir.c_str(), 1);
-
-    // Force ANSI severity colors for FSM-managed launch trees even when they are
-    // spawned under a supervisor instead of directly from an interactive shell.
     ::setenv("RCUTILS_COLORIZED_OUTPUT", "1", 1);
-
-    // Fast DDS shared-memory transport can leave stale lock files behind when many
-    // short-lived launch trees cycle quickly. Disable SHM for FSM-managed subprocesses
-    // to avoid spurious RTPS transport startup errors.
     ::setenv("RMW_FASTRTPS_USE_SHM", "0", 1);
 
-    const std::string exec_command = "exec " + command;
-    ::execl("/bin/sh", "sh", "-c", exec_command.c_str(), (char *)nullptr);
-    _exit(127);
+    const int exit_code = supervise_managed_command(command);
+    _exit(exit_code);
   }
 
-  // Parent
   ::setpgid(pid, pid);
 
   Proc p;
@@ -158,25 +240,35 @@ bool ProcessManager::stop(const std::string & command, std::string & err_out, co
   const pid_t pid = it->second.pid;
   const pid_t pgid = pid;
 
-  // Signal process group (-pid) so typical "ros2 launch" trees are handled.
-  // Prefer SIGINT first so ROS launch trees get a graceful Ctrl-C style shutdown.
-  if (process_group_alive(pgid) || pid_alive(pid)) {
-    ::kill(-pgid, SIGINT);
-    if (!wait_process_group_dead(pgid, policy.sigint_timeout)) {
-      ::kill(-pgid, SIGTERM);
-      if (!wait_process_group_dead(pgid, policy.sigterm_timeout)) {
-        ::kill(-pgid, SIGKILL);
-        (void)wait_process_group_dead(pgid, policy.sigkill_timeout);
+  if (pid_alive(pid)) {
+    const bool is_ros2_launch = command.rfind("ros2 launch", 0) == 0;
+    const int initial_signal = is_ros2_launch ? SIGTERM : SIGINT;
+    const auto initial_timeout = is_ros2_launch ? policy.sigterm_timeout : policy.sigint_timeout;
+
+    send_signal(pid, initial_signal);
+    if (!wait_dead(pid, initial_timeout)) {
+      send_signal(pid, SIGTERM);
+      (void)wait_dead(pid, policy.sigterm_timeout);
+    }
+  }
+
+  if (process_group_alive(pgid)) {
+    ::kill(-pgid, SIGTERM);
+    if (!wait_process_group_dead(pgid, policy.sigterm_timeout)) {
+      ::kill(-pgid, SIGKILL);
+      if (!wait_process_group_dead(pgid, policy.sigkill_timeout)) {
+        err_out =
+          "process group remained alive after SIGTERM/SIGKILL escalation for command '" + command + "'";
       }
     }
   }
 
-  // Reap if still present.
   int status = 0;
   (void)::waitpid(pid, &status, WNOHANG);
 
+  const bool stopped_cleanly = err_out.empty() && !pid_alive(pid) && !process_group_alive(pgid);
   procs_.erase(it);
-  return true;
+  return stopped_cleanly;
 }
 
 void ProcessManager::stop_all()
