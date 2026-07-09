@@ -27,6 +27,7 @@
 #define VALIDATING 203
 #define WARNING 301
 #define ERROR "400"
+#define BREAK 998
 #define EXIT 999
 
 #if __has_include(<azureiot/iothub.h>)
@@ -1038,10 +1039,10 @@ void on_device_twin_update(
 
     const Manifest manifest = Manifest::load_from_file(manifest_output_path);
     download_and_verify_manifest_files(manifest, manifest_output_path, *listener_context);
-    std::cout << IDLING << " IDLING (LISTENING)" << std::endl;
   } catch (const std::exception & ex) {
     std::cerr << ERROR << " FAILED TO PROCESS DATA: " << ex.what() << std::endl;
   }
+  std::cout << IDLING << " LISTENING (IDLING)" << std::endl;
 }
 
 class IoTHubRuntime
@@ -1121,7 +1122,7 @@ int main()
       std::this_thread::sleep_for(std::chrono::seconds(1));
     }
 
-    std::cout << EXIT << " INTERRUPED BY USER" << std::endl;
+    std::cout << BREAK << " INTERRUPED BY USER" << std::endl;
     std::cout << EXIT << " DISCONNECTED" << std::endl;
     return 0;
   } catch (const std::exception & ex) {
