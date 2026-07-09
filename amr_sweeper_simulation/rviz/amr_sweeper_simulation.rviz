@@ -43,6 +43,7 @@ Visualization Manager:
       Plane Cell Count: 60
       Reference Frame: map
       Value: true
+      
     - Alpha: 1
       Class: rviz_default_plugins/RobotModel
       Collision Enabled: false
@@ -70,6 +71,7 @@ Visualization Manager:
       Show Names: false
       Update Interval: 0
       Value: true
+
     - Class: rviz_default_plugins/Odometry
       Angle Tolerance: 0.1
       Color: 52; 152; 219
@@ -91,6 +93,7 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: __NS_PREFIX__/drive_controller/odom
       Value: true
+
     - Class: rviz_default_plugins/Odometry
       Angle Tolerance: 0.1
       Color: 46; 204; 113
@@ -112,6 +115,7 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: __NS_PREFIX__/localization/odometry_fused
       Value: true
+
     - Alpha: 1
       Class: rviz_default_plugins/LaserScan
       Color: 255; 170; 0
@@ -130,6 +134,7 @@ Visualization Manager:
       Use Fixed Frame: true
       Use rainbow: false
       Value: true
+
     - Alpha: 0.7
       Class: rviz_default_plugins/Map
       Color Scheme: raw
@@ -144,30 +149,7 @@ Visualization Manager:
         Value: __NS_PREFIX__/mapping/global_costmap
       Use Timestamp: false
       Value: true
-    - Alpha: 1
-      Class: rviz_default_plugins/Polygon
-      Color: 235; 87; 87
-      Enabled: true
-      Name: Global Footprint
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: __NS_PREFIX__/global_costmap/published_footprint
-      Value: true
-    - Alpha: 1
-      Class: rviz_default_plugins/Polygon
-      Color: 52; 152; 219
-      Enabled: true
-      Name: Local Footprint
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: __NS_PREFIX__/local_costmap/published_footprint
-      Value: true
+
     - Class: rviz_default_plugins/Path
       Color: 39; 174; 96
       Enabled: true
@@ -188,6 +170,7 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: __NS_PREFIX__/navigation/planner_server/plan
       Value: true
+
     - Class: rviz_default_plugins/Path
       Color: 241; 196; 15
       Enabled: true
@@ -208,6 +191,33 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: __NS_PREFIX__/navigation/controller_server/local_plan
       Value: true
+
+    - Alpha: 1
+      Class: rviz_default_plugins/Polygon
+      Color: 235; 87; 87
+      Enabled: false
+      Name: Global Footprint
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: __NS_PREFIX__/global_costmap/published_footprint
+      Value: true
+
+    - Alpha: 1
+      Class: rviz_default_plugins/Polygon
+      Color: 52; 152; 219
+      Enabled: false
+      Name: Local Footprint
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: __NS_PREFIX__/local_costmap/published_footprint
+      Value: true
+
   Enabled: true
   Global Options:
     Background Color: 30; 30; 30
