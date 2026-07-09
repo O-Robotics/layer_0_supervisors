@@ -88,6 +88,7 @@ namespace {
   const std::vector<std::string> kLayer3BringupOverrideKeys{
     "use_simulation",
     "use_sim_time",
+    "use_ntrip_client",
     "use_amr_sweeper_visual_odometry",
     "use_amr_sweeper_localization",
     "use_amr_sweeper_mapping",
