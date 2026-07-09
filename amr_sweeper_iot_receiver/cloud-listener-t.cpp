@@ -983,7 +983,7 @@ void on_device_twin_update(
   try {
     const ListenerContext * listener_context = static_cast<const ListenerContext *>(user_context);
     if (listener_context == nullptr) {
-      throw std::runtime_error("listener context is not initialized");
+      throw std::runtime_error(ERROR" LISTENER CONTEXT NOT INITIALIZED");
     }
 
     const std::string twin_payload = payload_to_string(payload, size);
@@ -1009,6 +1009,7 @@ void on_device_twin_update(
       extract_top_level_json_value(*property_source, "activePackage");
     if (!active_package.has_value()) {
       std::cout << WARNING << " UPDATE HAS NO activePackage" << std::endl;
+      std::cout << IDLING << " LISTENING (IDLING)" << std::endl;
       return;
     }
 
@@ -1016,12 +1017,14 @@ void on_device_twin_update(
       extract_top_level_json_value(*active_package, "manifestUrl");
     if (!raw_url.has_value()) {
       std::cout << ERROR << " RECEIVED activePackage HAS NO manifestUrl" << std::endl;
+      std::cout << IDLING << " LISTENING (IDLING)" << std::endl;
       return;
     }
 
     const std::optional<std::string> url = parse_json_string_literal(*raw_url);
     if (!url.has_value() || url->empty()) {
       std::cerr << ERROR << " UPDATE HAS INVALID manifestUrl: " << *raw_url << std::endl;
+      std::cout << IDLING << " LISTENING (IDLING)" << std::endl;
       return;
     }
 
@@ -1032,6 +1035,7 @@ void on_device_twin_update(
           listener_context->robot_api_key,
           &error_message)) {
       std::cerr << "Failed to save '" << manifest_output_path.string() << "': " << error_message << std::endl;
+      std::cout << IDLING << " LISTENING (IDLING)" << std::endl;
       return;
     }
 
