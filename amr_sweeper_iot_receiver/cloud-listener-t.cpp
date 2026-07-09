@@ -21,6 +21,14 @@
 #include <openssl/evp.h>
 #include <unistd.h>
 
+#define VERSION "0.1 pre-alfa"
+#define IDLING 101
+#define WORKING 201
+#define VALIDATING 203
+#define WARNING 301
+#define ERROR "400"
+#define EXIT 999
+
 #if __has_include(<azureiot/iothub.h>)
 #include <azureiot/iothub.h>
 #include <azureiot/iothub_device_client.h>
@@ -732,7 +740,7 @@ void download_and_verify_manifest_files(
   const ListenerContext & listener_context)
 {
   if (manifest.files.empty()) {
-    std::cout << "Manifest does not list any downloadable files." << std::endl;
+    std::cout << ERROR << "MANIFEST HAS NO FILES TO DOWNLOAD" << std::endl;
     return;
   }
 
@@ -748,20 +756,20 @@ void download_and_verify_manifest_files(
             listener_context.hostname,
             listener_context.robot_api_key,
             &error_message)) {
-        std::cerr << "Failed to save manifest file '" << file.file_name << "' from '"
-                  << file.download_url << "': " << error_message << std::endl;
+        std::cerr << ERROR << "FAILED TO SAVE MANIFEST FILE: " << file.file_name << ": "
+                  << error_message << std::endl;
         continue;
       }
 
-      std::cout << "SAVED FILE: " << output_path.string() << std::endl;
+      std::cout << WORKING << " SAVING FILE: " << output_path.string() << std::endl;
 
       const std::string actual_checksum = calculate_sha256_checksum(output_path);
       const bool checksum_matches =
         normalize_sha256_checksum(actual_checksum) == normalize_sha256_checksum(file.checksum);
 
-      std::cout << "CHECKSUM " << (checksum_matches ? "OK" : "MISMATCH") << std::endl;
+      std::cout << VALIDATING << " VERIFYING CHECKSUM: " << (checksum_matches ? "OK" : "MISMATCH") << std::endl;
     } catch (const std::exception & ex) {
-      std::cerr << "FAILED TO PROCESS FILE: " << file.file_name
+      std::cerr << ERROR << "FAILED TO PROCESS FILE: " << file.file_name
                 << ": " << ex.what() << std::endl;
     }
   }
@@ -820,9 +828,10 @@ void on_connection_status(
   void *)
 {
   if (status == IOTHUB_CLIENT_CONNECTION_AUTHENTICATED) {
-    std::cout << "CONNECTED TO IOT HUB" << std::endl;
+    std::cout << "IOT HUB DEVICE TWIN LISTENER v" << VERSION << " CONNECTED TO IOT HUB" << std::endl;
+    std::cout << IDLING << " LISTENING (IDLING)" << std::endl;
   } else {
-    std::cerr << "IOT HUB AUTHENTICATION FAILURE: "
+    std::cerr << ERROR << " IOT HUB AUTHENTICATION FAILURE: "
               << connection_reason_to_string(reason) << std::endl;
   }
 }
@@ -981,7 +990,7 @@ void on_device_twin_update(
     const std::filesystem::path manifest_output_path = manifest_output_path_from_home();
     std::string error_message;
 
-    std::cout << "\nUPDATE RECEIVED" << std::endl;
+    std::cout << WORKING << " UPDATE RECEIVED" << std::endl;
 
     if (update_state == DEVICE_TWIN_UPDATE_COMPLETE) {
       const std::optional<std::string> desired_properties =
@@ -990,7 +999,7 @@ void on_device_twin_update(
       if (desired_properties.has_value()) {
         property_source = &*desired_properties;
       } else {
-        std::cout << "Full twin payload:" << std::endl;
+        std::cout << "TWIN:" << std::endl;
         std::cout << twin_payload << std::endl;
       }
     }
@@ -998,20 +1007,20 @@ void on_device_twin_update(
     const std::optional<std::string> active_package =
       extract_top_level_json_value(*property_source, "activePackage");
     if (!active_package.has_value()) {
-      std::cout << "UPDATE HAS NO activePackage" << std::endl;
+      std::cout << WARNING << " UPDATE HAS NO activePackage" << std::endl;
       return;
     }
 
     const std::optional<std::string> raw_url =
       extract_top_level_json_value(*active_package, "manifestUrl");
     if (!raw_url.has_value()) {
-      std::cout << "RECEIVED activePackage HAS NO manifestUrl" << std::endl;
+      std::cout << ERROR << " RECEIVED activePackage HAS NO manifestUrl" << std::endl;
       return;
     }
 
     const std::optional<std::string> url = parse_json_string_literal(*raw_url);
     if (!url.has_value() || url->empty()) {
-      std::cerr << "UPDATE HAS INVALID manifestUrl: " << *raw_url << std::endl;
+      std::cerr << ERROR << " UPDATE HAS INVALID manifestUrl: " << *raw_url << std::endl;
       return;
     }
 
@@ -1025,13 +1034,13 @@ void on_device_twin_update(
       return;
     }
 
-    std::cout << "SAVED FILE: " << manifest_output_path.string() << std::endl;
+    std::cout << WORKING << " SAVING FILE: " << manifest_output_path.string() << std::endl;
 
     const Manifest manifest = Manifest::load_from_file(manifest_output_path);
     download_and_verify_manifest_files(manifest, manifest_output_path, *listener_context);
-
+    std::cout << IDLING << " IDLING (LISTENING)" << std::endl;
   } catch (const std::exception & ex) {
-    std::cerr << "Failed to process device twin payload: " << ex.what() << std::endl;
+    std::cerr << ERROR << " FAILED TO PROCESS DATA: " << ex.what() << std::endl;
   }
 }
 
@@ -1041,7 +1050,7 @@ public:
   IoTHubRuntime()
   {
     if (IoTHub_Init() != 0) {
-      throw std::runtime_error("IoTHub_Init failed");
+      throw std::runtime_error(ERROR" IOTHUB INITIALIZATION FAILED");
     }
   }
 
@@ -1112,11 +1121,11 @@ int main()
       std::this_thread::sleep_for(std::chrono::seconds(1));
     }
 
-    std::cout << "INTERRUPED BY USER" << std::endl;
-    std::cout << "DISCONNECTED" << std::endl;
+    std::cout << EXIT << " INTERRUPED BY USER" << std::endl;
+    std::cout << EXIT << " DISCONNECTED" << std::endl;
     return 0;
   } catch (const std::exception & ex) {
-    std::cerr << "ERROR: " << ex.what() << std::endl;
+    std::cerr << ERROR << "ERROR: " << ex.what() << std::endl;
     return 1;
   }
 }
