@@ -615,6 +615,8 @@ def _launch_setup(context, *args, **kwargs):
                     "origin_lat": str(georeference["latitude_deg"]),
                     "origin_lon": str(georeference["longitude_deg"]),
                     "origin_alt": str(georeference["elevation_m"]),
+                    "spawn_x": str(spawn_pose["x"]),
+                    "spawn_y": str(spawn_pose["y"]),
                     "publish_rate_hz": str(gnss_config.get("publish_rate_hz", 5.0)),
                     "noise_correlation_tau_s": str(gnss_config.get("noise_correlation_tau_s", 12.0)),
                     "autonomous_noise_h_m": str(gnss_config.get("autonomous_noise_h_m", 1.25)),
