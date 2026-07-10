@@ -2,6 +2,7 @@
 
 #include "amr_sweeper_fsm/srv/request_state.hpp"
 
+#include <chrono>
 #include <cstdint>
 #include <atomic>
 #include <map>
@@ -212,7 +213,10 @@ protected:
   bool graph_has_topic(const std::string & topic_name);
 
   // Helper: true if a topic has delivered at least one message during readiness gating.
-  bool topic_has_message(const std::string & topic_name, std::string & why_not);
+  bool topic_has_message(
+    const std::string & topic_name,
+    std::chrono::steady_clock::time_point deadline,
+    std::string & why_not);
 
   // Helper: true if service exists in ROS graph.
   bool graph_has_service(const std::string & service_name);
@@ -318,6 +322,7 @@ private:
 
   bool profile_process_readiness_satisfied_(
     const ProfileProcess & pp,
+    std::chrono::steady_clock::time_point deadline,
     std::string & why_not);
 
   std::vector<std::string> collect_profile_process_readiness_failures_(
