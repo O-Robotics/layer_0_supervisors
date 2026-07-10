@@ -514,7 +514,7 @@ std::vector<std::string> split_top_level_array_elements(const std::string & json
     position = skip_spaces(array_text, value_end);
 
     if (position >= array_text.size()) {
-      throw std::runtime_error("JSON array ended unexpectedly");
+      throw std::runtime_error(ERROR" JSON array ended unexpectedly");
     }
 
     if (array_text[position] == ',') {
