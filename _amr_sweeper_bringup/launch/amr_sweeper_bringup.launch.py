@@ -251,6 +251,8 @@ def _start_bringup_rosbag(context, *args, **kwargs):
                 rosbag_regex,
                 "--qos-profile-overrides-path",
                 rosbag_qos_overrides_path,
+                "--storage-preset-profile",
+                "zstd_fast",
                 "-o",
                 rosbag_output_directory,
             ],
@@ -272,6 +274,7 @@ def _start_fault_shutdown_watcher(context, *args, **kwargs):
     shutdown_fault_state = LaunchConfiguration("shutdown_fault_state").perform(context)
     shutdown_fault_profile = LaunchConfiguration("shutdown_fault_profile").perform(context)
     qualified_topic = _absolute_topic(namespace, fsm_state_topic)
+    qualified_end_mission_service = _absolute_topic(namespace, "end_mission")
 
     watcher = ExecuteProcess(
         cmd=[
@@ -285,6 +288,8 @@ def _start_fault_shutdown_watcher(context, *args, **kwargs):
             shutdown_fault_state,
             "--profile",
             shutdown_fault_profile,
+            "--end-mission-service",
+            qualified_end_mission_service,
         ],
         output="screen",
     )

@@ -59,6 +59,13 @@ constexpr char kLatestRecordedMapCostmapStem[] = "latest_recorded_map_costmap";
 constexpr char kLatestRecordedMapNavSatStem[] = "latest_recorded_map_navsat";
 constexpr char kActualScheduleLogFilename[] = "simulation_schedule.ics";
 constexpr char kDepthCameraScanTopic[] = "/amr_sweeper/depth_camera/scan";
+constexpr char kDepthCameraInfoTopic[] = "/amr_sweeper/depth_camera/depth/camera_info";
+constexpr char kDepthCameraMotionSampleTopic[] = "/amr_sweeper/depth_camera/motion/sample";
+constexpr char kSimulationPoseInfoTopic[] = "/amr_sweeper/simulation/pose/info";
+constexpr char kImuDataRawTopic[] = "/amr_sweeper/imu/data_raw";
+constexpr char kImuDataAccGyroTopic[] = "/amr_sweeper/imu/data_acc_gyro";
+constexpr char kImuDataHeadingTopic[] = "/amr_sweeper/imu/data_heading";
+constexpr char kImuAzimuthTopic[] = "/amr_sweeper/imu/azimuth";
 constexpr double kRecordMapCostmapResolutionMeters = 0.1;
 constexpr double kRecordMapCostmapPaddingMeters = 2.0;
 constexpr double kRecordMapEdgeBandMeters = 1.0;
@@ -320,6 +327,22 @@ std::filesystem::path writeRosbagRuntimeQosOverridesFile(
     << "  reliability: best_effort\n"
     << "  history: keep_last\n"
     << "  depth: 5\n";
+  for (const char * topic : {
+      kSimulationPoseInfoTopic,
+      kImuDataRawTopic,
+      kImuDataAccGyroTopic,
+      kImuDataHeadingTopic,
+      kImuAzimuthTopic,
+      kDepthCameraInfoTopic,
+      kDepthCameraMotionSampleTopic,
+    })
+  {
+    output_stream
+      << topic << ":\n"
+      << "  reliability: best_effort\n"
+      << "  history: keep_last\n"
+      << "  depth: 10\n";
+  }
   output_stream.flush();
   if (!output_stream.good()) {
     throw std::runtime_error(
@@ -4624,6 +4647,8 @@ bool MissionExecutorNode::startMissionRosbagRecording(
       const_cast<char *>(rosbag_regex.c_str()),
       const_cast<char *>("--qos-profile-overrides-path"),
       const_cast<char *>(rosbag_runtime_qos_overrides_string.c_str()),
+      const_cast<char *>("--storage-preset-profile"),
+      const_cast<char *>("zstd_fast"),
     };
     arguments.push_back(const_cast<char *>("-o"));
     arguments.push_back(const_cast<char *>(rosbag_output_string.c_str()));

@@ -79,20 +79,11 @@ def _resolve_world_path(simulation_pkg: str, world_file: str) -> str:
 def _simulation_resource_paths(simulation_pkg: str, description_share: str) -> list[str]:
     worlds_dir = os.path.join(simulation_pkg, "worlds")
     local_models = os.path.join(worlds_dir, "models")
-    model_collection = os.path.join(worlds_dir, "gazebo_models_worlds_collection")
-    citysim_collection = os.path.join(worlds_dir, "citysim")
     candidates = [
         os.path.dirname(simulation_pkg),
         os.path.dirname(description_share),
         worlds_dir,
         local_models,
-        citysim_collection,
-        os.path.join(citysim_collection, "models"),
-        os.path.join(citysim_collection, "worlds"),
-        os.path.join(model_collection, "models"),
-        os.path.join(model_collection, "worlds"),
-        model_collection,
-        os.path.join(citysim_collection, "media"),
     ]
     resource_paths = []
     for candidate in candidates:
