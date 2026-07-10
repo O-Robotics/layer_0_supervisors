@@ -350,6 +350,10 @@ class MissionBackendNode(Node):
             "missions_log_directory",
             "missions/logs",
         ).value
+        self._actual_schedule_log_directory = self.declare_parameter(
+            "actual_schedule_log_directory",
+            "missions/simulations",
+        ).value
         self._missions_from_db_directory = self.declare_parameter(
             "missions_from_db_directory",
             "missions/database",
@@ -1002,14 +1006,16 @@ class MissionBackendNode(Node):
             if path.exists():
                 return path
 
+        actual_schedule_log_directory = _resolve_path(self._actual_schedule_log_directory)
         missions_log_directory = _resolve_path(self._missions_log_directory)
-        fixed_path = missions_log_directory / "simulation_schedule.ics"
-        if fixed_path.exists():
-            return fixed_path
-
-        legacy_path = missions_log_directory / "actual_schedule.ics"
-        if legacy_path.exists():
-            return legacy_path
+        for candidate in (
+            actual_schedule_log_directory / "simulation_schedule.ics",
+            missions_log_directory / "actual_schedule.ics",
+            actual_schedule_log_directory / "actual_schedule.ics",
+            missions_log_directory / "simulation_schedule.ics",
+        ):
+            if candidate.exists():
+                return candidate
         return None
 
     def _robot_timezone_name(self) -> str:

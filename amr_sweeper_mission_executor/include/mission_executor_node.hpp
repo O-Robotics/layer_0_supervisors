@@ -174,6 +174,7 @@ private:
 
   std::string missions_directory_;
   std::string missions_log_directory_;
+  std::string actual_schedule_log_directory_;
   std::string manual_missions_directory_;
   std::string mission_file_extension_;
   std::string schedule_ics_path_;

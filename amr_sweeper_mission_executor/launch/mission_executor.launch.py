@@ -11,6 +11,7 @@ def generate_launch_description():
     use_simulation = LaunchConfiguration("use_simulation")
     missions_directory = LaunchConfiguration("missions_directory")
     missions_log_directory = LaunchConfiguration("missions_log_directory")
+    actual_schedule_log_directory = LaunchConfiguration("actual_schedule_log_directory")
     manual_missions_directory = LaunchConfiguration("manual_missions_directory")
     fsm_request_service = LaunchConfiguration("fsm_request_service")
     schedule_ics_path = LaunchConfiguration("schedule_ics_path")
@@ -31,6 +32,7 @@ def generate_launch_description():
         DeclareLaunchArgument("use_simulation", default_value="false"),
         DeclareLaunchArgument("missions_directory", default_value="missions/database"),
         DeclareLaunchArgument("missions_log_directory", default_value="missions/logs"),
+        DeclareLaunchArgument("actual_schedule_log_directory", default_value="missions/simulations"),
         DeclareLaunchArgument(
             "manual_missions_directory",
             default_value=PathJoinSubstitution(
@@ -64,6 +66,7 @@ def generate_launch_description():
             parameters=[{
                 "missions_directory": missions_directory,
                 "missions_log_directory": missions_log_directory,
+                "actual_schedule_log_directory": actual_schedule_log_directory,
                 "manual_missions_directory": manual_missions_directory,
                 "use_simulation": use_simulation,
                 "fsm_request_service": fsm_request_service,

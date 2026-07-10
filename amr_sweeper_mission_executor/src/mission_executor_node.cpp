@@ -57,7 +57,8 @@ constexpr char kLatestRecordedMapMetadataFile[] = "latest_recorded_map.json";
 constexpr char kLatestRecordedMapRouteStem[] = "latest_recorded_map_path";
 constexpr char kLatestRecordedMapCostmapStem[] = "latest_recorded_map_costmap";
 constexpr char kLatestRecordedMapNavSatStem[] = "latest_recorded_map_navsat";
-constexpr char kActualScheduleLogFilename[] = "simulation_schedule.ics";
+constexpr char kActualScheduleLogFilename[] = "actual_schedule.ics";
+constexpr char kSimulationActualScheduleLogFilename[] = "simulation_schedule.ics";
 constexpr char kDepthCameraScanTopic[] = "/amr_sweeper/depth_camera/scan";
 constexpr char kDepthCameraInfoTopic[] = "/amr_sweeper/depth_camera/depth/camera_info";
 constexpr char kDepthCameraMotionSampleTopic[] = "/amr_sweeper/depth_camera/motion/sample";
@@ -1868,6 +1869,9 @@ MissionExecutorNode::MissionExecutorNode(const rclcpp::NodeOptions & options)
   missions_log_directory_ = declare_parameter<std::string>(
     "missions_log_directory",
     "missions/logs");
+  actual_schedule_log_directory_ = declare_parameter<std::string>(
+    "actual_schedule_log_directory",
+    "missions/simulations");
   rosbag_directory_ = declare_parameter<std::string>("rosbag_directory", "missions/logs");
   manual_missions_directory_ = declare_parameter<std::string>("manual_missions_directory", "");
   mission_file_extension_ = declare_parameter<std::string>("mission_file_extension", ".json");
@@ -4846,10 +4850,14 @@ std::filesystem::path MissionExecutorNode::ensureScheduleLogPath(
 std::filesystem::path MissionExecutorNode::ensureActualScheduleLogPath(
   const std::filesystem::path & schedule_source_path) const
 {
-  const std::filesystem::path missions_log_directory = resolveMissionsLogDirectory();
-  std::filesystem::create_directories(missions_log_directory);
+  (void)schedule_source_path;
+  const std::filesystem::path actual_schedule_log_directory = use_simulation_ ?
+    resolvePath(actual_schedule_log_directory_) :
+    resolveMissionsLogDirectory();
+  std::filesystem::create_directories(actual_schedule_log_directory);
   const std::filesystem::path actual_schedule_path =
-    missions_log_directory / kActualScheduleLogFilename;
+    actual_schedule_log_directory /
+    (use_simulation_ ? kSimulationActualScheduleLogFilename : kActualScheduleLogFilename);
   if (std::filesystem::exists(actual_schedule_path)) {
     return actual_schedule_path;
   }
