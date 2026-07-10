@@ -1029,6 +1029,9 @@ StateNodeBase::on_configure(const rclcpp_lifecycle::State &)
           for (auto & t : p.ready_topics) {
             t = qualify_to_ns(t);
           }
+          for (auto & t : p.ready_message_topics) {
+            t = qualify_to_ns(t);
+          }
           for (auto & s : p.ready_services) {
             s = qualify_to_ns(s);
           }
@@ -1601,21 +1604,41 @@ bool StateNodeBase::graph_has_service(const std::string & service_name)
   return false;
 }
 
-bool StateNodeBase::topic_has_message(const std::string & topic_name, std::string & why_not)
+bool StateNodeBase::topic_has_message(
+  const std::string & topic_name,
+  std::chrono::steady_clock::time_point deadline,
+  std::string & why_not)
 {
   if (ready_message_topics_seen_.count(topic_name) > 0U) {
     why_not.clear();
     return true;
   }
 
-  const auto publishers = this->get_publishers_info_by_topic(topic_name);
-  if (publishers.empty()) {
-    why_not = "topic not discovered: '" + topic_name + "'";
-    return false;
+  std::string topic_type;
+  bool discovered = false;
+  while (rclcpp::ok(this->get_node_base_interface()->get_context()) &&
+    !shutdown_requested_() &&
+    std::chrono::steady_clock::now() < deadline)
+  {
+    const auto publishers = this->get_publishers_info_by_topic(topic_name);
+    if (!publishers.empty()) {
+      discovered = true;
+      topic_type = publishers.front().topic_type();
+      break;
+    }
+    rclcpp::sleep_for(std::chrono::milliseconds(20));
   }
 
-  const auto & publisher = publishers.front();
-  const auto topic_type = publisher.topic_type();
+  if (!discovered) {
+    const auto publishers = this->get_publishers_info_by_topic(topic_name);
+    if (publishers.empty()) {
+      why_not = "topic not discovered: '" + topic_name + "'";
+      return false;
+    }
+    discovered = true;
+    topic_type = publishers.front().topic_type();
+  }
+
   if (topic_type.empty()) {
     why_not = "topic discovered without type information: '" + topic_name + "'";
     return false;
@@ -1643,8 +1666,8 @@ bool StateNodeBase::topic_has_message(const std::string & topic_name, std::strin
   rclcpp::executors::SingleThreadedExecutor exec;
   exec.add_node(probe);
 
-  const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(100);
   while (rclcpp::ok(this->get_node_base_interface()->get_context()) &&
+    !shutdown_requested_() &&
     !received &&
     std::chrono::steady_clock::now() < deadline)
   {
@@ -1906,6 +1929,20 @@ bool StateNodeBase::wait_for_readiness(std::string & why_not)
         }
       }
 
+      for (const auto & t : readiness_.message_topics) {
+        std::string topic_why;
+        if (!topic_has_message(t, global_deadline, topic_why)) {
+          why_not = topic_why;
+          if (std::chrono::steady_clock::now() >= global_deadline) {
+            why_not =
+              "timed out after " + std::to_string(readiness_.timeout_ms) +
+              " ms waiting for " + why_not;
+            return false;
+          }
+          waiting = true;
+        }
+      }
+
       for (const auto & s : readiness_.services) {
         if (!graph_has_service(s)) {
           why_not = "service not discovered: '" + s + "'";
@@ -1969,6 +2006,23 @@ bool StateNodeBase::wait_for_readiness(std::string & why_not)
           }
         }
       }
+
+      if (!proc_waiting) {
+        for (const auto & t : pp.ready_message_topics) {
+          if (!is_profile_requirement_enabled(resolved_command, "topic_message", t)) {
+            continue;
+          }
+          std::string topic_why;
+          const auto topic_deadline =
+            (pp.importance == ProcessImportance::CRITICAL) ? proc_deadline : now;
+          if (!topic_has_message(t, topic_deadline, topic_why)) {
+            proc_waiting = true;
+            why_not = topic_why;
+            break;
+          }
+        }
+      }
+
       if (!proc_waiting) {
         for (const auto & s : pp.ready_services) {
           if (!is_profile_requirement_enabled(resolved_command, "service", s)) {
@@ -2032,7 +2086,7 @@ bool StateNodeBase::wait_for_readiness(std::string & why_not)
       }
 
       if (pp.importance == ProcessImportance::CRITICAL) {
-        if (pp.window_ms > 0 && now >= proc_deadline) {
+        if (pp.window_ms > 0 && std::chrono::steady_clock::now() >= proc_deadline) {
           const auto failures = collect_profile_process_readiness_failures_(pp);
           if (!failures.empty()) {
             const std::string pname = pp.name.empty() ? pp.command : pp.name;
@@ -2553,6 +2607,7 @@ std::string StateNodeBase::resolve_placeholders(std::string cmd) const
 
 bool StateNodeBase::profile_process_readiness_satisfied_(
   const ProfileProcess & pp,
+  std::chrono::steady_clock::time_point deadline,
   std::string & why_not)
 {
   const auto resolved_command = resolve_placeholders(pp.command);
@@ -2587,7 +2642,7 @@ bool StateNodeBase::profile_process_readiness_satisfied_(
       continue;
     }
     std::string topic_why;
-    if (!topic_has_message(t, topic_why)) {
+    if (!topic_has_message(t, deadline, topic_why)) {
       why_not = missing_reason_for("topic message", t);
       return false;
     }
@@ -2678,7 +2733,7 @@ std::vector<std::string> StateNodeBase::collect_profile_process_readiness_failur
       continue;
     }
     std::string topic_why;
-    if (!topic_has_message(t, topic_why)) {
+    if (!topic_has_message(t, std::chrono::steady_clock::now(), topic_why)) {
       failures.push_back(topic_why);
     }
   }
@@ -2751,7 +2806,7 @@ bool StateNodeBase::wait_for_profile_process_readiness_(
   rclcpp::WallRate rate(10.0);
 
   while (rclcpp::ok() && !shutdown_requested_()) {
-    if (profile_process_readiness_satisfied_(pp, why_not)) {
+    if (profile_process_readiness_satisfied_(pp, deadline, why_not)) {
       return true;
     }
     if (std::chrono::steady_clock::now() >= deadline) {
