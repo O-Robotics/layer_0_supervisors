@@ -1232,8 +1232,9 @@ StateNodeBase::on_activate(const rclcpp_lifecycle::State &)
       RCLCPP_INFO(
         get_logger(),
         "Activation interrupted by shutdown while starting managed processes");
-      stop_state_processes();
-      return LifecycleNodeInterface::CallbackReturn::SUCCESS;
+      mark_shutdown_requested_();
+      perform_managed_teardown_();
+      return LifecycleNodeInterface::CallbackReturn::FAILURE;
     }
 
     RCLCPP_ERROR(get_logger(), "Process startup failed: %s", process_start_why.c_str());
@@ -1270,8 +1271,9 @@ StateNodeBase::on_activate(const rclcpp_lifecycle::State &)
       RCLCPP_INFO(
         get_logger(),
         "Activation interrupted by shutdown while waiting for readiness");
-      stop_state_processes();
-      return LifecycleNodeInterface::CallbackReturn::SUCCESS;
+      mark_shutdown_requested_();
+      perform_managed_teardown_();
+      return LifecycleNodeInterface::CallbackReturn::FAILURE;
     }
 
     RCLCPP_ERROR(get_logger(), "Ready timeout: %s", why.c_str());
@@ -1300,9 +1302,11 @@ StateNodeBase::on_activate(const rclcpp_lifecycle::State &)
 
   if (shutdown_requested_() || !rclcpp::ok()) {
     RCLCPP_INFO(get_logger(), "Activation interrupted because shutdown began during startup");
-    stop_state_processes();
-    return LifecycleNodeInterface::CallbackReturn::SUCCESS;
+    mark_shutdown_requested_();
+    perform_managed_teardown_();
+    return LifecycleNodeInterface::CallbackReturn::FAILURE;
   }
+
 
 
 // Optional: request an automatic FSM transition once this state is ACTIVE.

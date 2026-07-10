@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import rclpy
-from rclpy.executors import MultiThreadedExecutor
+from rclpy.executors import ExternalShutdownException, MultiThreadedExecutor
 
 from backend_node import MissionBackendNode
 
@@ -3405,11 +3405,15 @@ def main(args: list[str] | None = None) -> int:
 
     spin_thread = threading.Thread(target=_spin_executor, args=(executor, node), daemon=True)
     spin_thread.start()
+    server_thread: threading.Thread | None = None
 
     try:
         node.start_http_server()
-        node.serve_forever()
-    except KeyboardInterrupt:
+        server_thread = threading.Thread(target=node.serve_forever, name="mission_http_server", daemon=True)
+        server_thread.start()
+        while server_thread.is_alive():
+            server_thread.join(timeout=0.5)
+    except (KeyboardInterrupt, ExternalShutdownException):
         pass
     except Exception as exc:  # noqa: BLE001
         node.get_logger().error(f"Mission frontend HTTP startup failed: {exc}")
@@ -3419,6 +3423,8 @@ def main(args: list[str] | None = None) -> int:
             node.stop_http_server()
         except RuntimeError:
             pass
+        if server_thread is not None:
+            server_thread.join(timeout=2.0)
         try:
             executor.shutdown()
         except RuntimeError:

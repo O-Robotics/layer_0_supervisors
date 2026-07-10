@@ -1,4 +1,4 @@
-"""Launch the AMR Sweeper layer 0 supervisor stack from one bringup entrypoint."""
+﻿"""Launch the AMR Sweeper layer 0 supervisor stack from one bringup entrypoint."""
 
 import os
 import re
@@ -361,6 +361,7 @@ def generate_launch_description():
     use_simulation = LaunchConfiguration("use_simulation")
     simulation_profile = LaunchConfiguration("simulation_profile")
     launch_rviz = LaunchConfiguration("launch_rviz")
+    launch_gz_gui = LaunchConfiguration("launch_gz_gui")
     rviz_config = LaunchConfiguration("rviz_config")
     tick_period_ms = LaunchConfiguration("tick_period_ms")
     missions_from_db_directory = LaunchConfiguration("missions_from_db_directory")
@@ -445,6 +446,7 @@ def generate_launch_description():
         DeclareLaunchArgument("use_simulation", default_value="false"),
         DeclareLaunchArgument("use_sim_time", default_value="false"),
         DeclareLaunchArgument("launch_rviz", default_value="true"),
+        DeclareLaunchArgument("launch_gz_gui", default_value="true"),
         DeclareLaunchArgument("rviz_config", default_value=""),
         DeclareLaunchArgument(
             "simulation_profile",
@@ -522,6 +524,7 @@ def generate_launch_description():
                 "use_ntrip_client": fsm_override_args["use_ntrip_client"],
                 "launch_gnss_stack": "false",
                 "launch_rviz": launch_rviz,
+                "launch_gz_gui": launch_gz_gui,
                 "rviz_config": rviz_config,
                 "simulation_profile": simulation_profile,
             }.items(),
@@ -604,4 +607,5 @@ def generate_launch_description():
         ),
         OpaqueFunction(function=_start_fault_shutdown_watcher),
     ])
+
 

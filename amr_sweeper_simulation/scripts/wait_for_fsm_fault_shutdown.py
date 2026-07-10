@@ -4,6 +4,7 @@ import argparse
 
 import rclpy
 from amr_sweeper_fsm.msg import FSMState
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 
 
@@ -49,6 +50,8 @@ def main() -> int:
         while rclpy.ok() and not node.matched:
             rclpy.spin_once(node, timeout_sec=0.5)
     except KeyboardInterrupt:
+        node.mark_interrupted()
+    except ExternalShutdownException:
         node.mark_interrupted()
     finally:
         matched = node.matched

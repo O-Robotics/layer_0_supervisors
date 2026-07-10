@@ -10,7 +10,9 @@ Panels:
         - /Wheel Odometry1
         - /Localization Odometry1
         - /Depth Scan1
-        - /Mission Costmap1
+        - /Mapping Costmap1
+        - /Nav2 Global Costmap1
+        - /Nav2 Local Costmap1
         - /Global Footprint1
         - /Local Footprint1
         - /Global Plan1
@@ -72,50 +74,6 @@ Visualization Manager:
       Update Interval: 0
       Value: true
 
-    - Class: rviz_default_plugins/Odometry
-      Angle Tolerance: 0.1
-      Color: 52; 152; 219
-      Color Style: Unique
-      Enabled: true
-      Keep: 1
-      Length: 1
-      Name: Wheel Odometry
-      Position Tolerance: 0.1
-      Shaft Length: 0.6
-      Shaft Radius: 0.05000000074505806
-      Head Length: 0.30000001192092896
-      Head Radius: 0.10000000149011612
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        Filter size: 30
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: __NS_PREFIX__/drive_controller/odom
-      Value: true
-
-    - Class: rviz_default_plugins/Odometry
-      Angle Tolerance: 0.1
-      Color: 46; 204; 113
-      Color Style: Unique
-      Enabled: true
-      Keep: 1
-      Length: 1
-      Name: Localization Odometry
-      Position Tolerance: 0.1
-      Shaft Length: 0.6
-      Shaft Radius: 0.05000000074505806
-      Head Length: 0.30000001192092896
-      Head Radius: 0.10000000149011612
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        Filter size: 30
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: __NS_PREFIX__/localization/odometry_fused
-      Value: true
-
     - Alpha: 1
       Class: rviz_default_plugins/LaserScan
       Color: 255; 170; 0
@@ -140,13 +98,43 @@ Visualization Manager:
       Color Scheme: raw
       Draw Behind: false
       Enabled: true
-      Name: Mission Costmap
+      Name: Mapping Costmap
       Topic:
         Depth: 5
         Durability Policy: Transient Local
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: __NS_PREFIX__/mapping/global_costmap
+      Use Timestamp: false
+      Value: true
+
+    - Alpha: 0.7
+      Class: rviz_default_plugins/Map
+      Color Scheme: costmap
+      Draw Behind: false
+      Enabled: true
+      Name: Nav2 Global Costmap
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: __NS_PREFIX__/global_costmap/costmap
+      Use Timestamp: false
+      Value: true
+
+    - Alpha: 0.7
+      Class: rviz_default_plugins/Map
+      Color Scheme: raw
+      Draw Behind: false
+      Enabled: true
+      Name: Nav2 Local Costmap
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: __NS_PREFIX__/local_costmap/costmap
       Use Timestamp: false
       Value: true
 
@@ -216,6 +204,54 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: __NS_PREFIX__/local_costmap/published_footprint
+      Value: true
+
+    - Class: rviz_default_plugins/Odometry
+      Angle Tolerance: 0.1
+      Color: 52; 152; 219
+      Color Style: Unique
+      Enabled: false
+      Keep: 1
+      Length: 1
+      Name: Wheel Odometry
+      Position Tolerance: 0.1
+      Shaft Length: 0.6
+      Shaft Radius: 0.05000000074505806
+      Head Length: 0.30000001192092896
+      Head Radius: 0.10000000149011612
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 30
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: __NS_PREFIX__/drive_controller/odom
+      Value: true
+
+    - Class: rviz_default_plugins/Odometry
+      Angle Tolerance: 0.1
+      Color: 46; 204; 113
+      Color Style: Unique
+      Covariance:
+        Covariance Orientation: false
+        Covariance Position: false
+        Value: false
+      Enabled: false
+      Keep: 1
+      Length: 1
+      Name: Localization Odometry
+      Position Tolerance: 0.1
+      Shaft Length: 0.6
+      Shaft Radius: 0.05000000074505806
+      Head Length: 0.30000001192092896
+      Head Radius: 0.10000000149011612
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 30
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: __NS_PREFIX__/localization/odometry_fused
       Value: true
 
   Enabled: true

@@ -1,4 +1,4 @@
-import copy
+﻿import copy
 import os
 import re
 import subprocess
@@ -12,6 +12,9 @@ from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchD
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+
+_GZ_SIM_SIGTERM_TIMEOUT_SEC = "15.0"
+_GZ_SIM_SIGKILL_TIMEOUT_SEC = "5.0"
 
 
 def _normalize_namespace(namespace: str) -> str:
@@ -75,16 +78,20 @@ def _resolve_world_path(simulation_pkg: str, world_file: str) -> str:
 
 def _simulation_resource_paths(simulation_pkg: str, description_share: str) -> list[str]:
     worlds_dir = os.path.join(simulation_pkg, "worlds")
+    local_models = os.path.join(worlds_dir, "models")
     model_collection = os.path.join(worlds_dir, "gazebo_models_worlds_collection")
     citysim_collection = os.path.join(worlds_dir, "citysim")
     candidates = [
         os.path.dirname(simulation_pkg),
         os.path.dirname(description_share),
         worlds_dir,
+        local_models,
+        citysim_collection,
+        os.path.join(citysim_collection, "models"),
+        os.path.join(citysim_collection, "worlds"),
         os.path.join(model_collection, "models"),
         os.path.join(model_collection, "worlds"),
         model_collection,
-        os.path.join(citysim_collection, "models"),
         os.path.join(citysim_collection, "media"),
     ]
     resource_paths = []
@@ -150,6 +157,128 @@ def _strip_missing_model_elements(world_sdf: str, available_model_names: set[str
         removed_model_names.update(missing_model_names)
 
     return ET.tostring(root, encoding="unicode"), removed_model_names
+
+
+def _strip_incompatible_model_includes(world_sdf: str) -> tuple[str, set[str]]:
+    incompatible_model_uris = set()
+    root = ET.fromstring(world_sdf)
+    parent_map = {child: parent for parent in root.iter() for child in parent}
+    removed_model_uris = set()
+
+    for include in list(root.iter("include")):
+        uri = include.find("uri")
+        if uri is None:
+            continue
+        model_uri = (uri.text or "").strip()
+        if model_uri not in incompatible_model_uris:
+            continue
+        parent = parent_map.get(include)
+        if parent is None:
+            continue
+        parent.remove(include)
+        removed_model_uris.add(model_uri)
+
+    return ET.tostring(root, encoding="unicode"), removed_model_uris
+
+
+def _strip_legacy_classic_plugins(world_sdf: str) -> tuple[str, int]:
+    root = ET.fromstring(world_sdf)
+    parent_map = {child: parent for parent in root.iter() for child in parent}
+    removed_plugin_count = 0
+
+    for plugin in list(root.iter("plugin")):
+        filename = (plugin.get("filename") or "").strip()
+        if not filename.startswith("lib") or not filename.endswith(".so"):
+            continue
+        parent = parent_map.get(plugin)
+        if parent is None:
+            continue
+        parent.remove(plugin)
+        removed_plugin_count += 1
+
+    return ET.tostring(root, encoding="unicode"), removed_plugin_count
+
+
+def _strip_actor_elements(world_sdf: str) -> tuple[str, int]:
+    root = ET.fromstring(world_sdf)
+    parent_map = {child: parent for parent in root.iter() for child in parent}
+    removed_actor_count = 0
+
+    for actor in list(root.iter("actor")):
+        parent = parent_map.get(actor)
+        if parent is None:
+            continue
+        parent.remove(actor)
+        removed_actor_count += 1
+
+    return ET.tostring(root, encoding="unicode"), removed_actor_count
+
+
+def _set_child_text(element: ET.Element, tag_name: str, value: str) -> None:
+    child = element.find(tag_name)
+    if child is None:
+        child = ET.SubElement(element, tag_name)
+    child.text = value
+
+
+def _upgrade_legacy_materials(world_sdf: str) -> tuple[str, int]:
+    asphalt_texture = "model://asphalt_plane/materials/textures/tarmac.png"
+    legacy_color_materials = {
+        "CitySim/ShinyGrey": "0.55 0.55 0.55 1.0",
+        "Gazebo/Residential": "0.42 0.42 0.42 1.0",
+    }
+    root = ET.fromstring(world_sdf)
+    parent_map = {child: parent for parent in root.iter() for child in parent}
+    upgraded_material_count = 0
+
+    for script in list(root.iter("script")):
+        uri = script.find("uri")
+        name = script.find("name")
+        if uri is None or name is None:
+            continue
+        script_uri = (uri.text or "").strip()
+        script_name = (name.text or "").strip()
+        if (
+            script_uri != "file://media/materials/scripts/gazebo.material"
+            and script_name not in {"vrc/asphalt", "CitySim/ShinyGrey"}
+        ):
+            continue
+        if script_name not in {"Gazebo/Residential", "vrc/asphalt", "CitySim/ShinyGrey"}:
+            continue
+
+        material = parent_map.get(script)
+        if material is None:
+            continue
+        material.remove(script)
+        material_color = legacy_color_materials.get(script_name, "0.42 0.42 0.42 1.0")
+        _set_child_text(material, "ambient", material_color)
+        _set_child_text(material, "diffuse", material_color)
+        _set_child_text(material, "specular", "0.12 0.12 0.12 1.0")
+
+        if script_name == "vrc/asphalt":
+            pbr = material.find("pbr")
+            if pbr is None:
+                pbr = ET.SubElement(material, "pbr")
+            metal = pbr.find("metal")
+            if metal is None:
+                metal = ET.SubElement(pbr, "metal")
+            _set_child_text(metal, "albedo_map", asphalt_texture)
+            _set_child_text(metal, "roughness", "0.85")
+            _set_child_text(metal, "metalness", "0.0")
+        upgraded_material_count += 1
+
+    for material in root.iter("material"):
+        ambient = material.find("ambient")
+        diffuse = material.find("diffuse")
+        if ambient is None or diffuse is not None:
+            continue
+        ambient_value = (ambient.text or "").strip()
+        if not ambient_value:
+            continue
+        _set_child_text(material, "diffuse", ambient_value)
+        upgraded_material_count += 1
+
+    return ET.tostring(root, encoding="unicode"), upgraded_material_count
 
 
 def _bridge_config(bridge: dict, namespace: str, world_name: str) -> dict:
@@ -248,6 +377,18 @@ def _render_world_with_georeference(
         world_sdf = stream.read()
 
     world_sdf = _rename_world(world_sdf, world_name)
+    world_sdf, removed_plugin_count = _strip_legacy_classic_plugins(world_sdf)
+    if removed_plugin_count:
+        print(
+            "[amr_sweeper_simulation] Removed legacy Gazebo Classic plugins: "
+            f"{removed_plugin_count}"
+        )
+    world_sdf, removed_actor_count = _strip_actor_elements(world_sdf)
+    if removed_actor_count:
+        print(
+            "[amr_sweeper_simulation] Removed legacy actor animations: "
+            f"{removed_actor_count}"
+        )
     world_sdf = _ensure_gz_sim_system_plugins(world_sdf)
     world_sdf, removed_model_names = _strip_missing_model_elements(
         world_sdf, available_model_names
@@ -256,6 +397,22 @@ def _render_world_with_georeference(
         print(
             "[amr_sweeper_simulation] Removed missing world models: "
             + ", ".join(sorted(removed_model_names))
+        )
+    world_sdf, removed_incompatible_model_uris = _strip_incompatible_model_includes(
+        world_sdf
+    )
+    if removed_incompatible_model_uris:
+        print(
+            "[amr_sweeper_simulation] Removed incompatible legacy world models: "
+            + ", ".join(sorted(removed_incompatible_model_uris))
+        )
+    world_sdf, upgraded_material_count = _upgrade_legacy_materials(
+        world_sdf
+    )
+    if upgraded_material_count:
+        print(
+            "[amr_sweeper_simulation] Upgraded legacy world materials: "
+            f"{upgraded_material_count}"
         )
 
     replacements = {
@@ -326,6 +483,7 @@ def _launch_setup(context, *args, **kwargs):
     use_ntrip_client = LaunchConfiguration("use_ntrip_client").perform(context)
     launch_gnss_stack = LaunchConfiguration("launch_gnss_stack").perform(context)
     launch_rviz = LaunchConfiguration("launch_rviz").perform(context)
+    launch_gz_gui = LaunchConfiguration("launch_gz_gui").perform(context)
     rviz_config = LaunchConfiguration("rviz_config").perform(context).strip()
     if not rviz_config:
         rviz_config = os.path.join(
@@ -355,13 +513,22 @@ def _launch_setup(context, *args, **kwargs):
     rendered_rviz_config = _render_rviz_config(rviz_config, namespace)
 
     spawn_pose = simulation_config["spawn_pose"]
-    gazebo = ExecuteProcess(
-        cmd=["gz", "sim", "-r", world],
-        additional_env={
+    launch_gz_gui_enabled = launch_gz_gui.strip().lower() in {"1", "true", "yes", "on"}
+    gazebo_cmd = ["gz", "sim", "-r", world] if launch_gz_gui_enabled else ["gz", "sim", "-s", "-r", world]
+    gazebo_kwargs = {
+        "cmd": gazebo_cmd,
+        "additional_env": {
             "GZ_SIM_RESOURCE_PATH": os.pathsep.join(resource_paths),
         },
-        output="screen",
-    )
+        "output": "screen",
+    }
+    if launch_gz_gui_enabled:
+        # `gz sim` without `-s` uses a Ruby wrapper that forks GUI + server and
+        # shuts them down sequentially. Give that wrapper time to complete its
+        # own cleanup without launch sending a second signal mid-shutdown.
+        gazebo_kwargs["sigterm_timeout"] = _GZ_SIM_SIGTERM_TIMEOUT_SEC
+        gazebo_kwargs["sigkill_timeout"] = _GZ_SIM_SIGKILL_TIMEOUT_SEC
+    gazebo = ExecuteProcess(**gazebo_kwargs)
 
     spawn_robot = Node(
         package="ros_gz_sim",
@@ -491,6 +658,7 @@ def generate_launch_description():
         DeclareLaunchArgument("use_ntrip_client", default_value="true"),
         DeclareLaunchArgument("launch_gnss_stack", default_value="true"),
         DeclareLaunchArgument("launch_rviz", default_value="true"),
+        DeclareLaunchArgument("launch_gz_gui", default_value="true"),
         DeclareLaunchArgument(
             "rviz_config",
             default_value=os.path.join(
@@ -506,5 +674,9 @@ def generate_launch_description():
         DeclareLaunchArgument("override_timestamps_with_wall_time", default_value="false"),
         OpaqueFunction(function=_launch_setup),
     ])
+
+
+
+
 
 

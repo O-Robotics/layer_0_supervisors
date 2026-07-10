@@ -30,7 +30,7 @@
         yaw: 0.0
     test_city:
       world_name: test_city
-      world_file: gazebo_models_worlds_collection/worlds/test_city.world
+      world_file: test_city.sdf
       mission_id: test_city
       schedule_ics_path: missions/database/simulations/test_city.ics
       spawn_pose:
@@ -42,7 +42,7 @@
         yaw: 0.0
     neighborhood:
       world_name: neighborhood
-      world_file: gazebo_models_worlds_collection/worlds/neighborhood.world
+      world_file: neighborhood.sdf
       mission_id: neighborhood
       schedule_ics_path: missions/database/simulations/neighborhood.ics
       spawn_pose:
@@ -54,12 +54,24 @@
         yaw: 0.0
     small_city:
       world_name: small_city
-      world_file: gazebo_models_worlds_collection/worlds/small_city.world
+      world_file: small_city.sdf
       mission_id: small_city
       schedule_ics_path: missions/database/simulations/small_city.ics
       spawn_pose:
         x: -15.0
         y: 0.0
+        z: 0.15
+        roll: 0.0
+        pitch: 0.0
+        yaw: 0.0
+    simple_city:
+      world_name: simple_city
+      world_file: simple_city.sdf
+      mission_id: simple_city
+      schedule_ics_path: missions/database/simulations/simple_city.ics
+      spawn_pose:
+        x: -45.0
+        y: -2.0
         z: 0.15
         roll: 0.0
         pitch: 0.0
@@ -129,4 +141,3 @@ bridges:
     ros_type_name: tf2_msgs/msg/TFMessage
     gz_type_name: gz.msgs.Pose_V
     direction: GZ_TO_ROS
-
