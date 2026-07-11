@@ -220,7 +220,7 @@ profiles:
                 target: "mapping_node/get_parameters"
                 required: true
               - type: "topic"
-                target: "mapping/global_costmap"
+                target: "mapping/static_costmap"
                 required: true
               - type: "topic"
                 target: "local_costmap/costmap_raw"
@@ -465,7 +465,7 @@ profiles:
                 target: "mapping_node/get_parameters"
                 required: true
               - type: "topic"
-                target: "mapping/global_costmap"
+                target: "mapping/static_costmap"
                 required: true
               - type: "topic"
                 target: "local_costmap/costmap_raw"
@@ -749,7 +749,7 @@ profiles:
                 target: "mapping_node/get_parameters"
                 required: true
               - type: "topic"
-                target: "mapping/global_costmap"
+                target: "mapping/static_costmap"
                 required: true
               - type: "topic"
                 target: "local_costmap/costmap_raw"
@@ -1033,7 +1033,7 @@ profiles:
                 target: "mapping_node/get_parameters"
                 required: true
               - type: "topic"
-                target: "mapping/global_costmap"
+                target: "mapping/static_costmap"
                 required: true
               - type: "topic"
                 target: "local_costmap/costmap_raw"
@@ -2268,7 +2268,7 @@ profiles:
                 target: "mapping_node/get_parameters"
                 required: true
               - type: "topic"
-                target: "mapping/global_costmap"
+                target: "mapping/static_costmap"
                 required: true
               - type: "topic"
                 target: "local_costmap/costmap_raw"

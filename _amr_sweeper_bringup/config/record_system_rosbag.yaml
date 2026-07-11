@@ -70,7 +70,7 @@ topics:
   - /amr_sweeper/navigation/waypoint_follower/transition_event
 
 # Runtime mapping and costmap topics visible to Nav2.
-  - /amr_sweeper/mapping/global_costmap
+  - /amr_sweeper/mapping/static_costmap
   - /amr_sweeper/mapping/waypoint_path
   - /amr_sweeper/mapping/map_pose_status
   - /amr_sweeper/mapping/status

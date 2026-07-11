@@ -1,2289 +1,810 @@
 <?xml version='1.0' encoding='utf-8'?>
-<sdf version="1.4">
+<sdf version="1.8">
   <world name="test_city">
-    <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics" />
-    <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands" />
-    <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster" />
-    <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors">
-      <render_engine>ogre2</render_engine>
-    </plugin>
-    <plugin filename="gz-sim-imu-system" name="gz::sim::systems::Imu" />
-    <light name="sun" type="directional">
-      <cast_shadows>1</cast_shadows>
-      <pose>0 0 10 0 0 0</pose>
-      <diffuse>0.8 0.8 0.8 1</diffuse>
-      <specular>0.2 0.2 0.2 1</specular>
-      <attenuation>
-        <range>1000</range>
-        <constant>0.9</constant>
-        <linear>0.01</linear>
-        <quadratic>0.001</quadratic>
-      </attenuation>
-      <direction>-0.5 0.1 -0.9</direction>
-    </light>
-    <physics type="ode">
-      <ode>
-        <solver>
-          <type>quick</type>
-          <iters>1000</iters>
-          <sor>1.3</sor>
-        </solver>
-        <constraints>
-          <cfm>0</cfm>
-          <erp>0.2</erp>
-          <contact_max_correcting_vel>100</contact_max_correcting_vel>
-          <contact_surface_layer>0.001</contact_surface_layer>
-        </constraints>
-      </ode>
-      <max_step_size>0.01</max_step_size>
-      <real_time_factor>1</real_time_factor>
-      <real_time_update_rate>100</real_time_update_rate>
-      <gravity>0 0 -9.8</gravity>
-    </physics>
-    <scene>
-      <ambient>0.4 0.4 0.4 1</ambient>
-      <background>0.7 0.7 0.7 1</background>
-      <shadows>1</shadows>
-    </scene>
-    <spherical_coordinates>
-      <surface_model>EARTH_WGS84</surface_model>
-      <latitude_deg>56.164520029</latitude_deg>
-      <longitude_deg>10.1453534275</longitude_deg>
-      <elevation>100.0</elevation>
-      <heading_deg>0.0</heading_deg>
-    </spherical_coordinates>
-    <model name="asphalt_plane">
+    <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors"><render_engine>ogre2</render_engine></plugin>
+    <plugin filename="gz-sim-imu-system" name="gz::sim::systems::Imu"/>
+    <light name="sun" type="directional"><cast_shadows>1</cast_shadows><pose>0 0 60 0 0 0</pose><diffuse>0.86 0.84 0.78 1</diffuse><specular>0.25 0.25 0.22 1</specular><attenuation><range>1000</range><constant>0.9</constant><linear>0.01</linear><quadratic>0.001</quadratic></attenuation><direction>-0.45 0.15 -0.88</direction></light>
+    <gravity>0 0 -9.8</gravity>
+    <physics type="ode"><ode><solver><type>quick</type><iters>50</iters><sor>1.3</sor></solver><constraints><cfm>0</cfm><erp>0.2</erp><contact_max_correcting_vel>100</contact_max_correcting_vel><contact_surface_layer>0.001</contact_surface_layer></constraints></ode><max_step_size>0.01</max_step_size><real_time_factor>1</real_time_factor><real_time_update_rate>100</real_time_update_rate></physics>
+    <scene><grid>false</grid><origin_visual>false</origin_visual><ambient>0.45 0.45 0.43 1</ambient><background>0.62 0.68 0.72 1</background><shadows>1</shadows></scene>
+    <spherical_coordinates><surface_model>EARTH_WGS84</surface_model><latitude_deg>56.164520029</latitude_deg><longitude_deg>10.1453534275</longitude_deg><elevation>100.0</elevation><heading_deg>0.0</heading_deg></spherical_coordinates>
+    <gui fullscreen="0"><camera name="user_camera"><pose>-24 -43 28 0 0.58 0.65</pose><view_controller>orbit</view_controller></camera></gui>
+    <model name="urban_collision_base">
       <static>1</static>
+      <pose>10.000 -7.500 -0.035 0 0 0.000000</pose>
       <link name="link">
-        <collision name="collision">
-          <geometry>
-            <box>
-              <size>20 20 0.1</size>
-            </box>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <visual name="visual">
-          <cast_shadows>0</cast_shadows>
-          <geometry>
-            <box>
-              <size>20 20 0.1</size>
-            </box>
-          </geometry>
-          <material>
-            <ambient>0.42 0.42 0.42 1.0</ambient>
-            <diffuse>0.42 0.42 0.42 1.0</diffuse>
-            <specular>0.12 0.12 0.12 1.0</specular>
-            <pbr>
-              <metal>
-                <albedo_map>model://asphalt_plane/materials/textures/tarmac.png</albedo_map>
-                <roughness>0.85</roughness>
-                <metalness>0.0</metalness>
-              </metal>
-            </pbr>
-          </material>
-        </visual>
-        <velocity_decay>
-          <linear>0</linear>
-          <angular>0</angular>
-        </velocity_decay>
-        <self_collide>0</self_collide>
-        <kinematic>0</kinematic>
-        <gravity>1</gravity>
+        <collision name="collision"><geometry><box><size>74.000 67.000 0.060</size></box></geometry></collision>
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>74.000 67.000 0.060</size></box></geometry><material><ambient>0.18 0.18 0.17 1</ambient><diffuse>0.18 0.18 0.17 1</diffuse><specular>0.08 0.08 0.08 1</specular><pbr><metal><albedo_map>model://urban_surface/materials/textures/urban_asphalt.png</albedo_map><roughness>0.92</roughness><metalness>0.0</metalness></metal></pbr></material></visual>
       </link>
-      <pose>10 10 0 0 0 0</pose>
     </model>
-    <model name="asphalt_plane_0">
+    <model name="northwest_residential_lawn">
       <static>1</static>
+      <pose>-13.000 13.000 0.003 0 0 0.000000</pose>
       <link name="link">
-        <collision name="collision">
-          <geometry>
-            <box>
-              <size>20 20 0.1</size>
-            </box>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <visual name="visual">
-          <cast_shadows>0</cast_shadows>
-          <geometry>
-            <box>
-              <size>20 20 0.1</size>
-            </box>
-          </geometry>
-          <material>
-            <ambient>0.42 0.42 0.42 1.0</ambient>
-            <diffuse>0.42 0.42 0.42 1.0</diffuse>
-            <specular>0.12 0.12 0.12 1.0</specular>
-            <pbr>
-              <metal>
-                <albedo_map>model://asphalt_plane/materials/textures/tarmac.png</albedo_map>
-                <roughness>0.85</roughness>
-                <metalness>0.0</metalness>
-              </metal>
-            </pbr>
-          </material>
-        </visual>
-        <velocity_decay>
-          <linear>0</linear>
-          <angular>0</angular>
-        </velocity_decay>
-        <self_collide>0</self_collide>
-        <kinematic>0</kinematic>
-        <gravity>1</gravity>
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>24.000 24.000 0.012</size></box></geometry><material><ambient>0.26 0.48 0.20 1</ambient><diffuse>0.26 0.48 0.20 1</diffuse><specular>0.08 0.08 0.08 1</specular><pbr><metal><albedo_map>model://urban_surface/materials/textures/grass_lawn.png</albedo_map><roughness>0.95</roughness><metalness>0.0</metalness></metal></pbr></material></visual>
       </link>
-      <pose>10 -10 0 0 0 0</pose>
     </model>
-    <model name="asphalt_plane_1">
+    <model name="northeast_commercial_plaza">
       <static>1</static>
+      <pose>33.000 13.000 0.004 0 0 0.000000</pose>
       <link name="link">
-        <collision name="collision">
-          <geometry>
-            <box>
-              <size>20 20 0.1</size>
-            </box>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <visual name="visual">
-          <cast_shadows>0</cast_shadows>
-          <geometry>
-            <box>
-              <size>20 20 0.1</size>
-            </box>
-          </geometry>
-          <material>
-            <ambient>0.42 0.42 0.42 1.0</ambient>
-            <diffuse>0.42 0.42 0.42 1.0</diffuse>
-            <specular>0.12 0.12 0.12 1.0</specular>
-            <pbr>
-              <metal>
-                <albedo_map>model://asphalt_plane/materials/textures/tarmac.png</albedo_map>
-                <roughness>0.85</roughness>
-                <metalness>0.0</metalness>
-              </metal>
-            </pbr>
-          </material>
-        </visual>
-        <velocity_decay>
-          <linear>0</linear>
-          <angular>0</angular>
-        </velocity_decay>
-        <self_collide>0</self_collide>
-        <kinematic>0</kinematic>
-        <gravity>1</gravity>
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>22.000 20.000 0.012</size></box></geometry><material><ambient>0.62 0.61 0.58 1</ambient><diffuse>0.62 0.61 0.58 1</diffuse><specular>0.08 0.08 0.08 1</specular><pbr><metal><albedo_map>model://urban_surface/materials/textures/concrete_sidewalk.png</albedo_map><roughness>0.82</roughness><metalness>0.0</metalness></metal></pbr></material></visual>
       </link>
-      <pose>-10 10 0 0 0 0</pose>
     </model>
-    <model name="asphalt_plane_2">
+    <model name="southwest_cafe_patio">
       <static>1</static>
+      <pose>-12.000 -23.000 0.006 0 0 0.000000</pose>
       <link name="link">
-        <collision name="collision">
-          <geometry>
-            <box>
-              <size>20 20 0.1</size>
-            </box>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <visual name="visual">
-          <cast_shadows>0</cast_shadows>
-          <geometry>
-            <box>
-              <size>20 20 0.1</size>
-            </box>
-          </geometry>
-          <material>
-            <ambient>0.42 0.42 0.42 1.0</ambient>
-            <diffuse>0.42 0.42 0.42 1.0</diffuse>
-            <specular>0.12 0.12 0.12 1.0</specular>
-            <pbr>
-              <metal>
-                <albedo_map>model://asphalt_plane/materials/textures/tarmac.png</albedo_map>
-                <roughness>0.85</roughness>
-                <metalness>0.0</metalness>
-              </metal>
-            </pbr>
-          </material>
-        </visual>
-        <velocity_decay>
-          <linear>0</linear>
-          <angular>0</angular>
-        </velocity_decay>
-        <self_collide>0</self_collide>
-        <kinematic>0</kinematic>
-        <gravity>1</gravity>
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>22.000 17.000 0.012</size></box></geometry><material><ambient>0.52 0.50 0.45 1</ambient><diffuse>0.52 0.50 0.45 1</diffuse><specular>0.08 0.08 0.08 1</specular><pbr><metal><albedo_map>model://urban_surface/materials/textures/flagstone_patio.png</albedo_map><roughness>0.86</roughness><metalness>0.0</metalness></metal></pbr></material></visual>
       </link>
-      <pose>-10 -10 0 0 0 0</pose>
     </model>
-    <model name="asphalt_plane_3">
+    <model name="southeast_service_lawn">
       <static>1</static>
+      <pose>35.000 -27.000 0.003 0 0 0.000000</pose>
       <link name="link">
-        <collision name="collision">
-          <geometry>
-            <box>
-              <size>20 20 0.1</size>
-            </box>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <visual name="visual">
-          <cast_shadows>0</cast_shadows>
-          <geometry>
-            <box>
-              <size>20 20 0.1</size>
-            </box>
-          </geometry>
-          <material>
-            <ambient>0.42 0.42 0.42 1.0</ambient>
-            <diffuse>0.42 0.42 0.42 1.0</diffuse>
-            <specular>0.12 0.12 0.12 1.0</specular>
-            <pbr>
-              <metal>
-                <albedo_map>model://asphalt_plane/materials/textures/tarmac.png</albedo_map>
-                <roughness>0.85</roughness>
-                <metalness>0.0</metalness>
-              </metal>
-            </pbr>
-          </material>
-        </visual>
-        <velocity_decay>
-          <linear>0</linear>
-          <angular>0</angular>
-        </velocity_decay>
-        <self_collide>0</self_collide>
-        <kinematic>0</kinematic>
-        <gravity>1</gravity>
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>16.000 22.000 0.012</size></box></geometry><material><ambient>0.26 0.48 0.20 1</ambient><diffuse>0.26 0.48 0.20 1</diffuse><specular>0.08 0.08 0.08 1</specular><pbr><metal><albedo_map>model://urban_surface/materials/textures/grass_lawn.png</albedo_map><roughness>0.95</roughness><metalness>0.0</metalness></metal></pbr></material></visual>
       </link>
-      <pose>-10 -30 0 0 0 0</pose>
     </model>
-    <model name="asphalt_plane_4">
+    <model name="west_driveway_pavers">
       <static>1</static>
+      <pose>-5.000 10.000 0.007 0 0 0.000000</pose>
       <link name="link">
-        <collision name="collision">
-          <geometry>
-            <box>
-              <size>20 20 0.1</size>
-            </box>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <visual name="visual">
-          <cast_shadows>0</cast_shadows>
-          <geometry>
-            <box>
-              <size>20 20 0.1</size>
-            </box>
-          </geometry>
-          <material>
-            <ambient>0.42 0.42 0.42 1.0</ambient>
-            <diffuse>0.42 0.42 0.42 1.0</diffuse>
-            <specular>0.12 0.12 0.12 1.0</specular>
-            <pbr>
-              <metal>
-                <albedo_map>model://asphalt_plane/materials/textures/tarmac.png</albedo_map>
-                <roughness>0.85</roughness>
-                <metalness>0.0</metalness>
-              </metal>
-            </pbr>
-          </material>
-        </visual>
-        <velocity_decay>
-          <linear>0</linear>
-          <angular>0</angular>
-        </velocity_decay>
-        <self_collide>0</self_collide>
-        <kinematic>0</kinematic>
-        <gravity>1</gravity>
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>8.000 11.000 0.012</size></box></geometry><material><ambient>0.50 0.48 0.43 1</ambient><diffuse>0.50 0.48 0.43 1</diffuse><specular>0.08 0.08 0.08 1</specular><pbr><metal><albedo_map>model://urban_surface/materials/textures/driveway_pavers.png</albedo_map><roughness>0.88</roughness><metalness>0.0</metalness></metal></pbr></material></visual>
       </link>
-      <pose>10 -30 0 0 0 0</pose>
     </model>
-    <model name="asphalt_plane_5">
+    <model name="east_driveway_pavers">
       <static>1</static>
+      <pose>31.000 -14.000 0.007 0 0 0.000000</pose>
       <link name="link">
-        <collision name="collision">
-          <geometry>
-            <box>
-              <size>20 20 0.1</size>
-            </box>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <visual name="visual">
-          <cast_shadows>0</cast_shadows>
-          <geometry>
-            <box>
-              <size>20 20 0.1</size>
-            </box>
-          </geometry>
-          <material>
-            <ambient>0.42 0.42 0.42 1.0</ambient>
-            <diffuse>0.42 0.42 0.42 1.0</diffuse>
-            <specular>0.12 0.12 0.12 1.0</specular>
-            <pbr>
-              <metal>
-                <albedo_map>model://asphalt_plane/materials/textures/tarmac.png</albedo_map>
-                <roughness>0.85</roughness>
-                <metalness>0.0</metalness>
-              </metal>
-            </pbr>
-          </material>
-        </visual>
-        <velocity_decay>
-          <linear>0</linear>
-          <angular>0</angular>
-        </velocity_decay>
-        <self_collide>0</self_collide>
-        <kinematic>0</kinematic>
-        <gravity>1</gravity>
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>10.000 12.000 0.012</size></box></geometry><material><ambient>0.50 0.48 0.43 1</ambient><diffuse>0.50 0.48 0.43 1</diffuse><specular>0.08 0.08 0.08 1</specular><pbr><metal><albedo_map>model://urban_surface/materials/textures/driveway_pavers.png</albedo_map><roughness>0.88</roughness><metalness>0.0</metalness></metal></pbr></material></visual>
       </link>
-      <pose>30 -30 0 0 0 0</pose>
     </model>
-    <model name="asphalt_plane_6">
+    <model name="south_parking_lot">
       <static>1</static>
+      <pose>10.000 -34.000 0.005 0 0 0.000000</pose>
       <link name="link">
-        <collision name="collision">
-          <geometry>
-            <box>
-              <size>20 20 0.1</size>
-            </box>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <visual name="visual">
-          <cast_shadows>0</cast_shadows>
-          <geometry>
-            <box>
-              <size>20 20 0.1</size>
-            </box>
-          </geometry>
-          <material>
-            <ambient>0.42 0.42 0.42 1.0</ambient>
-            <diffuse>0.42 0.42 0.42 1.0</diffuse>
-            <specular>0.12 0.12 0.12 1.0</specular>
-            <pbr>
-              <metal>
-                <albedo_map>model://asphalt_plane/materials/textures/tarmac.png</albedo_map>
-                <roughness>0.85</roughness>
-                <metalness>0.0</metalness>
-              </metal>
-            </pbr>
-          </material>
-        </visual>
-        <velocity_decay>
-          <linear>0</linear>
-          <angular>0</angular>
-        </velocity_decay>
-        <self_collide>0</self_collide>
-        <kinematic>0</kinematic>
-        <gravity>1</gravity>
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>38.000 10.000 0.012</size></box></geometry><material><ambient>0.20 0.20 0.19 1</ambient><diffuse>0.20 0.20 0.19 1</diffuse><specular>0.08 0.08 0.08 1</specular><pbr><metal><albedo_map>model://urban_surface/materials/textures/parking_asphalt.png</albedo_map><roughness>0.9</roughness><metalness>0.0</metalness></metal></pbr></material></visual>
       </link>
-      <pose>30 10 0 0 0 0</pose>
     </model>
-    <model name="asphalt_plane_7">
+    <model name="main_north_south_road">
       <static>1</static>
+      <pose>20.000 -7.500 0.011 0 0 0.000000</pose>
       <link name="link">
-        <collision name="collision">
-          <geometry>
-            <box>
-              <size>20 20 0.1</size>
-            </box>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <visual name="visual">
-          <cast_shadows>0</cast_shadows>
-          <geometry>
-            <box>
-              <size>20 20 0.1</size>
-            </box>
-          </geometry>
-          <material>
-            <ambient>0.42 0.42 0.42 1.0</ambient>
-            <diffuse>0.42 0.42 0.42 1.0</diffuse>
-            <specular>0.12 0.12 0.12 1.0</specular>
-            <pbr>
-              <metal>
-                <albedo_map>model://asphalt_plane/materials/textures/tarmac.png</albedo_map>
-                <roughness>0.85</roughness>
-                <metalness>0.0</metalness>
-              </metal>
-            </pbr>
-          </material>
-        </visual>
-        <velocity_decay>
-          <linear>0</linear>
-          <angular>0</angular>
-        </velocity_decay>
-        <self_collide>0</self_collide>
-        <kinematic>0</kinematic>
-        <gravity>1</gravity>
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>8.200 65.000 0.014</size></box></geometry><material><ambient>0.18 0.18 0.17 1</ambient><diffuse>0.18 0.18 0.17 1</diffuse><specular>0.08 0.08 0.08 1</specular><pbr><metal><albedo_map>model://urban_surface/materials/textures/urban_asphalt.png</albedo_map><roughness>0.92</roughness><metalness>0.0</metalness></metal></pbr></material></visual>
       </link>
-      <pose>30 -10 0 0 0 0</pose>
     </model>
-    <model name="Fast Food">
+    <model name="main_east_west_road">
       <static>1</static>
+      <pose>10.000 0.000 0.012 0 0 0.000000</pose>
       <link name="link">
-        <pose>0 0 1.57966 0 0 0</pose>
-        <collision name="collision">
-          <geometry>
-            <mesh>
-              <uri>model://fast_food/meshes/fast_food.dae</uri>
-            </mesh>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <visual name="visual">
-          <geometry>
-            <mesh>
-              <uri>model://fast_food/meshes/fast_food.dae</uri>
-            </mesh>
-          </geometry>
-          <material>
-            <script>
-              <uri>model://fast_food/materials/scripts</uri>
-              <uri>model://fast_food/materials/textures</uri>
-              <name>FastFood/Diffuse</name>
-            </script>
-            <shader type="normal_map_object_space">
-              <normal_map>FastFood_Normal.png</normal_map>
-            </shader>
-          </material>
-        </visual>
-        <velocity_decay>
-          <linear>0</linear>
-          <angular>0</angular>
-        </velocity_decay>
-        <self_collide>0</self_collide>
-        <kinematic>0</kinematic>
-        <gravity>1</gravity>
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>70.000 8.200 0.014</size></box></geometry><material><ambient>0.18 0.18 0.17 1</ambient><diffuse>0.18 0.18 0.17 1</diffuse><specular>0.08 0.08 0.08 1</specular><pbr><metal><albedo_map>model://urban_surface/materials/textures/urban_asphalt.png</albedo_map><roughness>0.92</roughness><metalness>0.0</metalness></metal></pbr></material></visual>
       </link>
-      <pose>-5 -13 0 0 0 0</pose>
     </model>
-    <model name="Dumpster">
-      <link name="link">
-        <collision name="collision">
-          <geometry>
-            <mesh>
-              <uri>model://dumpster/meshes/dumpster.dae</uri>
-            </mesh>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <visual name="visual">
-          <geometry>
-            <mesh>
-              <uri>model://dumpster/meshes/dumpster.dae</uri>
-            </mesh>
-          </geometry>
-          <material>
-            <script>
-              <uri>model://dumpster/materials/scripts</uri>
-              <uri>model://dumpster/materials/textures</uri>
-              <name>Dumpster/Diffuse</name>
-            </script>
-          </material>
-        </visual>
-        <velocity_decay>
-          <linear>0</linear>
-          <angular>0</angular>
-        </velocity_decay>
-        <self_collide>0</self_collide>
-        <inertial>
-          <inertia>
-            <ixx>1</ixx>
-            <ixy>0</ixy>
-            <ixz>0</ixz>
-            <iyy>1</iyy>
-            <iyz>0</iyz>
-            <izz>1</izz>
-          </inertia>
-          <mass>1</mass>
-        </inertial>
-        <kinematic>0</kinematic>
-        <gravity>1</gravity>
-      </link>
-      <pose>-8.5 -12 0 0 0 0</pose>
-      <static>0</static>
-    </model>
-    <model name="drc_practice_yellow_parking_block">
+    <model name="south_service_road">
       <static>1</static>
+      <pose>12.000 -28.000 0.013 0 0 0.000000</pose>
       <link name="link">
-        <visual name="visual">
-          <geometry>
-            <mesh>
-              <uri>model://drc_practice_yellow_parking_block/meshes/block.dae</uri>
-            </mesh>
-          </geometry>
-        </visual>
-        <collision name="collision">
-          <geometry>
-            <mesh>
-              <uri>model://drc_practice_yellow_parking_block/meshes/block.dae</uri>
-            </mesh>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <velocity_decay>
-          <linear>0</linear>
-          <angular>0</angular>
-        </velocity_decay>
-        <self_collide>0</self_collide>
-        <kinematic>0</kinematic>
-        <gravity>1</gravity>
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>52.000 7.200 0.014</size></box></geometry><material><ambient>0.18 0.18 0.17 1</ambient><diffuse>0.18 0.18 0.17 1</diffuse><specular>0.08 0.08 0.08 1</specular><pbr><metal><albedo_map>model://urban_surface/materials/textures/urban_asphalt.png</albedo_map><roughness>0.92</roughness><metalness>0.0</metalness></metal></pbr></material></visual>
       </link>
-      <pose>-5 0 0 0 0 0</pose>
     </model>
-    <model name="drc_practice_yellow_parking_block_0">
+    <model name="sidewalk_w_ns">
       <static>1</static>
+      <pose>14.200 -7.500 0.018 0 0 0.000000</pose>
       <link name="link">
-        <visual name="visual">
-          <geometry>
-            <mesh>
-              <uri>model://drc_practice_yellow_parking_block/meshes/block.dae</uri>
-            </mesh>
-          </geometry>
-        </visual>
-        <collision name="collision">
-          <geometry>
-            <mesh>
-              <uri>model://drc_practice_yellow_parking_block/meshes/block.dae</uri>
-            </mesh>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <velocity_decay>
-          <linear>0</linear>
-          <angular>0</angular>
-        </velocity_decay>
-        <self_collide>0</self_collide>
-        <kinematic>0</kinematic>
-        <gravity>1</gravity>
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>2.200 65.000 0.018</size></box></geometry><material><ambient>0.62 0.61 0.58 1</ambient><diffuse>0.62 0.61 0.58 1</diffuse><specular>0.08 0.08 0.08 1</specular><pbr><metal><albedo_map>model://urban_surface/materials/textures/concrete_sidewalk.png</albedo_map><roughness>0.82</roughness><metalness>0.0</metalness></metal></pbr></material></visual>
       </link>
-      <pose>-5 -2.5 0 0 0 0</pose>
     </model>
-    <model name="drc_practice_yellow_parking_block_1">
+    <model name="sidewalk_e_ns">
       <static>1</static>
+      <pose>25.800 -7.500 0.018 0 0 0.000000</pose>
       <link name="link">
-        <visual name="visual">
-          <geometry>
-            <mesh>
-              <uri>model://drc_practice_yellow_parking_block/meshes/block.dae</uri>
-            </mesh>
-          </geometry>
-        </visual>
-        <collision name="collision">
-          <geometry>
-            <mesh>
-              <uri>model://drc_practice_yellow_parking_block/meshes/block.dae</uri>
-            </mesh>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <velocity_decay>
-          <linear>0</linear>
-          <angular>0</angular>
-        </velocity_decay>
-        <self_collide>0</self_collide>
-        <kinematic>0</kinematic>
-        <gravity>1</gravity>
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>2.200 65.000 0.018</size></box></geometry><material><ambient>0.62 0.61 0.58 1</ambient><diffuse>0.62 0.61 0.58 1</diffuse><specular>0.08 0.08 0.08 1</specular><pbr><metal><albedo_map>model://urban_surface/materials/textures/concrete_sidewalk.png</albedo_map><roughness>0.82</roughness><metalness>0.0</metalness></metal></pbr></material></visual>
       </link>
-      <pose>-5 2.5 0 0 0 0</pose>
     </model>
-    <model name="drc_practice_yellow_parking_block_2">
+    <model name="sidewalk_n_ew">
       <static>1</static>
+      <pose>10.000 5.800 0.018 0 0 0.000000</pose>
       <link name="link">
-        <visual name="visual">
-          <geometry>
-            <mesh>
-              <uri>model://drc_practice_yellow_parking_block/meshes/block.dae</uri>
-            </mesh>
-          </geometry>
-        </visual>
-        <collision name="collision">
-          <geometry>
-            <mesh>
-              <uri>model://drc_practice_yellow_parking_block/meshes/block.dae</uri>
-            </mesh>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <velocity_decay>
-          <linear>0</linear>
-          <angular>0</angular>
-        </velocity_decay>
-        <self_collide>0</self_collide>
-        <kinematic>0</kinematic>
-        <gravity>1</gravity>
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>70.000 2.200 0.018</size></box></geometry><material><ambient>0.62 0.61 0.58 1</ambient><diffuse>0.62 0.61 0.58 1</diffuse><specular>0.08 0.08 0.08 1</specular><pbr><metal><albedo_map>model://urban_surface/materials/textures/concrete_sidewalk.png</albedo_map><roughness>0.82</roughness><metalness>0.0</metalness></metal></pbr></material></visual>
       </link>
-      <pose>-4 2.5 0 0 0 0</pose>
     </model>
-    <model name="drc_practice_yellow_parking_block_3">
+    <model name="sidewalk_s_ew">
       <static>1</static>
+      <pose>10.000 -5.800 0.018 0 0 0.000000</pose>
       <link name="link">
-        <visual name="visual">
-          <geometry>
-            <mesh>
-              <uri>model://drc_practice_yellow_parking_block/meshes/block.dae</uri>
-            </mesh>
-          </geometry>
-        </visual>
-        <collision name="collision">
-          <geometry>
-            <mesh>
-              <uri>model://drc_practice_yellow_parking_block/meshes/block.dae</uri>
-            </mesh>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <velocity_decay>
-          <linear>0</linear>
-          <angular>0</angular>
-        </velocity_decay>
-        <self_collide>0</self_collide>
-        <kinematic>0</kinematic>
-        <gravity>1</gravity>
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>70.000 2.200 0.018</size></box></geometry><material><ambient>0.62 0.61 0.58 1</ambient><diffuse>0.62 0.61 0.58 1</diffuse><specular>0.08 0.08 0.08 1</specular><pbr><metal><albedo_map>model://urban_surface/materials/textures/concrete_sidewalk.png</albedo_map><roughness>0.82</roughness><metalness>0.0</metalness></metal></pbr></material></visual>
       </link>
-      <pose>-4 0 0 0 0 0</pose>
     </model>
-    <model name="drc_practice_yellow_parking_block_4">
+    <model name="sidewalk_n_service">
       <static>1</static>
+      <pose>12.000 -23.200 0.018 0 0 0.000000</pose>
       <link name="link">
-        <visual name="visual">
-          <geometry>
-            <mesh>
-              <uri>model://drc_practice_yellow_parking_block/meshes/block.dae</uri>
-            </mesh>
-          </geometry>
-        </visual>
-        <collision name="collision">
-          <geometry>
-            <mesh>
-              <uri>model://drc_practice_yellow_parking_block/meshes/block.dae</uri>
-            </mesh>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <velocity_decay>
-          <linear>0</linear>
-          <angular>0</angular>
-        </velocity_decay>
-        <self_collide>0</self_collide>
-        <kinematic>0</kinematic>
-        <gravity>1</gravity>
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>52.000 2.000 0.018</size></box></geometry><material><ambient>0.62 0.61 0.58 1</ambient><diffuse>0.62 0.61 0.58 1</diffuse><specular>0.08 0.08 0.08 1</specular><pbr><metal><albedo_map>model://urban_surface/materials/textures/concrete_sidewalk.png</albedo_map><roughness>0.82</roughness><metalness>0.0</metalness></metal></pbr></material></visual>
       </link>
-      <pose>-4 -2.5 0 0 0 0</pose>
     </model>
-    <model name="House 1">
+    <model name="sidewalk_s_service">
       <static>1</static>
+      <pose>12.000 -32.800 0.018 0 0 0.000000</pose>
       <link name="link">
-        <collision name="collision">
-          <geometry>
-            <mesh>
-              <uri>model://house_1/meshes/house_1.dae</uri>
-            </mesh>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <visual name="visual">
-          <geometry>
-            <mesh>
-              <uri>model://house_1/meshes/house_1.dae</uri>
-            </mesh>
-          </geometry>
-          <material>
-            <script>
-              <uri>model://house_1/materials/scripts</uri>
-              <uri>model://house_1/materials/textures</uri>
-              <name>House_1/Diffuse</name>
-            </script>
-            <shader type="normal_map_object_space">
-              <normal_map>House_1_Normal.png</normal_map>
-            </shader>
-          </material>
-        </visual>
-        <velocity_decay>
-          <linear>0</linear>
-          <angular>0</angular>
-        </velocity_decay>
-        <self_collide>0</self_collide>
-        <kinematic>0</kinematic>
-        <gravity>1</gravity>
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>52.000 2.000 0.018</size></box></geometry><material><ambient>0.62 0.61 0.58 1</ambient><diffuse>0.62 0.61 0.58 1</diffuse><specular>0.08 0.08 0.08 1</specular><pbr><metal><albedo_map>model://urban_surface/materials/textures/concrete_sidewalk.png</albedo_map><roughness>0.82</roughness><metalness>0.0</metalness></metal></pbr></material></visual>
       </link>
-      <pose>13 16 0 0 0 0</pose>
     </model>
-    <model name="House 2">
+    <model name="curb_w_ns_upper">
       <static>1</static>
+      <pose>15.400 15.200 0.060 0 0 0.000000</pose>
       <link name="link">
-        <collision name="collision">
-          <geometry>
-            <mesh>
-              <uri>model://house_2/meshes/house_2.dae</uri>
-            </mesh>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <visual name="visual">
-          <geometry>
-            <mesh>
-              <uri>model://house_2/meshes/house_2.dae</uri>
-            </mesh>
-          </geometry>
-          <material>
-            <script>
-              <uri>model://house_2/materials/scripts</uri>
-              <uri>model://house_2/materials/textures</uri>
-              <uri>model://house_1/materials/textures</uri>
-              <name>House_2/Diffuse</name>
-            </script>
-            <shader type="normal_map_object_space">
-              <normal_map>model://house_1/materials/textures/House_1_Normal.png</normal_map>
-            </shader>
-          </material>
-        </visual>
-        <velocity_decay>
-          <linear>0</linear>
-          <angular>0</angular>
-        </velocity_decay>
-        <self_collide>0</self_collide>
-        <kinematic>0</kinematic>
-        <gravity>1</gravity>
+        <collision name="collision"><geometry><box><size>0.250 20.000 0.120</size></box></geometry></collision>
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>0.250 20.000 0.120</size></box></geometry><material><ambient>0.72 0.71 0.67 1</ambient><diffuse>0.72 0.71 0.67 1</diffuse><specular>0.08 0.08 0.08 1</specular><pbr><metal><albedo_map>model://urban_surface/materials/textures/curb_concrete.png</albedo_map><roughness>0.8</roughness><metalness>0.0</metalness></metal></pbr></material></visual>
       </link>
-      <pose>0 15 0 0 0 0</pose>
     </model>
-    <model name="House 3">
+    <model name="curb_w_ns_lower">
       <static>1</static>
+      <pose>15.400 -20.000 0.060 0 0 0.000000</pose>
       <link name="link">
-        <collision name="collision">
-          <geometry>
-            <mesh>
-              <uri>model://house_3/meshes/house_3.dae</uri>
-            </mesh>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <visual name="visual">
-          <geometry>
-            <mesh>
-              <uri>model://house_3/meshes/house_3.dae</uri>
-            </mesh>
-          </geometry>
-          <material>
-            <script>
-              <uri>model://house_3/materials/scripts</uri>
-              <uri>model://house_3/materials/textures</uri>
-              <uri>model://house_1/materials/textures</uri>
-              <name>House_3/Diffuse</name>
-            </script>
-            <shader type="normal_map_object_space">
-              <normal_map>model://house_1/materials/textures/House_1_Normal.png</normal_map>
-            </shader>
-          </material>
-        </visual>
-        <velocity_decay>
-          <linear>0</linear>
-          <angular>0</angular>
-        </velocity_decay>
-        <self_collide>0</self_collide>
-        <kinematic>0</kinematic>
-        <gravity>1</gravity>
+        <collision name="collision"><geometry><box><size>0.250 25.000 0.120</size></box></geometry></collision>
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>0.250 25.000 0.120</size></box></geometry><material><ambient>0.72 0.71 0.67 1</ambient><diffuse>0.72 0.71 0.67 1</diffuse><specular>0.08 0.08 0.08 1</specular><pbr><metal><albedo_map>model://urban_surface/materials/textures/curb_concrete.png</albedo_map><roughness>0.8</roughness><metalness>0.0</metalness></metal></pbr></material></visual>
       </link>
-      <pose>-8 14 0 0 0 0</pose>
     </model>
-    <model name="mud_box">
+    <model name="curb_e_ns_upper">
       <static>1</static>
+      <pose>24.600 15.200 0.060 0 0 0.000000</pose>
       <link name="link">
-        <collision name="collision">
-          <geometry>
-            <box>
-              <size>8 10 0.2</size>
-            </box>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <visual name="visual_1">
-          <pose>-2 2.5 0 0 0 0</pose>
-          <cast_shadows>0</cast_shadows>
-          <geometry>
-            <box>
-              <size>4 5 0.2</size>
-            </box>
-          </geometry>
-          <material>
-            <script>
-              <uri>model://mud_box/materials/scripts</uri>
-              <uri>model://mud_box/materials/textures</uri>
-              <name>vrc/mud</name>
-            </script>
-          </material>
-        </visual>
-        <visual name="visual_2">
-          <pose>2 2.5 0 0 0 0</pose>
-          <cast_shadows>0</cast_shadows>
-          <geometry>
-            <box>
-              <size>4 5 0.2</size>
-            </box>
-          </geometry>
-          <material>
-            <script>
-              <uri>model://mud_box/materials/scripts</uri>
-              <uri>model://mud_box/materials/textures</uri>
-              <name>vrc/mud</name>
-            </script>
-          </material>
-        </visual>
-        <visual name="visual_3">
-          <pose>2 -2.5 0 0 0 0</pose>
-          <cast_shadows>0</cast_shadows>
-          <geometry>
-            <box>
-              <size>4 5 0.2</size>
-            </box>
-          </geometry>
-          <material>
-            <script>
-              <uri>model://mud_box/materials/scripts</uri>
-              <uri>model://mud_box/materials/textures</uri>
-              <name>vrc/mud</name>
-            </script>
-          </material>
-        </visual>
-        <visual name="visual_4">
-          <pose>-2 -2.5 0 0 0 0</pose>
-          <cast_shadows>0</cast_shadows>
-          <geometry>
-            <box>
-              <size>4 5 0.2</size>
-            </box>
-          </geometry>
-          <material>
-            <script>
-              <uri>model://mud_box/materials/scripts</uri>
-              <uri>model://mud_box/materials/textures</uri>
-              <name>vrc/mud</name>
-            </script>
-          </material>
-        </visual>
-        <velocity_decay>
-          <linear>0</linear>
-          <angular>0</angular>
-        </velocity_decay>
-        <self_collide>0</self_collide>
-        <kinematic>0</kinematic>
-        <gravity>1</gravity>
+        <collision name="collision"><geometry><box><size>0.250 20.000 0.120</size></box></geometry></collision>
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>0.250 20.000 0.120</size></box></geometry><material><ambient>0.72 0.71 0.67 1</ambient><diffuse>0.72 0.71 0.67 1</diffuse><specular>0.08 0.08 0.08 1</specular><pbr><metal><albedo_map>model://urban_surface/materials/textures/curb_concrete.png</albedo_map><roughness>0.8</roughness><metalness>0.0</metalness></metal></pbr></material></visual>
       </link>
-      <pose>-16.1 -21 0 0 0 0</pose>
     </model>
-    <model name="ladder">
+    <model name="curb_e_ns_lower">
       <static>1</static>
+      <pose>24.600 -20.000 0.060 0 0 0.000000</pose>
       <link name="link">
-        <collision name="step0">
-          <pose>0 -1 0.3 0 0 0</pose>
-          <geometry>
-            <box>
-              <size>0.9 0.1016 0.0381</size>
-            </box>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <collision name="step1">
-          <pose>0 -0.79106 0.59054 0 0 0</pose>
-          <geometry>
-            <box>
-              <size>0.9 0.1016 0.0381</size>
-            </box>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <collision name="step2">
-          <pose>0 -0.61509 0.89508 0 0 0</pose>
-          <geometry>
-            <box>
-              <size>0.9 0.1016 0.0381</size>
-            </box>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <collision name="step3">
-          <pose>0 -0.43912 1.19962 0 0 0</pose>
-          <geometry>
-            <box>
-              <size>0.9 0.1016 0.0381</size>
-            </box>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <collision name="step4">
-          <pose>0 -0.26315 1.50416 0 0 0</pose>
-          <geometry>
-            <box>
-              <size>0.9 0.1016 0.0381</size>
-            </box>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <collision name="step5">
-          <pose>0 -0.08718 1.8087 0 0 0</pose>
-          <geometry>
-            <box>
-              <size>0.9 0.1016 0.0381</size>
-            </box>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <collision name="step6">
-          <pose>0 0.08879 2.11324 0 0 0</pose>
-          <geometry>
-            <box>
-              <size>0.9 0.1016 0.0381</size>
-            </box>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <collision name="step7">
-          <pose>0 0.26476 2.41778 0 0 0</pose>
-          <geometry>
-            <box>
-              <size>0.9 0.1016 0.0381</size>
-            </box>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <collision name="landing">
-          <pose>0 0.73039 2.72432 0 0 0</pose>
-          <geometry>
-            <box>
-              <size>0.9 0.6096 0.0381</size>
-            </box>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <collision name="left_side_wall">
-          <pose>-0.43217 -0.37451 1.3386 1.0472 0 0</pose>
-          <geometry>
-            <box>
-              <size>0.0508 3.16758 0.13</size>
-            </box>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <collision name="left_side_landing_wall">
-          <pose>-0.43217 0.69819 2.667 0 0 0</pose>
-          <geometry>
-            <box>
-              <size>0.0508 0.67401 0.1524</size>
-            </box>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <collision name="left_railing_landing_3">
-          <pose>-0.433355 0.66933 3.81 1.5707 0 0</pose>
-          <geometry>
-            <cylinder>
-              <radius>0.02413</radius>
-              <length>0.73172</length>
-            </cylinder>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <collision name="left_railing_landing_2">
-          <pose>-0.433355 0.73166 3.5433 1.5707 0 0</pose>
-          <geometry>
-            <cylinder>
-              <radius>0.02413</radius>
-              <length>0.5588</length>
-            </cylinder>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <collision name="left_railing_landing_1">
-          <pose>-0.433355 0.73166 3.2766 1.5707 0 0</pose>
-          <geometry>
-            <cylinder>
-              <radius>0.02413</radius>
-              <length>0.5588</length>
-            </cylinder>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <collision name="left_railing_landing_0">
-          <pose>-0.433355 0.73166 3.0099 1.5707 0 0</pose>
-          <geometry>
-            <cylinder>
-              <radius>0.02413</radius>
-              <length>0.5588</length>
-            </cylinder>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <collision name="left_railing_landing_upright_back">
-          <pose>-0.433355 1.01088 3.2766 0 0 0</pose>
-          <geometry>
-            <cylinder>
-              <radius>0.02413</radius>
-              <length>1.0668</length>
-            </cylinder>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <collision name="left_railing_landing_upright_front">
-          <pose>-0.433355 0.45208 3.2766 0 0 0</pose>
-          <geometry>
-            <cylinder>
-              <radius>0.02413</radius>
-              <length>1.0668</length>
-            </cylinder>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <collision name="left_railing_upright_4">
-          <pose>-0.433355 0.0699 2.80986 1.03414 0 0</pose>
-          <geometry>
-            <cylinder>
-              <radius>0.02413</radius>
-              <length>0.57</length>
-            </cylinder>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <collision name="left_railing_upright_3">
-          <pose>-0.433355 -0.31006 2.15169 1.03414 0 0</pose>
-          <geometry>
-            <cylinder>
-              <radius>0.02413</radius>
-              <length>0.57</length>
-            </cylinder>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <collision name="left_railing_upright_2">
-          <pose>-0.433355 -0.6911 1.49172 1.03414 0 0</pose>
-          <geometry>
-            <cylinder>
-              <radius>0.02413</radius>
-              <length>0.57</length>
-            </cylinder>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <collision name="left_railing_upright_1">
-          <pose>-0.433355 -1.0732 0.82995 1.03414 0 0</pose>
-          <geometry>
-            <cylinder>
-              <radius>0.02413</radius>
-              <length>0.57</length>
-            </cylinder>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <collision name="left_railing_upright_0">
-          <pose>-0.433355 -1.45316 0.17179 1.03414 0 0</pose>
-          <geometry>
-            <cylinder>
-              <radius>0.02413</radius>
-              <length>0.57</length>
-            </cylinder>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <collision name="left_railing_long">
-          <pose>-0.433355 -0.781 1.9068 -0.523503 0 0</pose>
-          <geometry>
-            <cylinder>
-              <radius>0.02413</radius>
-              <length>4.42295</length>
-            </cylinder>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <collision name="right_side_wall">
-          <pose>0.43217 -0.37451 1.3386 1.0472 0 0</pose>
-          <geometry>
-            <box>
-              <size>0.0508 3.16758 0.13</size>
-            </box>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <collision name="right_side_landing_wall">
-          <pose>0.43217 0.69819 2.667 0 0 0</pose>
-          <geometry>
-            <box>
-              <size>0.0508 0.67401 0.1524</size>
-            </box>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <collision name="right_railing_landing_3">
-          <pose>0.433355 0.66933 3.81 1.5707 0 0</pose>
-          <geometry>
-            <cylinder>
-              <radius>0.02413</radius>
-              <length>0.73172</length>
-            </cylinder>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <collision name="right_railing_landing_2">
-          <pose>0.433355 0.73166 3.5433 1.5707 0 0</pose>
-          <geometry>
-            <cylinder>
-              <radius>0.02413</radius>
-              <length>0.5588</length>
-            </cylinder>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <collision name="right_railing_landing_1">
-          <pose>0.433355 0.73166 3.2766 1.5707 0 0</pose>
-          <geometry>
-            <cylinder>
-              <radius>0.02413</radius>
-              <length>0.5588</length>
-            </cylinder>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <collision name="right_railing_landing_0">
-          <pose>0.433355 0.73166 3.0099 1.5707 0 0</pose>
-          <geometry>
-            <cylinder>
-              <radius>0.02413</radius>
-              <length>0.5588</length>
-            </cylinder>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <collision name="right_railing_landing_upright_back">
-          <pose>0.433355 1.01088 3.2766 0 0 0</pose>
-          <geometry>
-            <cylinder>
-              <radius>0.02413</radius>
-              <length>1.0668</length>
-            </cylinder>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <collision name="right_railing_landing_upright_front">
-          <pose>0.433355 0.45208 3.2766 0 0 0</pose>
-          <geometry>
-            <cylinder>
-              <radius>0.02413</radius>
-              <length>1.0668</length>
-            </cylinder>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <collision name="right_railing_upright_4">
-          <pose>0.433355 0.0699 2.80986 1.03414 0 0</pose>
-          <geometry>
-            <cylinder>
-              <radius>0.02413</radius>
-              <length>0.57</length>
-            </cylinder>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <collision name="right_railing_upright_3">
-          <pose>0.433355 -0.31006 2.15169 1.03414 0 0</pose>
-          <geometry>
-            <cylinder>
-              <radius>0.02413</radius>
-              <length>0.57</length>
-            </cylinder>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <collision name="right_railing_upright_2">
-          <pose>0.433355 -0.6911 1.49172 1.03414 0 0</pose>
-          <geometry>
-            <cylinder>
-              <radius>0.02413</radius>
-              <length>0.57</length>
-            </cylinder>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <collision name="right_railing_upright_1">
-          <pose>0.433355 -1.0732 0.82995 1.03414 0 0</pose>
-          <geometry>
-            <cylinder>
-              <radius>0.02413</radius>
-              <length>0.57</length>
-            </cylinder>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <collision name="right_railing_upright_0">
-          <pose>0.433355 -1.45316 0.17179 1.03414 0 0</pose>
-          <geometry>
-            <cylinder>
-              <radius>0.02413</radius>
-              <length>0.57</length>
-            </cylinder>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <collision name="right_railing_long">
-          <pose>0.433355 -0.781 1.9068 -0.523503 0 0</pose>
-          <geometry>
-            <cylinder>
-              <radius>0.02413</radius>
-              <length>4.42295</length>
-            </cylinder>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <visual name="visual">
-          <geometry>
-            <mesh>
-              <uri>model://drc_practice_ladder/meshes/ladder.dae</uri>
-            </mesh>
-          </geometry>
-        </visual>
-        <velocity_decay>
-          <linear>0</linear>
-          <angular>0</angular>
-        </velocity_decay>
-        <self_collide>0</self_collide>
-        <kinematic>0</kinematic>
-        <gravity>1</gravity>
+        <collision name="collision"><geometry><box><size>0.250 25.000 0.120</size></box></geometry></collision>
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>0.250 25.000 0.120</size></box></geometry><material><ambient>0.72 0.71 0.67 1</ambient><diffuse>0.72 0.71 0.67 1</diffuse><specular>0.08 0.08 0.08 1</specular><pbr><metal><albedo_map>model://urban_surface/materials/textures/curb_concrete.png</albedo_map><roughness>0.8</roughness><metalness>0.0</metalness></metal></pbr></material></visual>
       </link>
-      <pose>-13 -13 0 0 0 0</pose>
     </model>
-    <model name="grey_wall">
+    <model name="curb_n_ew_left">
       <static>1</static>
+      <pose>-10.000 4.600 0.060 0 0 0.000000</pose>
       <link name="link">
-        <pose>0 0 1.4 0 0 0</pose>
-        <collision name="collision">
-          <geometry>
-            <box>
-              <size>7.5 0.2 2.8</size>
-            </box>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <visual name="visual">
-          <cast_shadows>0</cast_shadows>
-          <geometry>
-            <box>
-              <size>7.5 0.2 2.8</size>
-            </box>
-          </geometry>
-          <material>
-            <script>
-              <uri>model://grey_wall/materials/scripts</uri>
-              <uri>model://grey_wall/materials/textures</uri>
-              <name>vrc/grey_wall</name>
-            </script>
-          </material>
-        </visual>
-        <velocity_decay>
-          <linear>0</linear>
-          <angular>0</angular>
-        </velocity_decay>
-        <self_collide>0</self_collide>
-        <kinematic>0</kinematic>
-        <gravity>1</gravity>
+        <collision name="collision"><geometry><box><size>24.000 0.250 0.120</size></box></geometry></collision>
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>24.000 0.250 0.120</size></box></geometry><material><ambient>0.72 0.71 0.67 1</ambient><diffuse>0.72 0.71 0.67 1</diffuse><specular>0.08 0.08 0.08 1</specular><pbr><metal><albedo_map>model://urban_surface/materials/textures/curb_concrete.png</albedo_map><roughness>0.8</roughness><metalness>0.0</metalness></metal></pbr></material></visual>
       </link>
-      <pose>-16 -16 0 0 0 0</pose>
     </model>
-    <model name="grey_wall_0">
+    <model name="curb_n_ew_right">
       <static>1</static>
+      <pose>33.000 4.600 0.060 0 0 0.000000</pose>
       <link name="link">
-        <pose>0 0 1.4 0 0 0</pose>
-        <collision name="collision">
-          <geometry>
-            <box>
-              <size>7.5 0.2 2.8</size>
-            </box>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <visual name="visual">
-          <cast_shadows>0</cast_shadows>
-          <geometry>
-            <box>
-              <size>7.5 0.2 2.8</size>
-            </box>
-          </geometry>
-          <material>
-            <script>
-              <uri>model://grey_wall/materials/scripts</uri>
-              <uri>model://grey_wall/materials/textures</uri>
-              <name>vrc/grey_wall</name>
-            </script>
-          </material>
-        </visual>
-        <velocity_decay>
-          <linear>0</linear>
-          <angular>0</angular>
-        </velocity_decay>
-        <self_collide>0</self_collide>
-        <kinematic>0</kinematic>
-        <gravity>1</gravity>
+        <collision name="collision"><geometry><box><size>24.000 0.250 0.120</size></box></geometry></collision>
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>24.000 0.250 0.120</size></box></geometry><material><ambient>0.72 0.71 0.67 1</ambient><diffuse>0.72 0.71 0.67 1</diffuse><specular>0.08 0.08 0.08 1</specular><pbr><metal><albedo_map>model://urban_surface/materials/textures/curb_concrete.png</albedo_map><roughness>0.8</roughness><metalness>0.0</metalness></metal></pbr></material></visual>
       </link>
-      <pose>-12.15 -19.7 0 0 0 0</pose>
     </model>
-    <state world_name="test_city">
-      <sim_time>786 960000000</sim_time>
-      <real_time>788 773741868</real_time>
-      <wall_time>1402391362 370220840</wall_time>
-      <model name="Dumpster">
-        <pose>-8.64436 -11.8944 0.050849 4e-06 -0.000102 -2.96857</pose>
-        <link name="link">
-          <pose>-8.64436 -11.8944 0.050849 4e-06 -0.000102 -2.96857</pose>
-          <velocity>0 0 0 0 0 0</velocity>
-          <acceleration>0 0 0 0 0 0</acceleration>
-          <wrench>0 0 0 0 0 0</wrench>
-        </link>
-      </model>
-      <model name="Fast Food">
-        <pose>-5 -13 0 0 0 0</pose>
-        <link name="link">
-          <pose>-5 -13 1.57966 0 0 0</pose>
-          <velocity>0 0 0 0 0 0</velocity>
-          <acceleration>0 0 0 0 0 0</acceleration>
-          <wrench>0 0 0 0 0 0</wrench>
-        </link>
-      </model>
-      <model name="House 1">
-        <pose>13 16 0 0 0 0</pose>
-        <link name="link">
-          <pose>13 16 0 0 0 0</pose>
-          <velocity>0 0 0 0 0 0</velocity>
-          <acceleration>0 0 0 0 0 0</acceleration>
-          <wrench>0 0 0 0 0 0</wrench>
-        </link>
-      </model>
-      <model name="House 2">
-        <pose>0 15 0 0 0 0</pose>
-        <link name="link">
-          <pose>0 15 0 0 0 0</pose>
-          <velocity>0 0 0 0 0 0</velocity>
-          <acceleration>0 0 0 0 0 0</acceleration>
-          <wrench>0 0 0 0 0 0</wrench>
-        </link>
-      </model>
-      <model name="House 3">
-        <pose>-8 14 0 0 0 0</pose>
-        <link name="link">
-          <pose>-8 14 0 0 0 0</pose>
-          <velocity>0 0 0 0 0 0</velocity>
-          <acceleration>0 0 0 0 0 0</acceleration>
-          <wrench>0 0 0 0 0 0</wrench>
-        </link>
-      </model>
-      <model name="asphalt_plane">
-        <pose>10 10 0 0 0 0</pose>
-        <link name="link">
-          <pose>10 10 0 0 0 0</pose>
-          <velocity>0 0 0 0 0 0</velocity>
-          <acceleration>0 0 0 0 0 0</acceleration>
-          <wrench>0 0 0 0 0 0</wrench>
-        </link>
-      </model>
-      <model name="asphalt_plane_0">
-        <pose>10 -10 0 0 0 0</pose>
-        <link name="link">
-          <pose>10 -10 0 0 0 0</pose>
-          <velocity>0 0 0 0 0 0</velocity>
-          <acceleration>0 0 0 0 0 0</acceleration>
-          <wrench>0 0 0 0 0 0</wrench>
-        </link>
-      </model>
-      <model name="asphalt_plane_1">
-        <pose>-10 10 0 0 0 0</pose>
-        <link name="link">
-          <pose>-10 10 0 0 0 0</pose>
-          <velocity>0 0 0 0 0 0</velocity>
-          <acceleration>0 0 0 0 0 0</acceleration>
-          <wrench>0 0 0 0 0 0</wrench>
-        </link>
-      </model>
-      <model name="asphalt_plane_2">
-        <pose>-10 -10 0 0 0 0</pose>
-        <link name="link">
-          <pose>-10 -10 0 0 0 0</pose>
-          <velocity>0 0 0 0 0 0</velocity>
-          <acceleration>0 0 0 0 0 0</acceleration>
-          <wrench>0 0 0 0 0 0</wrench>
-        </link>
-      </model>
-      <model name="asphalt_plane_3">
-        <pose>-10 -30 0 0 0 0</pose>
-        <link name="link">
-          <pose>-10 -30 0 0 0 0</pose>
-          <velocity>0 0 0 0 0 0</velocity>
-          <acceleration>0 0 0 0 0 0</acceleration>
-          <wrench>0 0 0 0 0 0</wrench>
-        </link>
-      </model>
-      <model name="asphalt_plane_4">
-        <pose>10 -30 0 0 0 0</pose>
-        <link name="link">
-          <pose>10 -30 0 0 0 0</pose>
-          <velocity>0 0 0 0 0 0</velocity>
-          <acceleration>0 0 0 0 0 0</acceleration>
-          <wrench>0 0 0 0 0 0</wrench>
-        </link>
-      </model>
-      <model name="asphalt_plane_5">
-        <pose>30 -30 0 0 0 0</pose>
-        <link name="link">
-          <pose>30 -30 0 0 0 0</pose>
-          <velocity>0 0 0 0 0 0</velocity>
-          <acceleration>0 0 0 0 0 0</acceleration>
-          <wrench>0 0 0 0 0 0</wrench>
-        </link>
-      </model>
-      <model name="asphalt_plane_6">
-        <pose>30 10 0 0 0 0</pose>
-        <link name="link">
-          <pose>30 10 0 0 0 0</pose>
-          <velocity>0 0 0 0 0 0</velocity>
-          <acceleration>0 0 0 0 0 0</acceleration>
-          <wrench>0 0 0 0 0 0</wrench>
-        </link>
-      </model>
-      <model name="asphalt_plane_7">
-        <pose>30 -10 0 0 0 0</pose>
-        <link name="link">
-          <pose>30 -10 0 0 0 0</pose>
-          <velocity>0 0 0 0 0 0</velocity>
-          <acceleration>0 0 0 0 0 0</acceleration>
-          <wrench>0 0 0 0 0 0</wrench>
-        </link>
-      </model>
-      <model name="drc_practice_yellow_parking_block">
-        <pose>-5 0 0 0 0 0</pose>
-        <link name="link">
-          <pose>-5 0 0 0 0 0</pose>
-          <velocity>0 0 0 0 0 0</velocity>
-          <acceleration>0 0 0 0 0 0</acceleration>
-          <wrench>0 0 0 0 0 0</wrench>
-        </link>
-      </model>
-      <model name="drc_practice_yellow_parking_block_0">
-        <pose>-5 -2.5 0 0 0 0</pose>
-        <link name="link">
-          <pose>-5 -2.5 0 0 0 0</pose>
-          <velocity>0 0 0 0 0 0</velocity>
-          <acceleration>0 0 0 0 0 0</acceleration>
-          <wrench>0 0 0 0 0 0</wrench>
-        </link>
-      </model>
-      <model name="drc_practice_yellow_parking_block_1">
-        <pose>-5 2.5 0 0 0 0</pose>
-        <link name="link">
-          <pose>-5 2.5 0 0 0 0</pose>
-          <velocity>0 0 0 0 0 0</velocity>
-          <acceleration>0 0 0 0 0 0</acceleration>
-          <wrench>0 0 0 0 0 0</wrench>
-        </link>
-      </model>
-      <model name="drc_practice_yellow_parking_block_2">
-        <pose>-4 2.5 0 0 0 0</pose>
-        <link name="link">
-          <pose>-4 2.5 0 0 0 0</pose>
-          <velocity>0 0 0 0 0 0</velocity>
-          <acceleration>0 0 0 0 0 0</acceleration>
-          <wrench>0 0 0 0 0 0</wrench>
-        </link>
-      </model>
-      <model name="drc_practice_yellow_parking_block_3">
-        <pose>-4 0 0 0 0 0</pose>
-        <link name="link">
-          <pose>-4 0 0 0 0 0</pose>
-          <velocity>0 0 0 0 0 0</velocity>
-          <acceleration>0 0 0 0 0 0</acceleration>
-          <wrench>0 0 0 0 0 0</wrench>
-        </link>
-      </model>
-      <model name="drc_practice_yellow_parking_block_4">
-        <pose>-4 -2.5 0 0 0 0</pose>
-        <link name="link">
-          <pose>-4 -2.5 0 0 0 0</pose>
-          <velocity>0 0 0 0 0 0</velocity>
-          <acceleration>0 0 0 0 0 0</acceleration>
-          <wrench>0 0 0 0 0 0</wrench>
-        </link>
-      </model>
-      <model name="grey_wall">
-        <pose>-16 -16 0 0 0 0</pose>
-        <link name="link">
-          <pose>-16 -16 1.4 0 0 0</pose>
-          <velocity>0 0 0 0 0 0</velocity>
-          <acceleration>0 0 0 0 0 0</acceleration>
-          <wrench>0 0 0 0 0 0</wrench>
-        </link>
-      </model>
-      <model name="grey_wall_0">
-        <pose>-12.15 -19.7 0 0 0 -1.57378</pose>
-        <link name="link">
-          <pose>-12.15 -19.7 1.4 0 0 -1.57378</pose>
-          <velocity>0 0 0 0 0 0</velocity>
-          <acceleration>0 0 0 0 0 0</acceleration>
-          <wrench>0 0 0 0 0 0</wrench>
-        </link>
-      </model>
-      <model name="ground_plane">
-        <pose>0 0 0 0 0 0</pose>
-        <link name="link">
-          <pose>0 0 0 0 0 0</pose>
-          <velocity>0 0 0 0 0 0</velocity>
-          <acceleration>0 0 0 0 0 0</acceleration>
-          <wrench>0 0 0 0 0 0</wrench>
-        </link>
-      </model>
-      <model name="ladder">
-        <pose>-13.3 -15.3 0.1 0 0 -3.1415</pose>
-        <link name="link">
-          <pose>-13.3 -15.3 0.1 0 0 -3.1415</pose>
-          <velocity>0 0 0 0 0 0</velocity>
-          <acceleration>0 0 0 0 0 0</acceleration>
-          <wrench>0 0 0 0 0 0</wrench>
-        </link>
-      </model>
-      <model name="mud_box">
-        <pose>-16.1 -21 0 0 0 0</pose>
-        <link name="link">
-          <pose>-16.1 -21 0 0 0 0</pose>
-          <velocity>0 0 0 0 0 0</velocity>
-          <acceleration>0 0 0 0 0 0</acceleration>
-          <wrench>0 0 0 0 0 0</wrench>
-        </link>
-      </model>
-    </state>
-    <gui fullscreen="0">
-      <camera name="user_camera">
-        <pose>-15 0 4.57585 0 0.317796 0</pose>
-        <view_controller>orbit</view_controller>
-      </camera>
-    </gui>
-    <model name="Gas Station">
+    <model name="curb_s_ew_left">
       <static>1</static>
+      <pose>-10.000 -4.600 0.060 0 0 0.000000</pose>
       <link name="link">
-        <pose>0 0 0 0 0 0</pose>
-        <collision name="collision">
-          <geometry>
-            <mesh>
-              <uri>model://gas_station/meshes/gas_station.dae</uri>
-            </mesh>
-          </geometry>
-          <max_contacts>10</max_contacts>
-          <surface>
-            <bounce />
-            <friction>
-              <ode />
-            </friction>
-            <contact>
-              <ode />
-            </contact>
-          </surface>
-        </collision>
-        <visual name="visual">
-          <geometry>
-            <mesh>
-              <uri>model://gas_station/meshes/gas_station.dae</uri>
-            </mesh>
-          </geometry>
-          <material>
-            <script>
-              <uri>model://gas_station/materials/scripts</uri>
-              <uri>model://gas_station/materials/textures</uri>
-              <name>GasStation/Diffuse</name>
-            </script>
-            <shader type="normal_map_object_space">
-              <normal_map>GasStation_Normal.png</normal_map>
-            </shader>
-          </material>
-        </visual>
-        <velocity_decay>
-          <linear>0</linear>
-          <angular>0</angular>
-        </velocity_decay>
-        <self_collide>0</self_collide>
-        <kinematic>0</kinematic>
-        <gravity>1</gravity>
+        <collision name="collision"><geometry><box><size>24.000 0.250 0.120</size></box></geometry></collision>
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>24.000 0.250 0.120</size></box></geometry><material><ambient>0.72 0.71 0.67 1</ambient><diffuse>0.72 0.71 0.67 1</diffuse><specular>0.08 0.08 0.08 1</specular><pbr><metal><albedo_map>model://urban_surface/materials/textures/curb_concrete.png</albedo_map><roughness>0.8</roughness><metalness>0.0</metalness></metal></pbr></material></visual>
       </link>
-      <pose>25 -13 0 0 0 -1.5708</pose>
+    </model>
+    <model name="curb_s_ew_right">
+      <static>1</static>
+      <pose>33.000 -4.600 0.060 0 0 0.000000</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>24.000 0.250 0.120</size></box></geometry></collision>
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>24.000 0.250 0.120</size></box></geometry><material><ambient>0.72 0.71 0.67 1</ambient><diffuse>0.72 0.71 0.67 1</diffuse><specular>0.08 0.08 0.08 1</specular><pbr><metal><albedo_map>model://urban_surface/materials/textures/curb_concrete.png</albedo_map><roughness>0.8</roughness><metalness>0.0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="curb_service_n">
+      <static>1</static>
+      <pose>12.000 -24.400 0.060 0 0 0.000000</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>52.000 0.250 0.120</size></box></geometry></collision>
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>52.000 0.250 0.120</size></box></geometry><material><ambient>0.72 0.71 0.67 1</ambient><diffuse>0.72 0.71 0.67 1</diffuse><specular>0.08 0.08 0.08 1</specular><pbr><metal><albedo_map>model://urban_surface/materials/textures/curb_concrete.png</albedo_map><roughness>0.8</roughness><metalness>0.0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="curb_service_s">
+      <static>1</static>
+      <pose>12.000 -31.600 0.060 0 0 0.000000</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>52.000 0.250 0.120</size></box></geometry></collision>
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>52.000 0.250 0.120</size></box></geometry><material><ambient>0.72 0.71 0.67 1</ambient><diffuse>0.72 0.71 0.67 1</diffuse><specular>0.08 0.08 0.08 1</specular><pbr><metal><albedo_map>model://urban_surface/materials/textures/curb_concrete.png</albedo_map><roughness>0.8</roughness><metalness>0.0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="ew_center_yellow_line">
+      <static>1</static>
+      <pose>10.000 0.000 0.033 0 0 0.000000</pose>
+      <link name="link">
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>66.000 0.120 0.010</size></box></geometry><material><ambient>0.95 0.78 0.12 1</ambient><diffuse>0.95 0.78 0.12 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="ns_center_yellow_line">
+      <static>1</static>
+      <pose>20.000 -7.500 0.034 0 0 0.000000</pose>
+      <link name="link">
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>0.120 59.000 0.010</size></box></geometry><material><ambient>0.95 0.78 0.12 1</ambient><diffuse>0.95 0.78 0.12 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="service_center_yellow_line">
+      <static>1</static>
+      <pose>12.000 -28.000 0.035 0 0 0.000000</pose>
+      <link name="link">
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>48.000 0.100 0.010</size></box></geometry><material><ambient>0.95 0.78 0.12 1</ambient><diffuse>0.95 0.78 0.12 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="west_crosswalk_stripe_0">
+      <static>1</static>
+      <pose>-16.000 -2.900 0.040 0 0 0.000000</pose>
+      <link name="link">
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>1.000 0.420 0.012</size></box></geometry><material><ambient>0.92 0.92 0.88 1</ambient><diffuse>0.92 0.92 0.88 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="west_crosswalk_stripe_n_0">
+      <static>1</static>
+      <pose>-16.000 2.900 0.040 0 0 0.000000</pose>
+      <link name="link">
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>1.000 0.420 0.012</size></box></geometry><material><ambient>0.92 0.92 0.88 1</ambient><diffuse>0.92 0.92 0.88 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="west_crosswalk_stripe_1">
+      <static>1</static>
+      <pose>-14.000 -2.900 0.040 0 0 0.000000</pose>
+      <link name="link">
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>1.000 0.420 0.012</size></box></geometry><material><ambient>0.92 0.92 0.88 1</ambient><diffuse>0.92 0.92 0.88 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="west_crosswalk_stripe_n_1">
+      <static>1</static>
+      <pose>-14.000 2.900 0.040 0 0 0.000000</pose>
+      <link name="link">
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>1.000 0.420 0.012</size></box></geometry><material><ambient>0.92 0.92 0.88 1</ambient><diffuse>0.92 0.92 0.88 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="west_crosswalk_stripe_2">
+      <static>1</static>
+      <pose>-12.000 -2.900 0.040 0 0 0.000000</pose>
+      <link name="link">
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>1.000 0.420 0.012</size></box></geometry><material><ambient>0.92 0.92 0.88 1</ambient><diffuse>0.92 0.92 0.88 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="west_crosswalk_stripe_n_2">
+      <static>1</static>
+      <pose>-12.000 2.900 0.040 0 0 0.000000</pose>
+      <link name="link">
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>1.000 0.420 0.012</size></box></geometry><material><ambient>0.92 0.92 0.88 1</ambient><diffuse>0.92 0.92 0.88 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="west_crosswalk_stripe_3">
+      <static>1</static>
+      <pose>-10.000 -2.900 0.040 0 0 0.000000</pose>
+      <link name="link">
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>1.000 0.420 0.012</size></box></geometry><material><ambient>0.92 0.92 0.88 1</ambient><diffuse>0.92 0.92 0.88 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="west_crosswalk_stripe_n_3">
+      <static>1</static>
+      <pose>-10.000 2.900 0.040 0 0 0.000000</pose>
+      <link name="link">
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>1.000 0.420 0.012</size></box></geometry><material><ambient>0.92 0.92 0.88 1</ambient><diffuse>0.92 0.92 0.88 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="west_crosswalk_stripe_4">
+      <static>1</static>
+      <pose>-8.000 -2.900 0.040 0 0 0.000000</pose>
+      <link name="link">
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>1.000 0.420 0.012</size></box></geometry><material><ambient>0.92 0.92 0.88 1</ambient><diffuse>0.92 0.92 0.88 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="west_crosswalk_stripe_n_4">
+      <static>1</static>
+      <pose>-8.000 2.900 0.040 0 0 0.000000</pose>
+      <link name="link">
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>1.000 0.420 0.012</size></box></geometry><material><ambient>0.92 0.92 0.88 1</ambient><diffuse>0.92 0.92 0.88 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="west_crosswalk_stripe_5">
+      <static>1</static>
+      <pose>-6.000 -2.900 0.040 0 0 0.000000</pose>
+      <link name="link">
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>1.000 0.420 0.012</size></box></geometry><material><ambient>0.92 0.92 0.88 1</ambient><diffuse>0.92 0.92 0.88 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="west_crosswalk_stripe_n_5">
+      <static>1</static>
+      <pose>-6.000 2.900 0.040 0 0 0.000000</pose>
+      <link name="link">
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>1.000 0.420 0.012</size></box></geometry><material><ambient>0.92 0.92 0.88 1</ambient><diffuse>0.92 0.92 0.88 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="west_crosswalk_stripe_6">
+      <static>1</static>
+      <pose>-4.000 -2.900 0.040 0 0 0.000000</pose>
+      <link name="link">
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>1.000 0.420 0.012</size></box></geometry><material><ambient>0.92 0.92 0.88 1</ambient><diffuse>0.92 0.92 0.88 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="west_crosswalk_stripe_n_6">
+      <static>1</static>
+      <pose>-4.000 2.900 0.040 0 0 0.000000</pose>
+      <link name="link">
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>1.000 0.420 0.012</size></box></geometry><material><ambient>0.92 0.92 0.88 1</ambient><diffuse>0.92 0.92 0.88 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="west_crosswalk_stripe_7">
+      <static>1</static>
+      <pose>-2.000 -2.900 0.040 0 0 0.000000</pose>
+      <link name="link">
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>1.000 0.420 0.012</size></box></geometry><material><ambient>0.92 0.92 0.88 1</ambient><diffuse>0.92 0.92 0.88 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="west_crosswalk_stripe_n_7">
+      <static>1</static>
+      <pose>-2.000 2.900 0.040 0 0 0.000000</pose>
+      <link name="link">
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>1.000 0.420 0.012</size></box></geometry><material><ambient>0.92 0.92 0.88 1</ambient><diffuse>0.92 0.92 0.88 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="south_crosswalk_stripe_0">
+      <static>1</static>
+      <pose>17.000 -18.000 0.041 0 0 0.000000</pose>
+      <link name="link">
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>0.420 1.000 0.012</size></box></geometry><material><ambient>0.92 0.92 0.88 1</ambient><diffuse>0.92 0.92 0.88 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="south_crosswalk_stripe_e_0">
+      <static>1</static>
+      <pose>23.000 -18.000 0.041 0 0 0.000000</pose>
+      <link name="link">
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>0.420 1.000 0.012</size></box></geometry><material><ambient>0.92 0.92 0.88 1</ambient><diffuse>0.92 0.92 0.88 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="south_crosswalk_stripe_1">
+      <static>1</static>
+      <pose>17.000 -16.000 0.041 0 0 0.000000</pose>
+      <link name="link">
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>0.420 1.000 0.012</size></box></geometry><material><ambient>0.92 0.92 0.88 1</ambient><diffuse>0.92 0.92 0.88 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="south_crosswalk_stripe_e_1">
+      <static>1</static>
+      <pose>23.000 -16.000 0.041 0 0 0.000000</pose>
+      <link name="link">
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>0.420 1.000 0.012</size></box></geometry><material><ambient>0.92 0.92 0.88 1</ambient><diffuse>0.92 0.92 0.88 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="south_crosswalk_stripe_2">
+      <static>1</static>
+      <pose>17.000 -14.000 0.041 0 0 0.000000</pose>
+      <link name="link">
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>0.420 1.000 0.012</size></box></geometry><material><ambient>0.92 0.92 0.88 1</ambient><diffuse>0.92 0.92 0.88 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="south_crosswalk_stripe_e_2">
+      <static>1</static>
+      <pose>23.000 -14.000 0.041 0 0 0.000000</pose>
+      <link name="link">
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>0.420 1.000 0.012</size></box></geometry><material><ambient>0.92 0.92 0.88 1</ambient><diffuse>0.92 0.92 0.88 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="south_crosswalk_stripe_3">
+      <static>1</static>
+      <pose>17.000 -12.000 0.041 0 0 0.000000</pose>
+      <link name="link">
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>0.420 1.000 0.012</size></box></geometry><material><ambient>0.92 0.92 0.88 1</ambient><diffuse>0.92 0.92 0.88 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="south_crosswalk_stripe_e_3">
+      <static>1</static>
+      <pose>23.000 -12.000 0.041 0 0 0.000000</pose>
+      <link name="link">
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>0.420 1.000 0.012</size></box></geometry><material><ambient>0.92 0.92 0.88 1</ambient><diffuse>0.92 0.92 0.88 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="south_crosswalk_stripe_4">
+      <static>1</static>
+      <pose>17.000 -10.000 0.041 0 0 0.000000</pose>
+      <link name="link">
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>0.420 1.000 0.012</size></box></geometry><material><ambient>0.92 0.92 0.88 1</ambient><diffuse>0.92 0.92 0.88 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="south_crosswalk_stripe_e_4">
+      <static>1</static>
+      <pose>23.000 -10.000 0.041 0 0 0.000000</pose>
+      <link name="link">
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>0.420 1.000 0.012</size></box></geometry><material><ambient>0.92 0.92 0.88 1</ambient><diffuse>0.92 0.92 0.88 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="south_crosswalk_stripe_5">
+      <static>1</static>
+      <pose>17.000 -8.000 0.041 0 0 0.000000</pose>
+      <link name="link">
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>0.420 1.000 0.012</size></box></geometry><material><ambient>0.92 0.92 0.88 1</ambient><diffuse>0.92 0.92 0.88 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="south_crosswalk_stripe_e_5">
+      <static>1</static>
+      <pose>23.000 -8.000 0.041 0 0 0.000000</pose>
+      <link name="link">
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>0.420 1.000 0.012</size></box></geometry><material><ambient>0.92 0.92 0.88 1</ambient><diffuse>0.92 0.92 0.88 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="parking_bay_line_0">
+      <static>1</static>
+      <pose>-4.000 -34.000 0.042 0 0 0.000000</pose>
+      <link name="link">
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>0.100 7.500 0.010</size></box></geometry><material><ambient>0.88 0.88 0.82 1</ambient><diffuse>0.88 0.88 0.82 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="parking_bay_line_1">
+      <static>1</static>
+      <pose>2.000 -34.000 0.042 0 0 0.000000</pose>
+      <link name="link">
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>0.100 7.500 0.010</size></box></geometry><material><ambient>0.88 0.88 0.82 1</ambient><diffuse>0.88 0.88 0.82 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="parking_bay_line_2">
+      <static>1</static>
+      <pose>8.000 -34.000 0.042 0 0 0.000000</pose>
+      <link name="link">
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>0.100 7.500 0.010</size></box></geometry><material><ambient>0.88 0.88 0.82 1</ambient><diffuse>0.88 0.88 0.82 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="parking_bay_line_3">
+      <static>1</static>
+      <pose>14.000 -34.000 0.042 0 0 0.000000</pose>
+      <link name="link">
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>0.100 7.500 0.010</size></box></geometry><material><ambient>0.88 0.88 0.82 1</ambient><diffuse>0.88 0.88 0.82 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="parking_bay_line_4">
+      <static>1</static>
+      <pose>20.000 -34.000 0.042 0 0 0.000000</pose>
+      <link name="link">
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>0.100 7.500 0.010</size></box></geometry><material><ambient>0.88 0.88 0.82 1</ambient><diffuse>0.88 0.88 0.82 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="parking_bay_line_5">
+      <static>1</static>
+      <pose>26.000 -34.000 0.042 0 0 0.000000</pose>
+      <link name="link">
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>0.100 7.500 0.010</size></box></geometry><material><ambient>0.88 0.88 0.82 1</ambient><diffuse>0.88 0.88 0.82 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="parking_back_line">
+      <static>1</static>
+      <pose>11.000 -37.800 0.042 0 0 0.000000</pose>
+      <link name="link">
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>36.000 0.100 0.010</size></box></geometry><material><ambient>0.88 0.88 0.82 1</ambient><diffuse>0.88 0.88 0.82 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="parking_block_0">
+      <static>1</static>
+      <pose>-0.800 -31.100 0.110 0 0 0.000000</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>1.850 0.240 0.220</size></box></geometry></collision>
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>1.850 0.240 0.220</size></box></geometry><material><ambient>0.84 0.68 0.10 1</ambient><diffuse>0.84 0.68 0.10 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="parking_block_1">
+      <static>1</static>
+      <pose>5.200 -31.100 0.110 0 0 0.000000</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>1.850 0.240 0.220</size></box></geometry></collision>
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>1.850 0.240 0.220</size></box></geometry><material><ambient>0.84 0.68 0.10 1</ambient><diffuse>0.84 0.68 0.10 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="parking_block_2">
+      <static>1</static>
+      <pose>11.200 -31.100 0.110 0 0 0.000000</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>1.850 0.240 0.220</size></box></geometry></collision>
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>1.850 0.240 0.220</size></box></geometry><material><ambient>0.84 0.68 0.10 1</ambient><diffuse>0.84 0.68 0.10 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="parking_block_3">
+      <static>1</static>
+      <pose>17.200 -31.100 0.110 0 0 0.000000</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>1.850 0.240 0.220</size></box></geometry></collision>
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>1.850 0.240 0.220</size></box></geometry><material><ambient>0.84 0.68 0.10 1</ambient><diffuse>0.84 0.68 0.10 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
     </model>
     <include>
-      <name>urban_detail_test_fast_food_anchor</name>
+      <name>house_west</name>
+      <uri>model://house_3</uri>
+      <static>1</static>
+      <pose>-15.000 14.000 0.000 0 0 0.000000</pose>
+    </include>
+    <include>
+      <name>house_center</name>
+      <uri>model://house_2</uri>
+      <static>1</static>
+      <pose>-4.000 15.000 0.000 0 0 0.000000</pose>
+    </include>
+    <include>
+      <name>house_east</name>
+      <uri>model://house_1</uri>
+      <static>1</static>
+      <pose>8.000 15.000 0.000 0 0 0.000000</pose>
+    </include>
+    <include>
+      <name>gas_station_forecourt</name>
+      <uri>model://gas_station</uri>
+      <static>1</static>
+      <pose>32.000 -13.000 0.000 0 0 -1.570800</pose>
+    </include>
+    <include>
+      <name>corner_fast_food</name>
       <uri>model://fast_food</uri>
+      <static>1</static>
       <pose>-14.000 -17.000 0.000 0 0 1.570800</pose>
     </include>
     <include>
-      <name>urban_detail_test_cafe_table_1</name>
+      <name>cafe_table_1</name>
       <uri>model://cafe_table</uri>
-      <pose>-7.500 -20.500 0.000 0 0 0.200000</pose>
+      <static>1</static>
+      <pose>-9.000 -22.000 0.000 0 0 0.200000</pose>
     </include>
     <include>
-      <name>urban_detail_test_cafe_table_2</name>
+      <name>cafe_table_2</name>
       <uri>model://cafe_table</uri>
-      <pose>-3.200 -20.000 0.000 0 0 -0.400000</pose>
+      <static>1</static>
+      <pose>-5.200 -21.500 0.000 0 0 -0.400000</pose>
     </include>
     <include>
-      <name>urban_detail_test_dumpster_service</name>
+      <name>cafe_table_3</name>
+      <uri>model://cafe_table</uri>
+      <static>1</static>
+      <pose>-12.400 -25.000 0.000 0 0 0.800000</pose>
+    </include>
+    <include>
+      <name>dumpster_service</name>
       <uri>model://dumpster</uri>
-      <pose>-17.500 -25.000 0.000 0 0 1.570800</pose>
+      <static>1</static>
+      <pose>-18.000 -25.000 0.000 0 0 1.570800</pose>
     </include>
     <include>
-      <name>urban_detail_test_cardboard_stack_1</name>
+      <name>cardboard_stack_1</name>
       <uri>model://cardboard_box</uri>
-      <pose>-15.500 -26.200 0.000 0 0 0.300000</pose>
+      <static>1</static>
+      <pose>-16.000 -26.200 0.000 0 0 0.300000</pose>
     </include>
     <include>
-      <name>urban_detail_test_cardboard_stack_2</name>
+      <name>cardboard_stack_2</name>
       <uri>model://cardboard_box</uri>
-      <pose>-14.500 -25.700 0.000 0 0 -0.200000</pose>
+      <static>1</static>
+      <pose>-15.000 -25.700 0.000 0 0 -0.200000</pose>
     </include>
     <include>
-      <name>urban_detail_test_fire_hydrant_corner</name>
+      <name>hydrant_sw_corner</name>
       <uri>model://fire_hydrant</uri>
-      <pose>-12.500 -6.800 0.000 0 0 0.000000</pose>
+      <static>1</static>
+      <pose>-13.200 -6.900 0.000 0 0 0.000000</pose>
     </include>
     <include>
-      <name>urban_detail_test_hatchback_red_curb</name>
+      <name>postbox_residential</name>
+      <uri>model://postbox</uri>
+      <static>1</static>
+      <pose>12.500 6.800 0.000 0 0 1.570800</pose>
+    </include>
+    <include>
+      <name>red_hatchback_parking</name>
       <uri>model://hatchback_red</uri>
-      <pose>4.500 -35.000 0.000 0 0 1.570800</pose>
+      <static>1</static>
+      <pose>2.200 -35.000 0.000 0 0 1.570800</pose>
     </include>
     <include>
-      <name>urban_detail_test_hatchback_blue_curb</name>
+      <name>blue_hatchback_parking</name>
       <uri>model://hatchback_blue</uri>
-      <pose>13.000 -35.000 0.000 0 0 1.570800</pose>
+      <static>1</static>
+      <pose>10.200 -35.000 0.000 0 0 1.570800</pose>
     </include>
     <include>
-      <name>urban_detail_test_pickup_curb</name>
+      <name>pickup_at_gas_station</name>
       <uri>model://pickup</uri>
-      <pose>28.000 -24.000 0.000 0 0 3.141600</pose>
+      <static>1</static>
+      <pose>29.000 -21.000 0.000 0 0 3.141600</pose>
     </include>
     <include>
-      <name>urban_detail_test_suv_curb</name>
+      <name>suv_parallel_parked</name>
       <uri>model://suv</uri>
-      <pose>36.000 -5.000 0.000 0 0 -1.570800</pose>
+      <static>1</static>
+      <pose>36.000 -5.800 0.000 0 0 -1.570800</pose>
     </include>
     <include>
-      <name>urban_detail_test_bus_stop_bus</name>
+      <name>bus_at_stop</name>
       <uri>model://bus</uri>
-      <pose>34.500 13.000 0.000 0 0 3.141600</pose>
+      <static>1</static>
+      <pose>35.000 12.000 0.000 0 0 3.141600</pose>
     </include>
     <include>
-      <name>urban_detail_test_stop_sign_sw</name>
+      <name>stop_sign_sw</name>
       <uri>model://stop_sign</uri>
-      <pose>-1.200 -1.200 0.000 0 0 0.785400</pose>
+      <static>1</static>
+      <pose>-1.200 -5.700 0.000 0 0 0.785400</pose>
     </include>
     <include>
-      <name>urban_detail_test_stop_sign_ne</name>
+      <name>stop_sign_ne</name>
       <uri>model://stop_sign</uri>
-      <pose>21.200 1.200 0.000 0 0 -2.356200</pose>
+      <static>1</static>
+      <pose>25.900 5.600 0.000 0 0 -2.356200</pose>
     </include>
     <include>
-      <name>urban_detail_test_stop_light_main</name>
+      <name>traffic_light_main</name>
       <uri>model://stop_light_post</uri>
-      <pose>20.500 -19.000 0.000 0 0 0.000000</pose>
+      <static>1</static>
+      <pose>25.200 -5.400 0.000 0 0 0.000000</pose>
     </include>
     <include>
-      <name>urban_detail_test_lamp_1</name>
+      <name>traffic_light_secondary</name>
+      <uri>model://stop_light_post</uri>
+      <static>1</static>
+      <pose>14.800 5.200 0.000 0 0 3.141600</pose>
+    </include>
+    <include>
+      <name>lamp_post_nw_1</name>
       <uri>model://lamp_post</uri>
-      <pose>-13.500 7.500 0.000 0 0 0.000000</pose>
+      <static>1</static>
+      <pose>-17.500 6.900 0.000 0 0 0.000000</pose>
     </include>
     <include>
-      <name>urban_detail_test_lamp_2</name>
+      <name>lamp_post_nw_2</name>
       <uri>model://lamp_post</uri>
-      <pose>7.000 8.500 0.000 0 0 0.000000</pose>
+      <static>1</static>
+      <pose>9.500 6.900 0.000 0 0 0.000000</pose>
     </include>
     <include>
-      <name>urban_detail_test_lamp_3</name>
+      <name>lamp_post_e_1</name>
       <uri>model://lamp_post</uri>
-      <pose>29.500 8.000 0.000 0 0 0.000000</pose>
+      <static>1</static>
+      <pose>27.500 6.900 0.000 0 0 0.000000</pose>
     </include>
     <include>
-      <name>urban_detail_test_lamp_4</name>
+      <name>lamp_post_service_1</name>
       <uri>model://lamp_post</uri>
-      <pose>31.000 -33.000 0.000 0 0 0.000000</pose>
+      <static>1</static>
+      <pose>-9.500 -23.000 0.000 0 0 0.000000</pose>
     </include>
     <include>
-      <name>urban_detail_test_oak_nw_1</name>
+      <name>lamp_post_service_2</name>
+      <uri>model://lamp_post</uri>
+      <static>1</static>
+      <pose>31.000 -32.900 0.000 0 0 0.000000</pose>
+    </include>
+    <include>
+      <name>oak_tree_lawn_1</name>
       <uri>model://oak_tree</uri>
-      <pose>-18.000 8.500 0.000 0 0 0.400000</pose>
+      <static>1</static>
+      <pose>-22.000 10.000 0.000 0 0 0.400000</pose>
     </include>
     <include>
-      <name>urban_detail_test_oak_nw_2</name>
+      <name>oak_tree_lawn_2</name>
       <uri>model://oak_tree</uri>
-      <pose>-16.000 15.000 0.000 0 0 2.100000</pose>
+      <static>1</static>
+      <pose>-18.000 21.000 0.000 0 0 2.100000</pose>
     </include>
     <include>
-      <name>urban_detail_test_pine_e_1</name>
+      <name>pine_tree_service_1</name>
       <uri>model://pine_tree</uri>
-      <pose>40.500 -17.000 0.000 0 0 1.000000</pose>
+      <static>1</static>
+      <pose>41.000 -18.000 0.000 0 0 1.000000</pose>
     </include>
     <include>
-      <name>urban_detail_test_pine_e_2</name>
+      <name>pine_tree_service_2</name>
       <uri>model://pine_tree</uri>
+      <static>1</static>
       <pose>41.000 -31.000 0.000 0 0 2.400000</pose>
     </include>
     <include>
-      <name>urban_detail_test_cone_1</name>
+      <name>construction_cone_1</name>
       <uri>model://construction_cone</uri>
+      <static>1</static>
       <pose>23.000 -27.000 0.000 0 0 0.000000</pose>
     </include>
     <include>
-      <name>urban_detail_test_cone_2</name>
+      <name>construction_cone_2</name>
       <uri>model://construction_cone</uri>
+      <static>1</static>
       <pose>25.000 -27.000 0.000 0 0 0.000000</pose>
     </include>
     <include>
-      <name>urban_detail_test_barrel_1</name>
+      <name>construction_barrel_1</name>
       <uri>model://construction_barrel</uri>
+      <static>1</static>
       <pose>24.000 -29.000 0.000 0 0 0.000000</pose>
     </include>
     <include>
-      <name>urban_detail_test_cinder_block_1</name>
+      <name>cinder_block_1</name>
       <uri>model://cinder_block</uri>
+      <static>1</static>
       <pose>27.000 -29.000 0.000 0 0 0.400000</pose>
     </include>
+    <model name="bus_stop_sign_post">
+      <static>1</static>
+      <pose>30.200 6.900 1.000 0 0 0.000000</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>0.080 0.080 2.000</size></box></geometry></collision>
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>0.080 0.080 2.000</size></box></geometry><material><ambient>0.32 0.32 0.30 1</ambient><diffuse>0.32 0.32 0.30 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="bus_stop_sign_plate">
+      <static>1</static>
+      <pose>30.200 6.900 2.100 0 0 0.000000</pose>
+      <link name="link">
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>0.750 0.080 0.550</size></box></geometry><material><ambient>0.05 0.23 0.85 1</ambient><diffuse>0.05 0.23 0.85 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="parking_sign_post">
+      <static>1</static>
+      <pose>-2.400 -31.700 1.000 0 0 0.000000</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>0.080 0.080 2.000</size></box></geometry></collision>
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>0.080 0.080 2.000</size></box></geometry><material><ambient>0.32 0.32 0.30 1</ambient><diffuse>0.32 0.32 0.30 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
+    <model name="parking_sign_plate">
+      <static>1</static>
+      <pose>-2.400 -31.700 2.100 0 0 0.000000</pose>
+      <link name="link">
+        
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>0.750 0.080 0.550</size></box></geometry><material><ambient>0.05 0.23 0.85 1</ambient><diffuse>0.05 0.23 0.85 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
+      </link>
+    </model>
   </world>
 </sdf>

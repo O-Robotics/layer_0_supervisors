@@ -18,6 +18,8 @@
           </mesh>
         </geometry>
         <material>
+          <ambient>1 1 1 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
           <script>
             <uri>model://gas_station/materials/scripts</uri>
             <uri>model://gas_station/materials/textures</uri>
@@ -26,6 +28,13 @@
           <shader type="normal_map_tangent_space">
             <normal_map>GasStation_Normal.png</normal_map>
           </shader>
+          <pbr>
+            <metal>
+              <albedo_map>model://gas_station/materials/textures/GasStation_Diffuse.png</albedo_map>
+              <roughness>0.78</roughness>
+              <metalness>0.0</metalness>
+            </metal>
+          </pbr>
         </material>
       </visual>
     </link>

@@ -20,6 +20,17 @@
             <scale>0.01 0.01 0.01</scale>
           </mesh>
         </geometry>
+        <material>
+          <ambient>1 1 1 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <pbr>
+            <metal>
+              <albedo_map>model://stop_light_post/materials/textures/stop_light.png</albedo_map>
+              <roughness>0.68</roughness>
+              <metalness>0.0</metalness>
+            </metal>
+          </pbr>
+        </material>
       </visual>
 
     </link>

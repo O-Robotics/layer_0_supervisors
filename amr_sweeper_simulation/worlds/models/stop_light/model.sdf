@@ -25,6 +25,17 @@
             <scale>0.01 0.01 0.01</scale>
           </mesh>
         </geometry>
+        <material>
+          <ambient>1 1 1 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <pbr>
+            <metal>
+              <albedo_map>model://stop_light/materials/textures/stop_light.png</albedo_map>
+              <roughness>0.68</roughness>
+              <metalness>0.0</metalness>
+            </metal>
+          </pbr>
+        </material>
       </visual>
 
       <visual name="red">
@@ -41,6 +52,7 @@
             <name>StopLight/Light</name>
           </script>
           <ambient>1 0 0 1</ambient>
+          <diffuse>1 0 0 1</diffuse>
           <specular>1 0 0 1</specular>
           <!-- Turn a light on by uncommenting emissive -->
           <!--emissive>1 0 0 1</emissive-->
@@ -61,6 +73,7 @@
             <name>StopLight/Light</name>
           </script>
           <ambient>1 1 0 1</ambient>
+          <diffuse>1 1 0 1</diffuse>
           <specular>1 1 0 1</specular>
           <!--emissive>1 1 0 1</emissive-->
         </material>
@@ -80,6 +93,7 @@
             <name>StopLight/Light</name>
           </script>
           <ambient>0 1 0 1</ambient>
+          <diffuse>0 1 0 1</diffuse>
           <specular>0 1 0 1</specular>
           <!--emissive>0 1 0 1</emissive-->
         </material>

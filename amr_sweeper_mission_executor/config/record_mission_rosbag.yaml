@@ -41,7 +41,7 @@ topics:
   - /amr_sweeper/navigation/waypoint_follower/transition_event
 
 # Runtime mapping outputs used during missions.
-  - /amr_sweeper/mapping/global_costmap
+  - /amr_sweeper/mapping/static_costmap
   - /amr_sweeper/local_costmap/costmap_raw
   - /amr_sweeper/local_costmap/costmap_updates
   - /amr_sweeper/global_costmap/costmap_raw

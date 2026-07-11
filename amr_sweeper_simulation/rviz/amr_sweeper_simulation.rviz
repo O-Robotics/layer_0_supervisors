@@ -2,21 +2,7 @@ Panels:
   - Class: rviz_common/Displays
     Name: Displays
     Property Tree Widget:
-      Expanded:
-        - /Global Options1
-        - /Grid1
-        - /RobotModel1
-        - /TF1
-        - /Wheel Odometry1
-        - /Localization Odometry1
-        - /Depth Scan1
-        - /Mapping Costmap1
-        - /Nav2 Global Costmap1
-        - /Nav2 Local Costmap1
-        - /Global Footprint1
-        - /Local Footprint1
-        - /Global Plan1
-        - /Local Plan1
+      Expanded: ~
       Splitter Ratio: 0.58
     Tree Height: 860
   - Class: rviz_common/Views
@@ -95,16 +81,16 @@ Visualization Manager:
 
     - Alpha: 0.7
       Class: rviz_default_plugins/Map
-      Color Scheme: raw
+      Color Scheme: costmap
       Draw Behind: false
       Enabled: true
-      Name: Mapping Costmap
+      Name: Static Costmap
       Topic:
         Depth: 5
         Durability Policy: Transient Local
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: __NS_PREFIX__/mapping/global_costmap
+        Value: __NS_PREFIX__/mapping/static_costmap
       Use Timestamp: false
       Value: true
 
@@ -113,7 +99,7 @@ Visualization Manager:
       Color Scheme: costmap
       Draw Behind: false
       Enabled: true
-      Name: Nav2 Global Costmap
+      Name: Global Costmap
       Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -125,10 +111,10 @@ Visualization Manager:
 
     - Alpha: 0.7
       Class: rviz_default_plugins/Map
-      Color Scheme: raw
+      Color Scheme: costmap
       Draw Behind: false
       Enabled: true
-      Name: Nav2 Local Costmap
+      Name: Local Costmap
       Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -299,8 +285,4 @@ Window Geometry:
   Width: 1700
   X: 60
   Y: 60
-
-
-
-
 

@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<sdf version="1.8">
+  <model name="urban_surface">
+    <static>1</static>
+    <link name="link"/>
+  </model>
+</sdf>

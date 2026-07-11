@@ -3460,6 +3460,16 @@ void MissionExecutorNode::promoteRuntimeCostmapArtifacts(
   const srv::EndMission::Request & request) const
 {
   if (!promote_runtime_costmap_on_completed_mission_) {
+    context_document["persistent_costmap_promoted"] = false;
+    context_document["persistent_costmap_promotion_skip_reason"] =
+      "runtime_costmap_promotion_disabled";
+    return;
+  }
+  const std::string mission_type = toLower(context_document.value("mission_type", std::string{}));
+  if (mission_type == kScheduledMissionType || mission_type == kLocalScheduledMissionType) {
+    context_document["persistent_costmap_promoted"] = false;
+    context_document["persistent_costmap_promotion_skip_reason"] =
+      "scheduled_mission_static_costmap_is_parser_owned";
     return;
   }
   const std::string normalized_outcome = toLower(defaultIfEmpty(request.outcome, "completed"));
@@ -3479,6 +3489,13 @@ void MissionExecutorNode::promoteRuntimeCostmapArtifacts(
   if (runtime_costmap_yaml.empty() || persistent_costmap_yaml.empty() ||
     !std::filesystem::exists(runtime_costmap_yaml))
   {
+    context_document["persistent_costmap_promoted"] = false;
+    context_document["persistent_costmap_promotion_skip_reason"] =
+      runtime_costmap_yaml.empty() ?
+      "no_runtime_costmap_configured" :
+      (persistent_costmap_yaml.empty() ?
+      "no_persistent_costmap_destination_configured" :
+      "runtime_costmap_file_not_found");
     return;
   }
 
@@ -3502,6 +3519,9 @@ void MissionExecutorNode::promoteRuntimeCostmapArtifacts(
           normalized_outcome.c_str());
       }
       if (!promote_runtime_costmap) {
+        context_document["persistent_costmap_promoted"] = false;
+        context_document["persistent_costmap_promotion_skip_reason"] =
+          "mission_outcome_not_completed";
         return;
       }
       merged_costmap = mergeCostmaps(persistent_costmap, runtime_costmap);
@@ -3515,6 +3535,9 @@ void MissionExecutorNode::promoteRuntimeCostmapArtifacts(
         normalized_outcome.c_str());
     }
     if (!promote_runtime_costmap) {
+      context_document["persistent_costmap_promoted"] = false;
+      context_document["persistent_costmap_promotion_skip_reason"] =
+        "mission_outcome_not_completed";
       return;
     }
     saveCostmapArtifacts(merged_costmap, persistent_costmap_image, persistent_costmap_yaml);
@@ -3944,9 +3967,9 @@ void MissionExecutorNode::recordMissionExecutionEnd(
 {
   const auto now = std::chrono::system_clock::now();
   const std::string actual_end_utc = formatUtcTimestamp(now);
-  const std::string normalized_outcome = defaultIfEmpty(request.outcome, "completed");
+  const std::string normalized_outcome = toLower(defaultIfEmpty(request.outcome, "completed"));
   const std::string runtime_status =
-    toLower(normalized_outcome) == "completed" ? kRuntimeStatusCompleted : kRuntimeStatusAborted;
+    normalized_outcome == "completed" ? kRuntimeStatusCompleted : kRuntimeStatusAborted;
 
   double actual_duration_seconds = 0.0;
   if (context_document.contains("run_started_at") && context_document.at("run_started_at").is_string()) {
@@ -4785,7 +4808,6 @@ void MissionExecutorNode::stopMissionRosbagRecording()
 
   if (!rosbag_context_file.empty() && std::filesystem::exists(rosbag_context_file)) {
     auto context_document = loadJsonDocument(rosbag_context_file);
-    context_document["rosbag_recording_started"] = false;
     context_document["rosbag_output_directory"] = rosbag_output_directory;
     context_document["rosbag_log_file"] = rosbag_log_file;
     context_document["rosbag_metadata_present"] = metadata_present;
