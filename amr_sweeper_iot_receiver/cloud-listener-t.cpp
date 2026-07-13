@@ -4,6 +4,7 @@
 #include <csignal>
 #include <cctype>
 #include <cstdint>
+#include <ctime>
 #include <cstdlib>
 #include <cstring>
 #include <deque>
@@ -60,13 +61,31 @@ struct PendingTwinUpdate
   std::string payload;
 };
 
+struct ActivePackageReportInfo
+{
+  std::string package_id;
+  std::int64_t version {};
+};
+
+struct ReportedStateContext
+{
+  struct ListenerContext * listener_context = nullptr;
+  std::string package_id;
+  std::int64_t version {};
+  std::string status;
+  std::string confirmation_key;
+  std::string payload_json;
+};
+
 struct ListenerContext
 {
   std::string hostname;
   std::string robot_api_key;
+  IOTHUB_DEVICE_CLIENT_LL_HANDLE device_client_handle = nullptr;
   std::mutex state_mutex;
   std::deque<PendingTwinUpdate> pending_twin_updates;
   std::optional<std::string> last_processed_active_package;
+  std::optional<std::string> last_confirmed_reported_status_key;
   bool startup_twin_requested = false;
   bool startup_twin_completed = false;
 };
@@ -139,6 +158,52 @@ std::string unescape_double_quoted(const std::string & value)
   }
 
   return result;
+}
+
+std::string escape_json_string(const std::string & value)
+{
+  std::ostringstream escaped;
+
+  for (unsigned char ch : value) {
+    switch (ch) {
+      case '\\':
+        escaped << "\\\\";
+        break;
+      case '"':
+        escaped << "\\\"";
+        break;
+      case '\b':
+        escaped << "\\b";
+        break;
+      case '\f':
+        escaped << "\\f";
+        break;
+      case '\n':
+        escaped << "\\n";
+        break;
+      case '\r':
+        escaped << "\\r";
+        break;
+      case '\t':
+        escaped << "\\t";
+        break;
+      default:
+        if (ch < 0x20) {
+          escaped << "\\u"
+                  << std::hex
+                  << std::setw(4)
+                  << std::setfill('0')
+                  << static_cast<unsigned int>(ch)
+                  << std::dec
+                  << std::setfill(' ');
+        } else {
+          escaped << static_cast<char>(ch);
+        }
+        break;
+    }
+  }
+
+  return escaped.str();
 }
 
 std::string strip_unquoted_comment(const std::string & value)
@@ -514,6 +579,33 @@ std::string require_json_array_field(const std::string & json_object, const std:
   return value;
 }
 
+std::string current_timestamp_utc_iso8601()
+{
+  const std::time_t now = std::time(nullptr);
+  std::tm time_components {};
+
+#if defined(_WIN32)
+  if (gmtime_s(&time_components, &now) != 0) {
+    throw std::runtime_error("failed to convert current time to UTC");
+  }
+#else
+  if (gmtime_r(&now, &time_components) == nullptr) {
+    throw std::runtime_error("failed to convert current time to UTC");
+  }
+#endif
+
+  std::ostringstream formatted;
+  formatted << std::put_time(&time_components, "%Y-%m-%dT%H:%M:%SZ");
+  return formatted.str();
+}
+
+std::string reported_status_confirmation_key(
+  const ActivePackageReportInfo & package_info,
+  const std::string & status)
+{
+  return package_info.package_id + "|" + std::to_string(package_info.version) + "|" + status;
+}
+
 std::vector<std::string> split_top_level_array_elements(const std::string & json_array)
 {
   const std::string array_text = trim(json_array);
@@ -759,6 +851,23 @@ std::string calculate_sha256_checksum(const std::filesystem::path & path)
   return "sha256:" + hex_output.str();
 }
 
+std::optional<ActivePackageReportInfo> try_parse_active_package_report_info(
+  const std::string & active_package_json,
+  std::string * error_message = nullptr)
+{
+  try {
+    ActivePackageReportInfo package_info;
+    package_info.package_id = require_json_string_field(active_package_json, "packageId");
+    package_info.version = require_json_integer_field(active_package_json, "version");
+    return package_info;
+  } catch (const std::exception & ex) {
+    if (error_message != nullptr) {
+      *error_message = ex.what();
+    }
+    return std::nullopt;
+  }
+}
+
 bool existing_file_matches_checksum(
   const std::filesystem::path & path,
   const std::string & expected_checksum,
@@ -788,15 +897,17 @@ bool existing_file_matches_checksum(
   }
 }
 
-void download_and_verify_manifest_files(
+bool download_and_verify_manifest_files(
   const Manifest & manifest,
   const std::filesystem::path & manifest_path,
   const ListenerContext & listener_context)
 {
   if (manifest.files.empty()) {
     std::cout << ERROR << "MANIFEST HAS NO FILES TO DOWNLOAD" << std::endl;
-    return;
+    return false;
   }
+
+  bool all_files_verified = true;
 
   for (const ManifestFileEntry & file : manifest.files) {
     try {
@@ -825,6 +936,7 @@ void download_and_verify_manifest_files(
             &error_message)) {
         std::cerr << ERROR << "FAILED TO SAVE MANIFEST FILE: " << file.file_name << ": "
                   << error_message << std::endl;
+        all_files_verified = false;
         continue;
       }
 
@@ -835,6 +947,7 @@ void download_and_verify_manifest_files(
 
       std::cout << VALIDATING << " VERIFYING CHECKSUM: " << (checksum_matches ? "OK" : "MISMATCH") << std::endl;
       if (!checksum_matches) {
+        all_files_verified = false;
         std::error_code remove_error;
         std::filesystem::remove(output_path, remove_error);
         if (remove_error) {
@@ -844,8 +957,11 @@ void download_and_verify_manifest_files(
     } catch (const std::exception & ex) {
       std::cerr << ERROR << "FAILED TO PROCESS FILE: " << file.file_name
                 << ": " << ex.what() << std::endl;
+      all_files_verified = false;
     }
   }
+
+  return all_files_verified;
 }
 
 std::string payload_to_string(const unsigned char * payload, std::size_t size)
@@ -892,6 +1008,122 @@ const char * connection_reason_to_string(IOTHUB_CLIENT_CONNECTION_STATUS_REASON 
       return "quota exceeded";
     default:
       return "unknown";
+  }
+}
+
+void on_reported_state_sent(int status_code, void * user_context)
+{
+  ReportedStateContext * callback_context = static_cast<ReportedStateContext *>(user_context);
+
+  if (callback_context != nullptr) {
+    if (status_code >= 200 && status_code < 300 && callback_context->listener_context != nullptr) {
+      std::lock_guard<std::mutex> lock(callback_context->listener_context->state_mutex);
+      callback_context->listener_context->last_confirmed_reported_status_key =
+        callback_context->confirmation_key;
+    }
+
+    if (status_code >= 200 && status_code < 300) {
+      std::cout << WORKING << " REPORTED activePackage STATUS CONFIRMED: "
+                << callback_context->status << " (" << callback_context->package_id
+                << " v" << callback_context->version << ")" << std::endl;
+    } else {
+      std::cerr << ERROR << " FAILED TO REPORT activePackage STATUS: "
+                << callback_context->status << " (" << callback_context->package_id
+                << " v" << callback_context->version << "), HTTP " << status_code << std::endl;
+    }
+
+    delete callback_context;
+    return;
+  }
+
+  if (status_code < 200 || status_code >= 300) {
+    std::cerr << ERROR << " FAILED TO REPORT activePackage STATUS, HTTP "
+              << status_code << std::endl;
+  }
+}
+
+bool is_reported_status_confirmed(
+  ListenerContext & listener_context,
+  const std::string & confirmation_key)
+{
+  std::lock_guard<std::mutex> lock(listener_context.state_mutex);
+  return listener_context.last_confirmed_reported_status_key.has_value() &&
+         *listener_context.last_confirmed_reported_status_key == confirmation_key;
+}
+
+void flush_iothub_work_until_reported_status(
+  ListenerContext & listener_context,
+  const std::string & confirmation_key,
+  std::chrono::milliseconds max_wait)
+{
+  if (listener_context.device_client_handle == nullptr) {
+    return;
+  }
+
+  const auto deadline = std::chrono::steady_clock::now() + max_wait;
+  while (g_running != 0 && std::chrono::steady_clock::now() < deadline) {
+    if (is_reported_status_confirmed(listener_context, confirmation_key)) {
+      return;
+    }
+
+    IoTHubDeviceClient_LL_DoWork(listener_context.device_client_handle);
+    std::this_thread::sleep_for(std::chrono::milliseconds(25));
+  }
+
+  IoTHubDeviceClient_LL_DoWork(listener_context.device_client_handle);
+}
+
+bool send_reported_active_package_status(
+  const ListenerContext & listener_context,
+  const ActivePackageReportInfo & package_info,
+  const char * status)
+{
+  try {
+    if (listener_context.device_client_handle == nullptr) {
+      std::cerr << ERROR << " DEVICE CLIENT HANDLE NOT INITIALIZED FOR REPORTED STATE" << std::endl;
+      return false;
+    }
+
+    ReportedStateContext * callback_context = new ReportedStateContext;
+    callback_context->listener_context = const_cast<ListenerContext *>(&listener_context);
+    callback_context->package_id = package_info.package_id;
+    callback_context->version = package_info.version;
+    callback_context->status = status;
+    callback_context->confirmation_key =
+      reported_status_confirmation_key(package_info, status);
+    callback_context->payload_json =
+      "{"
+        "\"activePackage\":{"
+          "\"packageId\":\"" + escape_json_string(package_info.package_id) + "\","
+          "\"version\":" + std::to_string(package_info.version) + ","
+          "\"status\":\"" + escape_json_string(status) + "\","
+          "\"updatedAt\":\"" + escape_json_string(current_timestamp_utc_iso8601()) + "\""
+        "}"
+      "}";
+
+    const IOTHUB_CLIENT_RESULT result = IoTHubDeviceClient_LL_SendReportedState(
+      listener_context.device_client_handle,
+      reinterpret_cast<const unsigned char *>(callback_context->payload_json.c_str()),
+      callback_context->payload_json.size(),
+      on_reported_state_sent,
+      callback_context);
+
+    if (result != IOTHUB_CLIENT_OK) {
+      delete callback_context;
+      std::cerr << ERROR << " FAILED TO QUEUE activePackage STATUS '" << status
+                << "' FOR " << package_info.package_id << " v" << package_info.version << std::endl;
+      return false;
+    }
+
+    std::cout << WORKING << " REPORTING activePackage STATUS: "
+              << status << " (" << package_info.package_id
+              << " v" << package_info.version << ")" << std::endl;
+    return true;
+  } catch (const std::exception & ex) {
+    std::cerr << ERROR << " FAILED TO PREPARE activePackage STATUS '" << status
+              << "' FOR " << package_info.package_id << " v" << package_info.version
+              << ": " << ex.what() << std::endl;
+    return false;
   }
 }
 
@@ -1148,6 +1380,14 @@ void process_device_twin_update(
       return;
     }
 
+    std::string package_report_error;
+    const std::optional<ActivePackageReportInfo> package_report_info =
+      try_parse_active_package_report_info(*active_package, &package_report_error);
+    if (!package_report_info.has_value()) {
+      std::cerr << WARNING << " activePackage HAS NO REPORTABLE packageId/version: "
+                << package_report_error << std::endl;
+    }
+
     const std::optional<std::string> raw_url =
       extract_top_level_json_value(*active_package, "manifestUrl");
     if (!raw_url.has_value()) {
@@ -1161,6 +1401,15 @@ void process_device_twin_update(
       std::cerr << ERROR << " UPDATE HAS INVALID manifestUrl: " << *raw_url << std::endl;
       std::cout << IDLING << " LISTENING (IDLING)" << std::endl;
       return;
+    }
+
+    if (package_report_info.has_value()) {
+      if (send_reported_active_package_status(listener_context, *package_report_info, "seen")) {
+        flush_iothub_work_until_reported_status(
+          listener_context,
+          reported_status_confirmation_key(*package_report_info, "seen"),
+          std::chrono::milliseconds(750));
+      }
     }
 
     if (!download_file(
@@ -1177,8 +1426,17 @@ void process_device_twin_update(
     std::cout << WORKING << " SAVING FILE: " << manifest_output_path.string() << std::endl;
 
     const Manifest manifest = Manifest::load_from_file(manifest_output_path);
-    download_and_verify_manifest_files(manifest, manifest_output_path, listener_context);
-    listener_context.last_processed_active_package = active_package_signature;
+    const bool download_completed =
+      download_and_verify_manifest_files(manifest, manifest_output_path, listener_context);
+
+    if (download_completed) {
+      if (package_report_info.has_value()) {
+        send_reported_active_package_status(listener_context, *package_report_info, "downloaded");
+      }
+      listener_context.last_processed_active_package = active_package_signature;
+    } else {
+      std::cerr << WARNING << " PACKAGE DOWNLOAD NOT COMPLETE; NOT REPORTING 'downloaded'" << std::endl;
+    }
   } catch (const std::exception & ex) {
     std::cerr << ERROR << " FAILED TO PROCESS DATA: " << ex.what() << std::endl;
   }
@@ -1273,6 +1531,7 @@ int main()
     ListenerContext listener_context;
     listener_context.hostname = hostname;
     listener_context.robot_api_key = robot_api_key;
+    listener_context.device_client_handle = device_client.get();
     const auto startup_twin_request_deadline =
       std::chrono::steady_clock::now() + std::chrono::seconds(2);
 
@@ -1319,3 +1578,4 @@ int main()
     return 1;
   }
 }
+
