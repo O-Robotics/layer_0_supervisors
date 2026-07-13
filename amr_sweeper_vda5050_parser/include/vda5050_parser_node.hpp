@@ -182,7 +182,7 @@ private:
   [[nodiscard]] std::string missionStemForPath(const std::filesystem::path & mission_path) const;
   [[nodiscard]] std::string coverageBasenameForMission(
     const std::filesystem::path & mission_path) const;
-  [[nodiscard]] std::string costmapBasenameForMission(
+  [[nodiscard]] std::string staticCostmapBasenameForMission(
     const std::filesystem::path & mission_path) const;
   void publishStatus(const std::string & state, const std::string & detail) const;
 

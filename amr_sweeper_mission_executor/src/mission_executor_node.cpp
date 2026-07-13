@@ -55,7 +55,7 @@ constexpr char kSpiralSweepPattern[] = "spiral";
 constexpr char kLatestRecordedMapDirectoryName[] = "latest_recorded_map";
 constexpr char kLatestRecordedMapMetadataFile[] = "latest_recorded_map.json";
 constexpr char kLatestRecordedMapRouteStem[] = "latest_recorded_map_path";
-constexpr char kLatestRecordedMapCostmapStem[] = "latest_recorded_map_costmap";
+constexpr char kLatestRecordedMapStaticCostmapStem[] = "latest_recorded_map_static_costmap";
 constexpr char kLatestRecordedMapNavSatStem[] = "latest_recorded_map_navsat";
 constexpr char kActualScheduleLogFilename[] = "actual_schedule.ics";
 constexpr char kSimulationActualScheduleLogFilename[] = "simulation_schedule.ics";
@@ -269,6 +269,23 @@ void writeJsonDocumentAtomic(
 std::string defaultIfEmpty(const std::string & value, const std::string & fallback)
 {
   return value.empty() ? fallback : value;
+}
+
+std::string jsonStringValue(
+  const nlohmann::json & document,
+  const std::string & key,
+  const std::string & fallback_key = std::string{})
+{
+  if (document.contains(key) && document.at(key).is_string()) {
+    return document.at(key).get<std::string>();
+  }
+  if (!fallback_key.empty() &&
+    document.contains(fallback_key) &&
+    document.at(fallback_key).is_string())
+  {
+    return document.at(fallback_key).get<std::string>();
+  }
+  return {};
 }
 
 std::string trimCopy(std::string value)
@@ -2110,6 +2127,8 @@ void MissionExecutorNode::handleUploadVda5050Mission(
 
     // Clear stale generated artifacts so the parser rebuilds from the new VDA5050 payload on execution.
     const auto mission_folder = resolveMissionsLogDirectory() / mission_id;
+    std::filesystem::remove(mission_folder / (mission_id + "_static_costmap.yaml"));
+    std::filesystem::remove(mission_folder / (mission_id + "_static_costmap.pgm"));
     std::filesystem::remove(mission_folder / (mission_id + "_costmap.yaml"));
     std::filesystem::remove(mission_folder / (mission_id + "_costmap.pgm"));
     std::filesystem::remove(mission_folder / (mission_id + "_path_planned.geojson"));
@@ -2148,13 +2167,19 @@ void MissionExecutorNode::handleCreateRecordedMission(
     const nlohmann::json latest_metadata = loadJsonDocument(latest_metadata_file);
     const std::filesystem::path perimeter_route_file(
       latest_metadata.value("recorded_work_area_route_file", std::string{}));
-    const std::filesystem::path costmap_yaml_file(
-      latest_metadata.value("recorded_work_area_costmap_yaml", std::string{}));
-    const std::filesystem::path costmap_image_file(
-      latest_metadata.value("recorded_work_area_costmap_image", std::string{}));
+    const std::filesystem::path static_costmap_yaml_file(
+      jsonStringValue(
+        latest_metadata,
+        "recorded_work_area_static_costmap_yaml",
+        "recorded_work_area_costmap_yaml"));
+    const std::filesystem::path static_costmap_image_file(
+      jsonStringValue(
+        latest_metadata,
+        "recorded_work_area_static_costmap_image",
+        "recorded_work_area_costmap_image"));
     if (perimeter_route_file.empty() || !std::filesystem::exists(perimeter_route_file) ||
-      costmap_yaml_file.empty() || !std::filesystem::exists(costmap_yaml_file) ||
-      costmap_image_file.empty() || !std::filesystem::exists(costmap_image_file))
+      static_costmap_yaml_file.empty() || !std::filesystem::exists(static_costmap_yaml_file) ||
+      static_costmap_image_file.empty() || !std::filesystem::exists(static_costmap_image_file))
     {
       throw std::runtime_error("Latest recorded map artifacts are incomplete");
     }
@@ -2907,10 +2932,10 @@ std::string MissionExecutorNode::missionStemForPath(const std::filesystem::path 
   return mission_path.stem().string();
 }
 
-std::string MissionExecutorNode::missionCostmapBasename(
+std::string MissionExecutorNode::missionStaticCostmapBasename(
   const std::filesystem::path & mission_path) const
 {
-  return missionStemForPath(mission_path) + "_costmap";
+  return missionStemForPath(mission_path) + "_static_costmap";
 }
 
 std::string MissionExecutorNode::missionRouteBasename(
@@ -3093,15 +3118,15 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
   namespace fs = std::filesystem;
   const std::filesystem::path mission_file(mission.mission_path);
   const std::filesystem::path source_mission_folder = artifactsDirectoryForMission(mission);
-  const std::filesystem::path mission_costmap_yaml =
-    source_mission_folder / (missionCostmapBasename(mission_file) + ".yaml");
-  const std::filesystem::path mission_costmap_image =
-    source_mission_folder / (missionCostmapBasename(mission_file) + ".pgm");
+  const std::filesystem::path mission_static_costmap_yaml =
+    source_mission_folder / (missionStaticCostmapBasename(mission_file) + ".yaml");
+  const std::filesystem::path mission_static_costmap_image =
+    source_mission_folder / (missionStaticCostmapBasename(mission_file) + ".pgm");
   const std::filesystem::path mission_route = resolveMissionRoutePath(mission, mission_file);
 
   if (!fs::exists(mission_file) ||
-    !fs::exists(mission_costmap_yaml) ||
-    !fs::exists(mission_costmap_image) ||
+    !fs::exists(mission_static_costmap_yaml) ||
+    !fs::exists(mission_static_costmap_image) ||
     !fs::exists(mission_route))
   {
     throw std::runtime_error("Manual mission artifacts are incomplete for mission_id=" + mission.mission_id);
@@ -3112,51 +3137,56 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
   const fs::path mission_history_directory = missionHistoryDirectory(mission);
   fs::create_directories(mission_history_directory);
 
-  std::filesystem::path selected_costmap_yaml = mission_costmap_yaml;
-  std::filesystem::path selected_costmap_image = mission_costmap_image;
+  std::filesystem::path selected_static_costmap_yaml = mission_static_costmap_yaml;
+  std::filesystem::path selected_static_costmap_image = mission_static_costmap_image;
   try {
-    const RasterizedCostmap source_costmap = loadCostmapArtifacts(mission_costmap_yaml);
+    const RasterizedCostmap source_static_costmap = loadCostmapArtifacts(mission_static_costmap_yaml);
     RCLCPP_INFO(
       get_logger(),
-      "Mission startup costmap source %s parsed with georeference_valid=%s resolution=%.3f origin=(%.3f, %.3f) size=%ux%u samples=%zu.",
-      mission_costmap_yaml.string().c_str(),
-      source_costmap.georeference_valid ? "true" : "false",
-      source_costmap.resolution,
-      source_costmap.origin_x,
-      source_costmap.origin_y,
-      source_costmap.width_cells,
-      source_costmap.height_cells,
-      source_costmap.georeference_sample_count);
-    if (!source_costmap.georeference_valid) {
-      const auto historical_georeferenced_yaml = findNewestGeoreferencedHistoricalCostmapYaml(
+      "Mission startup static costmap source %s parsed with georeference_valid=%s resolution=%.3f origin=(%.3f, %.3f) size=%ux%u samples=%zu.",
+      mission_static_costmap_yaml.string().c_str(),
+      source_static_costmap.georeference_valid ? "true" : "false",
+      source_static_costmap.resolution,
+      source_static_costmap.origin_x,
+      source_static_costmap.origin_y,
+      source_static_costmap.width_cells,
+      source_static_costmap.height_cells,
+      source_static_costmap.georeference_sample_count);
+    if (!source_static_costmap.georeference_valid) {
+      auto historical_georeferenced_yaml = findNewestGeoreferencedHistoricalCostmapYaml(
         mission_history_directory,
-        mission.mission_id + "_costmap.yaml");
+        mission.mission_id + "_static_costmap.yaml");
+      if (!historical_georeferenced_yaml.has_value()) {
+        historical_georeferenced_yaml = findNewestGeoreferencedHistoricalCostmapYaml(
+          mission_history_directory,
+          mission.mission_id + "_costmap.yaml");
+      }
       if (historical_georeferenced_yaml.has_value()) {
         const auto historical_georeferenced_image =
           historical_georeferenced_yaml->parent_path() /
           (historical_georeferenced_yaml->stem().string() + ".pgm");
         if (fs::exists(historical_georeferenced_image)) {
-          selected_costmap_yaml = *historical_georeferenced_yaml;
-          selected_costmap_image = historical_georeferenced_image;
+          selected_static_costmap_yaml = *historical_georeferenced_yaml;
+          selected_static_costmap_image = historical_georeferenced_image;
           RCLCPP_WARN(
             get_logger(),
-            "Mission source costmap %s is non-georeferenced. Reusing newest georeferenced historical costmap %s for startup seeding.",
-            mission_costmap_yaml.string().c_str(),
-            selected_costmap_yaml.string().c_str());
+            "Mission source static costmap %s is non-georeferenced. Reusing newest georeferenced historical static costmap %s for startup seeding.",
+            mission_static_costmap_yaml.string().c_str(),
+            selected_static_costmap_yaml.string().c_str());
         }
       } else {
         RCLCPP_WARN(
           get_logger(),
-          "Mission source costmap %s is non-georeferenced and no older georeferenced historical startup costmap was found under %s.",
-          mission_costmap_yaml.string().c_str(),
+          "Mission source static costmap %s is non-georeferenced and no older georeferenced historical startup static costmap was found under %s.",
+          mission_static_costmap_yaml.string().c_str(),
           mission_history_directory.string().c_str());
       }
     }
   } catch (const std::exception & exception) {
     RCLCPP_WARN(
       get_logger(),
-      "Failed to inspect mission source costmap %s before preparing mission artifacts: %s",
-      mission_costmap_yaml.string().c_str(),
+      "Failed to inspect mission source static costmap %s before preparing mission artifacts: %s",
+      mission_static_costmap_yaml.string().c_str(),
       exception.what());
   }
 
@@ -3166,21 +3196,27 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
 
   const fs::path history_mission_file =
     mission_history_directory / (mission.mission_id + "_vda5050" + mission_file_extension_);
-  const fs::path history_costmap_yaml =
-    mission_history_directory / (mission.mission_id + "_costmap.yaml");
-  const fs::path history_costmap_image =
-    mission_history_directory / (mission.mission_id + "_costmap.pgm");
+  const fs::path history_static_costmap_yaml =
+    mission_history_directory / (mission.mission_id + "_static_costmap.yaml");
+  const fs::path history_static_costmap_image =
+    mission_history_directory / (mission.mission_id + "_static_costmap.pgm");
   const fs::path history_route =
     mission_history_directory / (mission.mission_id + "_path_planned.geojson");
   if (mission_file != history_mission_file) {
     fs::copy_file(mission_file, history_mission_file, fs::copy_options::overwrite_existing);
   }
-  if (selected_costmap_yaml != history_costmap_yaml) {
-    fs::copy_file(selected_costmap_yaml, history_costmap_yaml, fs::copy_options::overwrite_existing);
-    rewriteCostmapYamlImageReference(history_costmap_yaml, history_costmap_image);
+  if (selected_static_costmap_yaml != history_static_costmap_yaml) {
+    fs::copy_file(
+      selected_static_costmap_yaml,
+      history_static_costmap_yaml,
+      fs::copy_options::overwrite_existing);
+    rewriteCostmapYamlImageReference(history_static_costmap_yaml, history_static_costmap_image);
   }
-  if (selected_costmap_image != history_costmap_image) {
-    fs::copy_file(selected_costmap_image, history_costmap_image, fs::copy_options::overwrite_existing);
+  if (selected_static_costmap_image != history_static_costmap_image) {
+    fs::copy_file(
+      selected_static_costmap_image,
+      history_static_costmap_image,
+      fs::copy_options::overwrite_existing);
   }
   if (mission_route != history_route) {
     fs::copy_file(mission_route, history_route, fs::copy_options::overwrite_existing);
@@ -3188,10 +3224,10 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
 
   const fs::path run_mission_file =
     mission_run_directory / (run_artifact_stem + "_vda5050" + mission_file_extension_);
-  const fs::path run_costmap_yaml =
-    mission_run_directory / (run_artifact_stem + "_costmap.yaml");
-  const fs::path run_costmap_image =
-    mission_run_directory / (run_artifact_stem + "_costmap.pgm");
+  const fs::path run_static_costmap_yaml =
+    mission_run_directory / (run_artifact_stem + "_static_costmap.yaml");
+  const fs::path run_static_costmap_image =
+    mission_run_directory / (run_artifact_stem + "_static_costmap.pgm");
   const fs::path run_route =
     mission_run_directory / (run_artifact_stem + "_path_planned.geojson");
   const fs::path actual_path_file =
@@ -3203,9 +3239,9 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
   const fs::path collected_artifacts_directory = mission_run_directory / "artifacts";
 
   fs::copy_file(history_mission_file, run_mission_file, fs::copy_options::overwrite_existing);
-  fs::copy_file(history_costmap_yaml, run_costmap_yaml, fs::copy_options::overwrite_existing);
-  fs::copy_file(history_costmap_image, run_costmap_image, fs::copy_options::overwrite_existing);
-  rewriteCostmapYamlImageReference(run_costmap_yaml, run_costmap_image);
+  fs::copy_file(history_static_costmap_yaml, run_static_costmap_yaml, fs::copy_options::overwrite_existing);
+  fs::copy_file(history_static_costmap_image, run_static_costmap_image, fs::copy_options::overwrite_existing);
+  rewriteCostmapYamlImageReference(run_static_costmap_yaml, run_static_costmap_image);
   fs::copy_file(history_route, run_route, fs::copy_options::overwrite_existing);
   fs::create_directories(gaussian_output_directory);
   fs::create_directories(captured_images_directory);
@@ -3235,19 +3271,19 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
     {"mission_file", run_mission_file.string()},
     {"mission_folder", mission_history_directory.string()},
     {"mission_route_file", run_route.string()},
-    {"mission_costmap_yaml", run_costmap_yaml.string()},
-    {"saved_costmap_yaml", run_costmap_yaml.string()},
+    {"mission_static_costmap_yaml", run_static_costmap_yaml.string()},
+    {"saved_static_costmap_yaml", run_static_costmap_yaml.string()},
     {"mission_run_directory", mission_run_directory.string()},
     {"persistent_mission_file", history_mission_file.string()},
     {"persistent_mission_route_file", history_route.string()},
-    {"persistent_mission_costmap_yaml", history_costmap_yaml.string()},
+    {"persistent_mission_static_costmap_yaml", history_static_costmap_yaml.string()},
     {"mission_window_start", mission_window_start},
     {"mission_window_end", mission_window_end},
     {"run_started_at", run_timestamp},
     {"source_mission_file", mission_file.string()},
     {"source_mission_route_file", mission_route.string()},
-    {"source_mission_costmap_yaml", mission_costmap_yaml.string()},
-    {"selected_startup_costmap_yaml", selected_costmap_yaml.string()},
+    {"source_mission_static_costmap_yaml", mission_static_costmap_yaml.string()},
+    {"selected_startup_static_costmap_yaml", selected_static_costmap_yaml.string()},
     {"actual_path_file", actual_path_file.string()},
     {"actual_path_navsat_file", actual_path_navsat_file.string()},
     {"gaussian_output_directory", gaussian_output_directory.string()},
@@ -3258,12 +3294,12 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
 
   RCLCPP_INFO(
     get_logger(),
-    "Prepared mission artifacts for %s with startup costmap %s, run costmap %s, persistent costmap %s, source costmap %s.",
+    "Prepared mission artifacts for %s with startup static costmap %s, run static costmap %s, persistent static costmap %s, source static costmap %s.",
     mission.mission_id.c_str(),
-    selected_costmap_yaml.string().c_str(),
-    run_costmap_yaml.string().c_str(),
-    history_costmap_yaml.string().c_str(),
-    mission_costmap_yaml.string().c_str());
+    selected_static_costmap_yaml.string().c_str(),
+    run_static_costmap_yaml.string().c_str(),
+    history_static_costmap_yaml.string().c_str(),
+    mission_static_costmap_yaml.string().c_str());
 
   const fs::path execution_context_file =
     mission_run_directory / (run_artifact_stem + "_context.json");
@@ -3323,14 +3359,14 @@ void MissionExecutorNode::rewriteBuiltinLocalPatternArtifacts(
 
   writeJsonDocumentAtomic(run_route_file, route_document);
 
-  context_document["mission_costmap_yaml"] = "";
-  context_document["source_mission_costmap_yaml"] = "";
+  context_document["mission_static_costmap_yaml"] = "";
+  context_document["source_mission_static_costmap_yaml"] = "";
   writeJsonDocumentAtomic(execution_context_file, context_document);
 
   RCLCPP_INFO(
     get_logger(),
     "Prepared builtin local pattern %s for mission-start anchoring in layer 3; route frame set to "
-    "base_footprint and mission costmap disabled.",
+    "base_footprint and mission static costmap disabled.",
     mission.mission_id.c_str());
 }
 
@@ -3474,83 +3510,93 @@ void MissionExecutorNode::promoteRuntimeCostmapArtifacts(
   }
   const std::string normalized_outcome = toLower(defaultIfEmpty(request.outcome, "completed"));
 
-  const std::filesystem::path runtime_costmap_yaml(
-    context_document.value("mission_costmap_yaml", std::string{}));
-  std::filesystem::path persistent_costmap_yaml(
-    context_document.value("persistent_mission_costmap_yaml", std::string{}));
-  if (persistent_costmap_yaml.empty()) {
+  const std::filesystem::path runtime_static_costmap_yaml(
+    jsonStringValue(context_document, "mission_static_costmap_yaml", "mission_costmap_yaml"));
+  std::filesystem::path persistent_static_costmap_yaml(
+    jsonStringValue(
+      context_document,
+      "persistent_mission_static_costmap_yaml",
+      "persistent_mission_costmap_yaml"));
+  if (persistent_static_costmap_yaml.empty()) {
     const std::filesystem::path mission_folder(
       context_document.value("mission_folder", std::string{}));
-    if (!mission_folder.empty() && !runtime_costmap_yaml.empty()) {
-      persistent_costmap_yaml = mission_folder / runtime_costmap_yaml.filename();
+    if (!mission_folder.empty() && !runtime_static_costmap_yaml.empty()) {
+      persistent_static_costmap_yaml = mission_folder / runtime_static_costmap_yaml.filename();
     }
   }
 
-  if (runtime_costmap_yaml.empty() || persistent_costmap_yaml.empty() ||
-    !std::filesystem::exists(runtime_costmap_yaml))
+  if (runtime_static_costmap_yaml.empty() || persistent_static_costmap_yaml.empty() ||
+    !std::filesystem::exists(runtime_static_costmap_yaml))
   {
     context_document["persistent_costmap_promoted"] = false;
     context_document["persistent_costmap_promotion_skip_reason"] =
-      runtime_costmap_yaml.empty() ?
-      "no_runtime_costmap_configured" :
-      (persistent_costmap_yaml.empty() ?
-      "no_persistent_costmap_destination_configured" :
-      "runtime_costmap_file_not_found");
+      runtime_static_costmap_yaml.empty() ?
+      "no_runtime_static_costmap_configured" :
+      (persistent_static_costmap_yaml.empty() ?
+      "no_persistent_static_costmap_destination_configured" :
+      "runtime_static_costmap_file_not_found");
     return;
   }
 
-  const std::filesystem::path persistent_costmap_image =
-    persistent_costmap_yaml.parent_path() / (persistent_costmap_yaml.stem().string() + ".pgm");
+  const std::filesystem::path persistent_static_costmap_image =
+    persistent_static_costmap_yaml.parent_path() /
+    (persistent_static_costmap_yaml.stem().string() + ".pgm");
   try {
-    const RasterizedCostmap runtime_costmap = loadCostmapArtifacts(runtime_costmap_yaml);
-    bool promote_runtime_costmap = (normalized_outcome == "completed");
-    RasterizedCostmap merged_costmap = runtime_costmap;
-    if (std::filesystem::exists(persistent_costmap_yaml)) {
-      const RasterizedCostmap persistent_costmap = loadCostmapArtifacts(persistent_costmap_yaml);
-      if (!promote_runtime_costmap && runtime_costmap.georeference_valid &&
-        !persistent_costmap.georeference_valid)
+    const RasterizedCostmap runtime_static_costmap = loadCostmapArtifacts(runtime_static_costmap_yaml);
+    bool promote_runtime_static_costmap = (normalized_outcome == "completed");
+    RasterizedCostmap merged_static_costmap = runtime_static_costmap;
+    if (std::filesystem::exists(persistent_static_costmap_yaml)) {
+      const RasterizedCostmap persistent_static_costmap =
+        loadCostmapArtifacts(persistent_static_costmap_yaml);
+      if (!promote_runtime_static_costmap && runtime_static_costmap.georeference_valid &&
+        !persistent_static_costmap.georeference_valid)
       {
-        promote_runtime_costmap = true;
+        promote_runtime_static_costmap = true;
         RCLCPP_WARN(
           get_logger(),
-          "Promoting georeferenced runtime costmap %s into non-georeferenced persistent startup artifact %s despite mission outcome '%s'.",
-          runtime_costmap_yaml.string().c_str(),
-          persistent_costmap_yaml.string().c_str(),
+          "Promoting georeferenced runtime static costmap %s into non-georeferenced persistent startup artifact %s despite mission outcome '%s'.",
+          runtime_static_costmap_yaml.string().c_str(),
+          persistent_static_costmap_yaml.string().c_str(),
           normalized_outcome.c_str());
       }
-      if (!promote_runtime_costmap) {
+      if (!promote_runtime_static_costmap) {
         context_document["persistent_costmap_promoted"] = false;
         context_document["persistent_costmap_promotion_skip_reason"] =
           "mission_outcome_not_completed";
         return;
       }
-      merged_costmap = mergeCostmaps(persistent_costmap, runtime_costmap);
-    } else if (!promote_runtime_costmap && runtime_costmap.georeference_valid) {
-      promote_runtime_costmap = true;
+      merged_static_costmap = mergeCostmaps(persistent_static_costmap, runtime_static_costmap);
+    } else if (!promote_runtime_static_costmap && runtime_static_costmap.georeference_valid) {
+      promote_runtime_static_costmap = true;
       RCLCPP_WARN(
         get_logger(),
-        "Promoting georeferenced runtime costmap %s into missing persistent startup artifact %s despite mission outcome '%s'.",
-        runtime_costmap_yaml.string().c_str(),
-        persistent_costmap_yaml.string().c_str(),
+        "Promoting georeferenced runtime static costmap %s into missing persistent startup artifact %s despite mission outcome '%s'.",
+        runtime_static_costmap_yaml.string().c_str(),
+        persistent_static_costmap_yaml.string().c_str(),
         normalized_outcome.c_str());
     }
-    if (!promote_runtime_costmap) {
+    if (!promote_runtime_static_costmap) {
       context_document["persistent_costmap_promoted"] = false;
       context_document["persistent_costmap_promotion_skip_reason"] =
         "mission_outcome_not_completed";
       return;
     }
-    saveCostmapArtifacts(merged_costmap, persistent_costmap_image, persistent_costmap_yaml);
-    context_document["persistent_mission_costmap_yaml"] = persistent_costmap_yaml.string();
-    context_document["persistent_mission_costmap_image"] = persistent_costmap_image.string();
+    saveCostmapArtifacts(
+      merged_static_costmap,
+      persistent_static_costmap_image,
+      persistent_static_costmap_yaml);
+    context_document["persistent_mission_static_costmap_yaml"] =
+      persistent_static_costmap_yaml.string();
+    context_document["persistent_mission_static_costmap_image"] =
+      persistent_static_costmap_image.string();
     context_document["persistent_costmap_merge_mode"] = "cell_average";
     context_document["persistent_costmap_promoted"] = true;
   } catch (const std::exception & exception) {
     RCLCPP_WARN(
       get_logger(),
-      "Failed to promote runtime costmap artifact from %s into %s: %s",
-      runtime_costmap_yaml.string().c_str(),
-      persistent_costmap_yaml.string().c_str(),
+      "Failed to promote runtime static costmap artifact from %s into %s: %s",
+      runtime_static_costmap_yaml.string().c_str(),
+      persistent_static_costmap_yaml.string().c_str(),
       exception.what());
     context_document["persistent_costmap_promoted"] = false;
     context_document["persistent_costmap_promotion_error"] = exception.what();
@@ -3569,8 +3615,8 @@ void MissionExecutorNode::updateRecordMapArtifacts(nlohmann::json & context_docu
     context_document.value("actual_path_file", std::string{}));
   const std::filesystem::path mission_route_file(
     context_document.value("mission_route_file", std::string{}));
-  const std::filesystem::path mission_costmap_yaml(
-    context_document.value("mission_costmap_yaml", std::string{}));
+  const std::filesystem::path mission_static_costmap_yaml(
+    jsonStringValue(context_document, "mission_static_costmap_yaml", "mission_costmap_yaml"));
   const std::filesystem::path mission_folder(
     context_document.value("mission_folder", std::string{}));
   const std::filesystem::path gaussian_output_directory(
@@ -3580,7 +3626,8 @@ void MissionExecutorNode::updateRecordMapArtifacts(nlohmann::json & context_docu
     context_document.value("actual_path_navsat_file", std::string{}));
 
   if (actual_path_file.empty() || !std::filesystem::exists(actual_path_file) ||
-    mission_route_file.empty() || mission_costmap_yaml.empty() || mission_folder.empty() || mission_id.empty())
+    mission_route_file.empty() || mission_static_costmap_yaml.empty() ||
+    mission_folder.empty() || mission_id.empty())
   {
     return;
   }
@@ -3627,9 +3674,13 @@ void MissionExecutorNode::updateRecordMapArtifacts(nlohmann::json & context_docu
         latitude_coefficients.at(2).get<double>()};
     }
   }
-  const std::filesystem::path mission_costmap_image = mission_costmap_yaml.parent_path() /
-    (mission_costmap_yaml.stem().string() + ".pgm");
-  saveCostmapArtifacts(georeferenced_map, mission_costmap_image, mission_costmap_yaml);
+  const std::filesystem::path mission_static_costmap_image =
+    mission_static_costmap_yaml.parent_path() /
+    (mission_static_costmap_yaml.stem().string() + ".pgm");
+  saveCostmapArtifacts(
+    georeferenced_map,
+    mission_static_costmap_image,
+    mission_static_costmap_yaml);
 
   {
     std::ofstream route_stream(mission_route_file, std::ios::trunc);
@@ -3648,16 +3699,23 @@ void MissionExecutorNode::updateRecordMapArtifacts(nlohmann::json & context_docu
     route_stream << std::setw(2) << buildPerimeterGeoJson(perimeter_points) << '\n';
   }
 
-  const std::filesystem::path history_costmap_yaml = mission_folder / mission_costmap_yaml.filename();
-  const std::filesystem::path history_costmap_image = history_costmap_yaml.parent_path() /
-    (history_costmap_yaml.stem().string() + ".pgm");
-  if (history_costmap_yaml != mission_costmap_yaml) {
-    saveCostmapArtifacts(georeferenced_map, history_costmap_image, history_costmap_yaml);
+  const std::filesystem::path history_static_costmap_yaml =
+    mission_folder / mission_static_costmap_yaml.filename();
+  const std::filesystem::path history_static_costmap_image =
+    history_static_costmap_yaml.parent_path() /
+    (history_static_costmap_yaml.stem().string() + ".pgm");
+  if (history_static_costmap_yaml != mission_static_costmap_yaml) {
+    saveCostmapArtifacts(
+      georeferenced_map,
+      history_static_costmap_image,
+      history_static_costmap_yaml);
   }
 
   context_document["recorded_work_area_route_file"] = mission_route_file.string();
-  context_document["recorded_work_area_costmap_yaml"] = mission_costmap_yaml.string();
-  context_document["recorded_work_area_costmap_image"] = mission_costmap_image.string();
+  context_document["recorded_work_area_static_costmap_yaml"] =
+    mission_static_costmap_yaml.string();
+  context_document["recorded_work_area_static_costmap_image"] =
+    mission_static_costmap_image.string();
   context_document["recorded_obstacle_count"] = obstacle_points.size();
   nlohmann::json obstacle_points_document = nlohmann::json::array();
   for (const auto & point : obstacle_points) {
@@ -3682,16 +3740,19 @@ void MissionExecutorNode::writeLatestRecordedMapSnapshot(const nlohmann::json & 
     context_document.value("mission_route_file", std::string{}));
   const std::filesystem::path actual_path_file(
     context_document.value("actual_path_file", std::string{}));
-  const std::filesystem::path mission_costmap_yaml(
-    context_document.value("mission_costmap_yaml", std::string{}));
-  const std::filesystem::path mission_costmap_image(
-    context_document.value("recorded_work_area_costmap_image", std::string{}));
+  const std::filesystem::path mission_static_costmap_yaml(
+    jsonStringValue(context_document, "mission_static_costmap_yaml", "mission_costmap_yaml"));
+  const std::filesystem::path mission_static_costmap_image(
+    jsonStringValue(
+      context_document,
+      "recorded_work_area_static_costmap_image",
+      "recorded_work_area_costmap_image"));
   const std::string run_started_at = context_document.value("run_started_at", std::string{});
 
   if (mission_route_file.empty() || !std::filesystem::exists(mission_route_file) ||
     actual_path_file.empty() || !std::filesystem::exists(actual_path_file) ||
-    mission_costmap_yaml.empty() || !std::filesystem::exists(mission_costmap_yaml) ||
-    mission_costmap_image.empty() || !std::filesystem::exists(mission_costmap_image) ||
+    mission_static_costmap_yaml.empty() || !std::filesystem::exists(mission_static_costmap_yaml) ||
+    mission_static_costmap_image.empty() || !std::filesystem::exists(mission_static_costmap_image) ||
     run_started_at.empty())
   {
     return;
@@ -3713,8 +3774,10 @@ void MissionExecutorNode::writeLatestRecordedMapSnapshot(const nlohmann::json & 
   const auto latest_directory = resolveMissionsLogDirectory() / kLatestRecordedMapDirectoryName;
   const auto latest_metadata_file = latest_directory / kLatestRecordedMapMetadataFile;
   const auto latest_route_file = latest_directory / (std::string(kLatestRecordedMapRouteStem) + ".geojson");
-  const auto latest_costmap_yaml_file = latest_directory / (std::string(kLatestRecordedMapCostmapStem) + ".yaml");
-  const auto latest_costmap_image_file = latest_directory / (std::string(kLatestRecordedMapCostmapStem) + ".pgm");
+  const auto latest_static_costmap_yaml_file =
+    latest_directory / (std::string(kLatestRecordedMapStaticCostmapStem) + ".yaml");
+  const auto latest_static_costmap_image_file =
+    latest_directory / (std::string(kLatestRecordedMapStaticCostmapStem) + ".pgm");
   const auto latest_navsat_file = latest_directory / (std::string(kLatestRecordedMapNavSatStem) + ".geojson");
   std::filesystem::create_directories(latest_directory);
 
@@ -3727,15 +3790,15 @@ void MissionExecutorNode::writeLatestRecordedMapSnapshot(const nlohmann::json & 
   }
 
   std::filesystem::copy_file(
-    mission_costmap_yaml,
-    latest_costmap_yaml_file,
+    mission_static_costmap_yaml,
+    latest_static_costmap_yaml_file,
     std::filesystem::copy_options::overwrite_existing);
   std::filesystem::copy_file(
-    mission_costmap_image,
-    latest_costmap_image_file,
+    mission_static_costmap_image,
+    latest_static_costmap_image_file,
     std::filesystem::copy_options::overwrite_existing);
 
-  rewriteCostmapYamlImageReference(latest_costmap_yaml_file, latest_costmap_image_file);
+  rewriteCostmapYamlImageReference(latest_static_costmap_yaml_file, latest_static_costmap_image_file);
 
   if (!navsat_route_file.empty() && std::filesystem::exists(navsat_route_file)) {
     std::filesystem::copy_file(
@@ -3748,8 +3811,8 @@ void MissionExecutorNode::writeLatestRecordedMapSnapshot(const nlohmann::json & 
     {"mission_id", mission_id},
     {"run_started_at", run_started_at},
     {"recorded_work_area_route_file", latest_route_file.string()},
-    {"recorded_work_area_costmap_yaml", latest_costmap_yaml_file.string()},
-    {"recorded_work_area_costmap_image", latest_costmap_image_file.string()},
+    {"recorded_work_area_static_costmap_yaml", latest_static_costmap_yaml_file.string()},
+    {"recorded_work_area_static_costmap_image", latest_static_costmap_image_file.string()},
     {"recorded_work_area_navsat_file", std::filesystem::exists(latest_navsat_file) ? latest_navsat_file.string() : std::string{}},
     {"recorded_obstacle_count", context_document.value("recorded_obstacle_count", 0)},
     {"recorded_obstacle_points", context_document.value("recorded_obstacle_points", nlohmann::json::array())},
@@ -4283,8 +4346,10 @@ bool MissionExecutorNode::missionArtifactsReady(const ManualMissionInfo & missio
   const std::filesystem::path mission_file(executable_mission.mission_path);
   const std::filesystem::path mission_folder = artifactsDirectoryForMission(executable_mission);
   return std::filesystem::exists(mission_file) &&
-         std::filesystem::exists(mission_folder / (missionCostmapBasename(mission_file) + ".yaml")) &&
-         std::filesystem::exists(mission_folder / (missionCostmapBasename(mission_file) + ".pgm")) &&
+         std::filesystem::exists(
+           mission_folder / (missionStaticCostmapBasename(mission_file) + ".yaml")) &&
+         std::filesystem::exists(
+           mission_folder / (missionStaticCostmapBasename(mission_file) + ".pgm")) &&
          std::filesystem::exists(resolveMissionRoutePath(executable_mission, mission_file));
 }
 

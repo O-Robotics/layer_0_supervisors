@@ -622,6 +622,16 @@ void Vda5050MissionParser::loadCoveragePath(
     nodes_by_id,
     node_theta_by_id,
     edges_by_id);
+
+  if (projection_initialized_) {
+    for (auto & waypoint : mission_waypoints_) {
+      double x = 0.0;
+      double y = 0.0;
+      double z = 0.0;
+      projector_.Forward(waypoint.geo_point.latitude, waypoint.geo_point.longitude, 0.0, x, y, z);
+      waypoint.map_point = MapPoint{x, y};
+    }
+  }
 }
 
 bool Vda5050MissionParser::pointInPolygon(const MapPoint & point, const PolygonZone & polygon) const
@@ -720,27 +730,10 @@ void Vda5050MissionParser::clearCoveragePathCorridor(RasterizedMap & map) const
     map.occupancy.at(index) = free_occupancy;
   };
   std::vector<MapPoint> corridor_waypoints;
-  corridor_waypoints.reserve(mission_waypoints_.size() * 2U);
+  corridor_waypoints.reserve(mission_waypoints_.size());
   for (const auto & waypoint : mission_waypoints_) {
     corridor_waypoints.push_back(waypoint.map_point);
-    if (map.georeference_valid && !waypoint.use_local_frame) {
-      const double a = map.longitude_coefficients[0];
-      const double b = map.longitude_coefficients[1];
-      const double c = map.longitude_coefficients[2];
-      const double d = map.latitude_coefficients[0];
-      const double e = map.latitude_coefficients[1];
-      const double f = map.latitude_coefficients[2];
-      const double determinant = (a * e) - (b * d);
-      if (std::abs(determinant) > std::numeric_limits<double>::epsilon()) {
-        const double longitude_delta = waypoint.geo_point.longitude - c;
-        const double latitude_delta = waypoint.geo_point.latitude - f;
-        corridor_waypoints.push_back(MapPoint{
-          ((e * longitude_delta) - (b * latitude_delta)) / determinant,
-          ((a * latitude_delta) - (d * longitude_delta)) / determinant});
-      }
-    }
   }
-
 
 
   for (const auto & waypoint : corridor_waypoints) {
@@ -1116,10 +1109,10 @@ bool MissionParserNode::buildArtifactsForMission(const std::filesystem::path & m
 
     const std::filesystem::path missions_directory = resolvePath(missions_directory_);
     const std::filesystem::path mission_directory = missionFolderPath(staged_mission_path);
-    const std::string costmap_basename = costmapBasenameForMission(staged_mission_path);
+    const std::string static_costmap_basename = staticCostmapBasenameForMission(staged_mission_path);
     const std::string coverage_basename = coverageBasenameForMission(staged_mission_path);
-    const std::filesystem::path mission_image_path = mission_directory / (costmap_basename + ".pgm");
-    const std::filesystem::path mission_yaml_path = mission_directory / (costmap_basename + ".yaml");
+    const std::filesystem::path mission_image_path = mission_directory / (static_costmap_basename + ".pgm");
+    const std::filesystem::path mission_yaml_path = mission_directory / (static_costmap_basename + ".yaml");
     const std::filesystem::path mission_coverage_path = mission_directory / (coverage_basename + ".geojson");
 
     mission_parser_->saveGlobalCostmapArtifacts(
@@ -1130,8 +1123,8 @@ bool MissionParserNode::buildArtifactsForMission(const std::filesystem::path & m
       mission_parser_->saveMissionWaypointsArtifact(mission_coverage_path.string());
     }
 
-    const std::filesystem::path legacy_image_path = missions_directory / (costmap_basename + ".pgm");
-    const std::filesystem::path legacy_yaml_path = missions_directory / (costmap_basename + ".yaml");
+    const std::filesystem::path legacy_image_path = missions_directory / (static_costmap_basename + ".pgm");
+    const std::filesystem::path legacy_yaml_path = missions_directory / (static_costmap_basename + ".yaml");
     const std::filesystem::path legacy_coverage_path = missions_directory / (coverage_basename + ".geojson");
     if (legacy_image_path != mission_image_path) {
       std::filesystem::remove(legacy_image_path);
@@ -1234,10 +1227,10 @@ std::string MissionParserNode::coverageBasenameForMission(
   return missionStemForPath(mission_path) + "_path_planned";
 }
 
-std::string MissionParserNode::costmapBasenameForMission(
+std::string MissionParserNode::staticCostmapBasenameForMission(
   const std::filesystem::path & mission_path) const
 {
-  return missionStemForPath(mission_path) + "_costmap";
+  return missionStemForPath(mission_path) + "_static_costmap";
 }
 
 void MissionParserNode::publishStatus(const std::string & state, const std::string & detail) const

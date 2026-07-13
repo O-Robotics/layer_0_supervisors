@@ -100,7 +100,7 @@ private:
   [[nodiscard]] std::filesystem::path missionFolderPath(const std::filesystem::path & mission_path) const;
   [[nodiscard]] std::filesystem::path artifactsDirectoryForMission(const ManualMissionInfo & mission) const;
   [[nodiscard]] std::string missionStemForPath(const std::filesystem::path & mission_path) const;
-  [[nodiscard]] std::string missionCostmapBasename(const std::filesystem::path & mission_path) const;
+  [[nodiscard]] std::string missionStaticCostmapBasename(const std::filesystem::path & mission_path) const;
   [[nodiscard]] std::string missionRouteBasename(const std::filesystem::path & mission_path) const;
   [[nodiscard]] std::filesystem::path resolveMissionRoutePath(
     const ManualMissionInfo & mission,

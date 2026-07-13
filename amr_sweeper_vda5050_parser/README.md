@@ -12,8 +12,8 @@ built when a mission is selected or when the mission executor requests a rebuild
 - Stages the selected mission into its own subfolder under the configured `missions_log_directory`
 - Builds selected per-mission artifacts:
   - `<missions_log_directory>/<order_id>/<order_id>_vda5050.json`
-  - `<missions_log_directory>/<order_id>/<order_id>_costmap.pgm`
-  - `<missions_log_directory>/<order_id>/<order_id>_costmap.yaml`
+  - `<missions_log_directory>/<order_id>/<order_id>_static_costmap.pgm`
+  - `<missions_log_directory>/<order_id>/<order_id>_static_costmap.yaml`
   - `<missions_log_directory>/<order_id>/<order_id>_path_planned.geojson`
 - Leaves runtime selection to the exact per-mission artifacts referenced from `execution_context.json`
 - Exposes `build_current_mission` so the mission executor can force-parse and build the selected mission
