@@ -1116,8 +1116,7 @@ bool send_reported_active_package_status(
     }
 
     std::cout << WORKING << " REPORTING activePackage STATUS: "
-              << status << " (" << package_info.package_id
-              << " v" << package_info.version << ")" << std::endl;
+              << status << std::endl;
     return true;
   } catch (const std::exception & ex) {
     std::cerr << ERROR << " FAILED TO PREPARE activePackage STATUS '" << status
@@ -1354,8 +1353,7 @@ void process_device_twin_update(
       mark_startup_twin_completed(listener_context);
     }
 
-    std::cout << WORKING << " PROCESSING DEVICE TWIN UPDATE ("
-              << twin_update_state_to_string(update_state) << ")" << std::endl;
+    std::cout << WORKING << " PROCESSING DEVICE TWIN UPDATE" << std::endl;
 
     if (desired_properties.has_value()) {
       property_source = &*desired_properties;
@@ -1375,7 +1373,7 @@ void process_device_twin_update(
     const std::string active_package_signature = trim(*active_package);
     if (listener_context.last_processed_active_package.has_value() &&
         *listener_context.last_processed_active_package == active_package_signature) {
-      std::cout << WORKING << " DUPLICATE activePackage RECEIVED; SKIPPING" << std::endl;
+      std::cout << WORKING << " DUPLICATE activePackage RECEIVED (SKIPPING)" << std::endl;
       std::cout << IDLING << " LISTENING (IDLING)" << std::endl;
       return;
     }
@@ -1455,8 +1453,7 @@ void on_device_twin_update(
       throw std::runtime_error(ERROR" LISTENER CONTEXT NOT INITIALIZED");
     }
 
-    std::cout << WORKING << " DEVICE TWIN UPDATE RECEIVED ("
-              << twin_update_state_to_string(update_state) << ")" << std::endl;
+    std::cout << WORKING << " DEVICE TWIN UPDATE RECEIVED" << std::endl;
 
     // Keep the SDK callback short and process downloads in the main loop instead.
     queue_twin_update(*listener_context, update_state, payload_to_string(payload, size));
@@ -1578,4 +1575,3 @@ int main()
     return 1;
   }
 }
-
