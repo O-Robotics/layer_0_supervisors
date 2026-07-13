@@ -6,15 +6,18 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <deque>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <mutex>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 #include <cstdio>
 #include <curl/curl.h>
@@ -32,11 +35,11 @@
 
 #if __has_include(<azureiot/iothub.h>)
 #include <azureiot/iothub.h>
-#include <azureiot/iothub_device_client.h>
+#include <azureiot/iothub_device_client_ll.h>
 #include <azureiot/iothubtransportmqtt.h>
 #elif __has_include(<iothub.h>)
 #include <iothub.h>
-#include <iothub_device_client.h>
+#include <iothub_device_client_ll.h>
 #include <iothubtransportmqtt.h>
 #else
 #error "Azure IoT C SDK headers not found. Install azure-iot-sdk-c or set CPPFLAGS."
@@ -51,10 +54,21 @@ constexpr const char * kHomeEnv = "HOME";
 
 volatile std::sig_atomic_t g_running = 1;
 
+struct PendingTwinUpdate
+{
+  DEVICE_TWIN_UPDATE_STATE update_state;
+  std::string payload;
+};
+
 struct ListenerContext
 {
   std::string hostname;
   std::string robot_api_key;
+  std::mutex state_mutex;
+  std::deque<PendingTwinUpdate> pending_twin_updates;
+  std::optional<std::string> last_processed_active_package;
+  bool startup_twin_requested = false;
+  bool startup_twin_completed = false;
 };
 
 void handle_signal(int)
@@ -218,9 +232,19 @@ void load_dotenv(const std::filesystem::path & path)
   }
 }
 
+void ensure_dotenv_loaded()
+{
+  static const bool dotenv_loaded = []() {
+    load_dotenv(kEnvPath);
+    return true;
+  }();
+
+  (void)dotenv_loaded;
+}
+
 std::string required_environment_variable(const char * variable_name)
 {
-  load_dotenv(kEnvPath);
+  ensure_dotenv_loaded();
 
   const char * value = std::getenv(variable_name);
   if (value == nullptr || value[0] == '\0') {
@@ -735,6 +759,35 @@ std::string calculate_sha256_checksum(const std::filesystem::path & path)
   return "sha256:" + hex_output.str();
 }
 
+bool existing_file_matches_checksum(
+  const std::filesystem::path & path,
+  const std::string & expected_checksum,
+  std::string * error_message = nullptr)
+{
+  std::error_code exists_error;
+  const bool file_exists = std::filesystem::exists(path, exists_error);
+  if (exists_error) {
+    if (error_message != nullptr) {
+      *error_message = "failed to inspect existing file: " + path.string();
+    }
+    return false;
+  }
+
+  if (!file_exists) {
+    return false;
+  }
+
+  try {
+    const std::string actual_checksum = calculate_sha256_checksum(path);
+    return normalize_sha256_checksum(actual_checksum) == expected_checksum;
+  } catch (const std::exception & ex) {
+    if (error_message != nullptr) {
+      *error_message = ex.what();
+    }
+    return false;
+  }
+}
+
 void download_and_verify_manifest_files(
   const Manifest & manifest,
   const std::filesystem::path & manifest_path,
@@ -749,7 +802,20 @@ void download_and_verify_manifest_files(
     try {
       const std::filesystem::path output_path =
         content_output_path_from_manifest(manifest_path, file.file_name);
+      const std::string expected_checksum = normalize_sha256_checksum(file.checksum);
       std::string error_message;
+
+      if (existing_file_matches_checksum(output_path, expected_checksum, &error_message)) {
+        std::cout << WORKING << " REUSING FILE: " << output_path.string() << std::endl;
+        std::cout << VALIDATING << " VERIFYING CHECKSUM: OK" << std::endl;
+        continue;
+      }
+
+      if (!error_message.empty()) {
+        std::cout << WARNING << " EXISTING FILE CHECK FAILED: " << file.file_name
+                  << ": " << error_message << std::endl;
+        error_message.clear();
+      }
 
       if (!download_file(
             file.download_url,
@@ -765,10 +831,16 @@ void download_and_verify_manifest_files(
       std::cout << WORKING << " SAVING FILE: " << output_path.string() << std::endl;
 
       const std::string actual_checksum = calculate_sha256_checksum(output_path);
-      const bool checksum_matches =
-        normalize_sha256_checksum(actual_checksum) == normalize_sha256_checksum(file.checksum);
+      const bool checksum_matches = normalize_sha256_checksum(actual_checksum) == expected_checksum;
 
       std::cout << VALIDATING << " VERIFYING CHECKSUM: " << (checksum_matches ? "OK" : "MISMATCH") << std::endl;
+      if (!checksum_matches) {
+        std::error_code remove_error;
+        std::filesystem::remove(output_path, remove_error);
+        if (remove_error) {
+          std::cerr << WARNING << " FAILED TO REMOVE INVALID FILE: " << output_path.string() << std::endl;
+        }
+      }
     } catch (const std::exception & ex) {
       std::cerr << ERROR << "FAILED TO PROCESS FILE: " << file.file_name
                 << ": " << ex.what() << std::endl;
@@ -823,11 +895,68 @@ const char * connection_reason_to_string(IOTHUB_CLIENT_CONNECTION_STATUS_REASON 
   }
 }
 
+void queue_twin_update(
+  ListenerContext & listener_context,
+  DEVICE_TWIN_UPDATE_STATE update_state,
+  std::string payload)
+{
+  std::lock_guard<std::mutex> lock(listener_context.state_mutex);
+  listener_context.pending_twin_updates.push_back(PendingTwinUpdate {update_state, std::move(payload)});
+}
+
+std::optional<PendingTwinUpdate> take_pending_twin_update(ListenerContext & listener_context)
+{
+  std::lock_guard<std::mutex> lock(listener_context.state_mutex);
+  if (listener_context.pending_twin_updates.empty()) {
+    return std::nullopt;
+  }
+
+  PendingTwinUpdate next_update = std::move(listener_context.pending_twin_updates.front());
+  listener_context.pending_twin_updates.pop_front();
+  return next_update;
+}
+
+bool try_begin_startup_twin_request(ListenerContext & listener_context)
+{
+  std::lock_guard<std::mutex> lock(listener_context.state_mutex);
+  if (listener_context.startup_twin_requested ||
+      listener_context.startup_twin_completed) {
+    return false;
+  }
+
+  listener_context.startup_twin_requested = true;
+  return true;
+}
+
+void mark_startup_twin_request_pending(ListenerContext & listener_context)
+{
+  std::lock_guard<std::mutex> lock(listener_context.state_mutex);
+  if (!listener_context.startup_twin_completed) {
+    listener_context.startup_twin_requested = false;
+  }
+}
+
+void mark_startup_twin_completed(ListenerContext & listener_context)
+{
+  std::lock_guard<std::mutex> lock(listener_context.state_mutex);
+  listener_context.startup_twin_requested = true;
+  listener_context.startup_twin_completed = true;
+}
+
 void on_connection_status(
   IOTHUB_CLIENT_CONNECTION_STATUS status,
   IOTHUB_CLIENT_CONNECTION_STATUS_REASON reason,
-  void *)
+  void * user_context)
 {
+  ListenerContext * listener_context = static_cast<ListenerContext *>(user_context);
+  if (listener_context != nullptr) {
+    std::lock_guard<std::mutex> lock(listener_context->state_mutex);
+    if (status != IOTHUB_CLIENT_CONNECTION_AUTHENTICATED &&
+        !listener_context->startup_twin_completed) {
+      listener_context->startup_twin_requested = false;
+    }
+  }
+
   if (status == IOTHUB_CLIENT_CONNECTION_AUTHENTICATED) {
     std::cout << "IOT HUB DEVICE TWIN LISTENER v" << VERSION << " CONNECTED TO IOT HUB" << std::endl;
     std::cout << IDLING << " LISTENING (IDLING)" << std::endl;
@@ -974,41 +1103,47 @@ bool download_file(
   return true;
 }
 
-void on_device_twin_update(
+void process_device_twin_update(
   DEVICE_TWIN_UPDATE_STATE update_state,
-  const unsigned char * payload,
-  std::size_t size,
-  void * user_context)
+  const std::string & twin_payload,
+  ListenerContext & listener_context)
 {
   try {
-    const ListenerContext * listener_context = static_cast<const ListenerContext *>(user_context);
-    if (listener_context == nullptr) {
-      throw std::runtime_error(ERROR" LISTENER CONTEXT NOT INITIALIZED");
-    }
-
-    const std::string twin_payload = payload_to_string(payload, size);
     const std::string * property_source = &twin_payload;
     const std::filesystem::path manifest_output_path = manifest_output_path_from_home();
     std::string error_message;
+    const std::optional<std::string> desired_properties =
+      extract_top_level_json_value(twin_payload, "desired");
+    const bool payload_contains_full_twin =
+      desired_properties.has_value() ||
+      extract_top_level_json_value(twin_payload, "reported").has_value();
 
-    std::cout << WORKING << " UPDATE RECEIVED" << std::endl;
+    if (update_state == DEVICE_TWIN_UPDATE_COMPLETE || payload_contains_full_twin) {
+      mark_startup_twin_completed(listener_context);
+    }
 
-    if (update_state == DEVICE_TWIN_UPDATE_COMPLETE) {
-      const std::optional<std::string> desired_properties =
-        extract_top_level_json_value(twin_payload, "desired");
+    std::cout << WORKING << " PROCESSING DEVICE TWIN UPDATE ("
+              << twin_update_state_to_string(update_state) << ")" << std::endl;
 
-      if (desired_properties.has_value()) {
-        property_source = &*desired_properties;
-      } else {
-        std::cout << "TWIN:" << std::endl;
-        std::cout << twin_payload << std::endl;
-      }
+    if (desired_properties.has_value()) {
+      property_source = &*desired_properties;
+    } else if (update_state == DEVICE_TWIN_UPDATE_COMPLETE || payload_contains_full_twin) {
+      std::cout << "TWIN:" << std::endl;
+      std::cout << twin_payload << std::endl;
     }
 
     const std::optional<std::string> active_package =
       extract_top_level_json_value(*property_source, "activePackage");
     if (!active_package.has_value()) {
       std::cout << WARNING << " UPDATE HAS NO activePackage" << std::endl;
+      std::cout << IDLING << " LISTENING (IDLING)" << std::endl;
+      return;
+    }
+
+    const std::string active_package_signature = trim(*active_package);
+    if (listener_context.last_processed_active_package.has_value() &&
+        *listener_context.last_processed_active_package == active_package_signature) {
+      std::cout << WORKING << " DUPLICATE activePackage RECEIVED; SKIPPING" << std::endl;
       std::cout << IDLING << " LISTENING (IDLING)" << std::endl;
       return;
     }
@@ -1031,8 +1166,8 @@ void on_device_twin_update(
     if (!download_file(
           *url,
           manifest_output_path.string(),
-          listener_context->hostname,
-          listener_context->robot_api_key,
+          listener_context.hostname,
+          listener_context.robot_api_key,
           &error_message)) {
       std::cerr << "Failed to save '" << manifest_output_path.string() << "': " << error_message << std::endl;
       std::cout << IDLING << " LISTENING (IDLING)" << std::endl;
@@ -1042,11 +1177,34 @@ void on_device_twin_update(
     std::cout << WORKING << " SAVING FILE: " << manifest_output_path.string() << std::endl;
 
     const Manifest manifest = Manifest::load_from_file(manifest_output_path);
-    download_and_verify_manifest_files(manifest, manifest_output_path, *listener_context);
+    download_and_verify_manifest_files(manifest, manifest_output_path, listener_context);
+    listener_context.last_processed_active_package = active_package_signature;
   } catch (const std::exception & ex) {
     std::cerr << ERROR << " FAILED TO PROCESS DATA: " << ex.what() << std::endl;
   }
   std::cout << IDLING << " LISTENING (IDLING)" << std::endl;
+}
+
+void on_device_twin_update(
+  DEVICE_TWIN_UPDATE_STATE update_state,
+  const unsigned char * payload,
+  std::size_t size,
+  void * user_context)
+{
+  try {
+    ListenerContext * listener_context = static_cast<ListenerContext *>(user_context);
+    if (listener_context == nullptr) {
+      throw std::runtime_error(ERROR" LISTENER CONTEXT NOT INITIALIZED");
+    }
+
+    std::cout << WORKING << " DEVICE TWIN UPDATE RECEIVED ("
+              << twin_update_state_to_string(update_state) << ")" << std::endl;
+
+    // Keep the SDK callback short and process downloads in the main loop instead.
+    queue_twin_update(*listener_context, update_state, payload_to_string(payload, size));
+  } catch (const std::exception & ex) {
+    std::cerr << ERROR << " FAILED TO QUEUE DEVICE TWIN DATA: " << ex.what() << std::endl;
+  }
 }
 
 class IoTHubRuntime
@@ -1072,7 +1230,7 @@ class DeviceClient
 {
 public:
   explicit DeviceClient(const std::string & connection_string)
-  : handle_(IoTHubDeviceClient_CreateFromConnectionString(connection_string.c_str(), MQTT_Protocol))
+  : handle_(IoTHubDeviceClient_LL_CreateFromConnectionString(connection_string.c_str(), MQTT_Protocol))
   {
     if (handle_ == nullptr) {
       throw std::runtime_error("failed to create IoT Hub device client from connection string");
@@ -1082,20 +1240,20 @@ public:
   ~DeviceClient()
   {
     if (handle_ != nullptr) {
-      IoTHubDeviceClient_Destroy(handle_);
+      IoTHubDeviceClient_LL_Destroy(handle_);
     }
   }
 
   DeviceClient(const DeviceClient &) = delete;
   DeviceClient & operator=(const DeviceClient &) = delete;
 
-  IOTHUB_DEVICE_CLIENT_HANDLE get() const
+  IOTHUB_DEVICE_CLIENT_LL_HANDLE get() const
   {
     return handle_;
   }
 
 private:
-  IOTHUB_DEVICE_CLIENT_HANDLE handle_ {};
+  IOTHUB_DEVICE_CLIENT_LL_HANDLE handle_ {};
 };
 
 }  // namespace
@@ -1112,18 +1270,45 @@ int main()
 
     IoTHubRuntime runtime;
     DeviceClient device_client(connection_string);
-    ListenerContext listener_context {hostname, robot_api_key};
+    ListenerContext listener_context;
+    listener_context.hostname = hostname;
+    listener_context.robot_api_key = robot_api_key;
+    const auto startup_twin_request_deadline =
+      std::chrono::steady_clock::now() + std::chrono::seconds(2);
 
-    if (IoTHubDeviceClient_SetConnectionStatusCallback(device_client.get(), on_connection_status, nullptr) != IOTHUB_CLIENT_OK) {
+    if (IoTHubDeviceClient_LL_SetConnectionStatusCallback(device_client.get(), on_connection_status, &listener_context) != IOTHUB_CLIENT_OK) {
       std::cerr << "Warning: failed to register IoT Hub connection status callback" << std::endl;
     }
 
-    if (IoTHubDeviceClient_SetDeviceTwinCallback(device_client.get(), on_device_twin_update, &listener_context) != IOTHUB_CLIENT_OK) {
+    if (IoTHubDeviceClient_LL_SetDeviceTwinCallback(device_client.get(), on_device_twin_update, &listener_context) != IOTHUB_CLIENT_OK) {
       throw std::runtime_error("failed to register device twin callback");
     }
 
     while (g_running != 0) {
-      std::this_thread::sleep_for(std::chrono::seconds(1));
+      IoTHubDeviceClient_LL_DoWork(device_client.get());
+
+      if (std::chrono::steady_clock::now() >= startup_twin_request_deadline &&
+          try_begin_startup_twin_request(listener_context)) {
+        std::cout << WORKING << " REQUESTING FULL DEVICE TWIN" << std::endl;
+        if (IoTHubDeviceClient_LL_GetTwinAsync(device_client.get(), on_device_twin_update, &listener_context) != IOTHUB_CLIENT_OK) {
+          std::cerr << ERROR << " FAILED TO REQUEST STARTUP DEVICE TWIN" << std::endl;
+          mark_startup_twin_request_pending(listener_context);
+        }
+      }
+
+      while (true) {
+        const std::optional<PendingTwinUpdate> next_update = take_pending_twin_update(listener_context);
+        if (!next_update.has_value()) {
+          break;
+        }
+
+        process_device_twin_update(
+          next_update->update_state,
+          next_update->payload,
+          listener_context);
+      }
+
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 
     std::cout << BREAK << " INTERRUPED BY USER" << std::endl;
