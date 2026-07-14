@@ -52,12 +52,18 @@ constexpr const char * kEnvPath = "/storage/secrets/.env";
 constexpr const char * kConnectionStringEnv = "IOTHUB_DEVICE_CONNECTION_STRING";
 constexpr const char * kRobotApiKeyEnv = "ROBOT_API_KEY";
 constexpr const char * kHomeEnv = "HOME";
+constexpr const char * kMessageOutputFileName = "message.json";
 
 volatile std::sig_atomic_t g_running = 1;
 
 struct PendingTwinUpdate
 {
   DEVICE_TWIN_UPDATE_STATE update_state;
+  std::string payload;
+};
+
+struct PendingMessage
+{
   std::string payload;
 };
 
@@ -84,6 +90,7 @@ struct ListenerContext
   IOTHUB_DEVICE_CLIENT_LL_HANDLE device_client_handle = nullptr;
   std::mutex state_mutex;
   std::deque<PendingTwinUpdate> pending_twin_updates;
+  std::deque<PendingMessage> pending_messages;
   std::optional<std::string> last_processed_active_package;
   std::optional<std::string> last_confirmed_reported_status_key;
   bool startup_twin_requested = false;
@@ -354,6 +361,11 @@ std::string manifest_output_path_from_home()
   }
 
   return (std::filesystem::path(home) / "rob_ws" / "missions" / "database" / "manifest.json").string();
+}
+
+std::filesystem::path message_output_path()
+{
+  return kMessageOutputFileName;
 }
 
 std::filesystem::path content_output_path_from_manifest(
@@ -1135,6 +1147,14 @@ void queue_twin_update(
   listener_context.pending_twin_updates.push_back(PendingTwinUpdate {update_state, std::move(payload)});
 }
 
+void queue_message(
+  ListenerContext & listener_context,
+  std::string payload)
+{
+  std::lock_guard<std::mutex> lock(listener_context.state_mutex);
+  listener_context.pending_messages.push_back(PendingMessage {std::move(payload)});
+}
+
 std::optional<PendingTwinUpdate> take_pending_twin_update(ListenerContext & listener_context)
 {
   std::lock_guard<std::mutex> lock(listener_context.state_mutex);
@@ -1145,6 +1165,18 @@ std::optional<PendingTwinUpdate> take_pending_twin_update(ListenerContext & list
   PendingTwinUpdate next_update = std::move(listener_context.pending_twin_updates.front());
   listener_context.pending_twin_updates.pop_front();
   return next_update;
+}
+
+std::optional<PendingMessage> take_pending_message(ListenerContext & listener_context)
+{
+  std::lock_guard<std::mutex> lock(listener_context.state_mutex);
+  if (listener_context.pending_messages.empty()) {
+    return std::nullopt;
+  }
+
+  PendingMessage next_message = std::move(listener_context.pending_messages.front());
+  listener_context.pending_messages.pop_front();
+  return next_message;
 }
 
 bool try_begin_startup_twin_request(ListenerContext & listener_context)
@@ -1189,12 +1221,68 @@ void on_connection_status(
   }
 
   if (status == IOTHUB_CLIENT_CONNECTION_AUTHENTICATED) {
-    std::cout << "IOT HUB DEVICE TWIN LISTENER v" << VERSION << " CONNECTED TO IOT HUB" << std::endl;
+    std::cout << "IOT HUB DEVICE LISTENER v" << VERSION << " CONNECTED TO IOT HUB" << std::endl;
     std::cout << IDLING << " LISTENING (IDLING)" << std::endl;
   } else {
     std::cerr << ERROR << " IOT HUB AUTHENTICATION FAILURE: "
               << connection_reason_to_string(reason) << std::endl;
   }
+}
+
+std::optional<std::string> extract_message_payload(IOTHUB_MESSAGE_HANDLE message)
+{
+  const char * string_payload = IoTHubMessage_GetString(message);
+  if (string_payload != nullptr) {
+    return std::string(string_payload);
+  }
+
+  const unsigned char * buffer = nullptr;
+  size_t size = 0;
+  if (IoTHubMessage_GetByteArray(message, &buffer, &size) == IOTHUB_MESSAGE_OK) {
+    return std::string(reinterpret_cast<const char *>(buffer), size);
+  }
+
+  return std::nullopt;
+}
+
+void save_message_payload(const std::string & payload)
+{
+  const std::filesystem::path output_path = message_output_path();
+  const std::filesystem::path output_directory = output_path.parent_path();
+  if (!output_directory.empty()) {
+    std::error_code create_error;
+    std::filesystem::create_directories(output_directory, create_error);
+    if (create_error) {
+      throw std::runtime_error("failed to create output directory: " + output_directory.string());
+    }
+  }
+
+  std::ofstream output(output_path, std::ios::binary | std::ios::trunc);
+  if (!output) {
+    throw std::runtime_error("failed to open output file: " + output_path.string());
+  }
+
+  output.write(payload.data(), static_cast<std::streamsize>(payload.size()));
+  if (!output.good()) {
+    throw std::runtime_error("failed to write output file: " + output_path.string());
+  }
+
+  output.close();
+  if (!output) {
+    throw std::runtime_error("failed to finalize output file: " + output_path.string());
+  }
+}
+
+void process_received_message(const PendingMessage & message)
+{
+  try {
+    save_message_payload(message.payload);
+    std::cout << WORKING << " SAVING FILE: " << message_output_path().string() << std::endl;
+  } catch (const std::exception & ex) {
+    std::cerr << ERROR << " FAILED TO SAVE DEVICE MESSAGE: " << ex.what() << std::endl;
+  }
+
+  std::cout << IDLING << " LISTENING (IDLING)" << std::endl;
 }
 
 size_t write_to_stream(void * contents, size_t size, size_t count, void * user_data)
@@ -1462,6 +1550,33 @@ void on_device_twin_update(
   }
 }
 
+IOTHUBMESSAGE_DISPOSITION_RESULT on_message_received(
+  IOTHUB_MESSAGE_HANDLE message,
+  void * user_context)
+{
+  try {
+    ListenerContext * listener_context = static_cast<ListenerContext *>(user_context);
+    if (listener_context == nullptr) {
+      throw std::runtime_error(ERROR" LISTENER CONTEXT NOT INITIALIZED");
+    }
+
+    const std::optional<std::string> payload = extract_message_payload(message);
+    if (!payload.has_value()) {
+      std::cerr << ERROR << " FAILED TO READ DEVICE MESSAGE PAYLOAD" << std::endl;
+      return IOTHUBMESSAGE_REJECTED;
+    }
+
+    std::cout << WORKING << " DEVICE MESSAGE RECEIVED" << std::endl;
+
+    // Keep the SDK callback short and save the message in the main loop instead.
+    queue_message(*listener_context, *payload);
+    return IOTHUBMESSAGE_ACCEPTED;
+  } catch (const std::exception & ex) {
+    std::cerr << ERROR << " FAILED TO QUEUE DEVICE MESSAGE: " << ex.what() << std::endl;
+    return IOTHUBMESSAGE_ABANDONED;
+  }
+}
+
 class IoTHubRuntime
 {
 public:
@@ -1540,6 +1655,10 @@ int main()
       throw std::runtime_error("failed to register device twin callback");
     }
 
+    if (IoTHubDeviceClient_LL_SetMessageCallback(device_client.get(), on_message_received, &listener_context) != IOTHUB_CLIENT_OK) {
+      throw std::runtime_error("failed to register device message callback");
+    }
+
     while (g_running != 0) {
       IoTHubDeviceClient_LL_DoWork(device_client.get());
 
@@ -1562,6 +1681,15 @@ int main()
           next_update->update_state,
           next_update->payload,
           listener_context);
+      }
+
+      while (true) {
+        const std::optional<PendingMessage> next_message = take_pending_message(listener_context);
+        if (!next_message.has_value()) {
+          break;
+        }
+
+        process_received_message(*next_message);
       }
 
       std::this_thread::sleep_for(std::chrono::milliseconds(100));
