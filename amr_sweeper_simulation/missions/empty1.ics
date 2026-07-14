@@ -26,11 +26,11 @@ END:STANDARD
 END:VTIMEZONE
 
 BEGIN:VEVENT
-UID:simulation-empty1-work-20260708t000000@amr_sweeper_scheduler
-DTSTAMP:20260708T000000Z
+UID:simulation-empty1-work-20260714t000000@amr_sweeper_scheduler
+DTSTAMP:20260714T000000Z
 SUMMARY:AMR Sweeper simulation mission empty1
 DESCRIPTION:Recurring simulation work window for empty1.
-DTSTART;TZID=Europe/Copenhagen:20260708T000000
+DTSTART;TZID=Europe/Copenhagen:20260714T000000
 DURATION:PT5M
 RRULE:FREQ=MINUTELY;INTERVAL=15
 X-ROBOT-ID:RBT-01
@@ -39,19 +39,4 @@ X-MISSION-ID:empty1
 X-RECORD-ROSBAG:FALSE
 END:VEVENT
 
-BEGIN:VEVENT
-UID:safety-amr_sweeper_attitude_controller-19700101T000016Z
-DTSTART;TZID=Europe/Copenhagen:19700101T010016
-DURATION:PT0S
-SUMMARY:Safety stop amr_sweeper_attitude_controller
-DESCRIPTION:sender=amr_sweeper_attitude_controller\; reason=imu timeout error\, imu/data_raw: no messages received\, roll=0.0 deg\, pitch=0.0 deg\; mission_id=empty1\; mission_run_directory=/home/alfolsen/dev/rob_ws/missions/simulations/empty1/20260708T121630Z\; recorded_by=mission_executor
-X-ROBOT-ID:RBT-01
-X-SCHEDULE-TYPE:SAFETY
-X-SAFETY-SENDER:amr_sweeper_attitude_controller
-X-SAFETY-REASON:imu timeout error\, imu/data_raw: no messages received\, roll=0.0 deg\, pitch=0.0 deg
-X-SAFETY-DEBUG:sender=amr_sweeper_attitude_controller\; reason=imu timeout error\, imu/data_raw: no messages received\, roll=0.0 deg\, pitch=0.0 deg\; mission_id=empty1\; mission_run_directory=/home/alfolsen/dev/rob_ws/missions/simulations/empty1/20260708T121630Z\; recorded_by=mission_executor
-X-ACTUAL-START-UTC:19700101T000016Z
-X-MISSION-ID:empty1
-X-MISSION-RUN-DIRECTORY:/home/alfolsen/dev/rob_ws/missions/simulations/empty1/20260708T121630Z
-END:VEVENT
 END:VCALENDAR

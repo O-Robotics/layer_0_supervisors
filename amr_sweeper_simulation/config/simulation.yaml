@@ -22,8 +22,8 @@
       mission_id: empty1
       schedule_ics_path: missions/database/simulations/empty1.ics
       spawn_pose:
-        x: 0.0
-        y: 0.0
+        x: -5.0
+        y: -4.75
         z: 0.15
         roll: 0.0
         pitch: 0.0
@@ -34,20 +34,20 @@
       mission_id: test_city
       schedule_ics_path: missions/database/simulations/test_city.ics
       spawn_pose:
-        x: 0.0
-        y: 0.0
+        x: 33.0
+        y: 13.0
         z: 0.15
         roll: 0.0
         pitch: 0.0
         yaw: 0.0
-    neighborhood:
-      world_name: neighborhood
-      world_file: neighborhood.sdf
-      mission_id: neighborhood
-      schedule_ics_path: missions/database/simulations/neighborhood.ics
+    medium_city:
+      world_name: medium_city
+      world_file: medium_city.sdf
+      mission_id: medium_city
+      schedule_ics_path: missions/database/simulations/medium_city.ics
       spawn_pose:
-        x: 15.0
-        y: 7.0
+        x: -49.8
+        y: -49.7
         z: 0.15
         roll: 0.0
         pitch: 0.0
@@ -58,20 +58,20 @@
       mission_id: small_city
       schedule_ics_path: missions/database/simulations/small_city.ics
       spawn_pose:
-        x: -15.0
-        y: 0.0
+        x: 26.66
+        y: -27.38
         z: 0.15
         roll: 0.0
         pitch: 0.0
         yaw: 0.0
-    simple_city:
-      world_name: simple_city
-      world_file: simple_city.sdf
-      mission_id: simple_city
-      schedule_ics_path: missions/database/simulations/simple_city.ics
+    large_city:
+      world_name: large_city
+      world_file: large_city.sdf
+      mission_id: large_city
+      schedule_ics_path: missions/database/simulations/large_city.ics
       spawn_pose:
-        x: -45.0
-        y: -2.0
+        x: 22.46
+        y: -97.78
         z: 0.15
         roll: 0.0
         pitch: 0.0

@@ -1,5 +1,5 @@
 <sdf version="1.6">
-  <world name="simple_city">
+  <world name="large_city">
 
     <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics" />
     <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands" />
@@ -17,13 +17,13 @@
     <scene>
       <grid>false</grid>
       <origin_visual>false</origin_visual>
-      <ambient>0.592 0.624 0.635 1</ambient>
+      <ambient>0.46 0.47 0.48 1</ambient>
       <sky>
         <clouds>
           <speed>12</speed>
         </clouds>
       </sky>
-      <background>0.35 0.35 0.35 1.0</background>
+      <background>0.64 0.70 0.76 1.0</background>
     </scene>
 
     <physics name="default_physics" default="0" type="ode">
@@ -44,15 +44,15 @@
     <light type="directional" name="sun">
       <pose>0 0 1000 0 0 0</pose>
       <cast_shadows>true</cast_shadows>
-      <diffuse>0.8 0.8 0.8 1</diffuse>
-      <specular>0.5 0.5 0.5 1</specular>
+      <diffuse>0.92 0.90 0.84 1</diffuse>
+      <specular>0.35 0.34 0.30 1</specular>
       <attenuation>
         <range>1000</range>
         <constant>0.9</constant>
         <linear>0.01</linear>
         <quadratic>0.001</quadratic>
       </attenuation>
-      <direction>-0.5 0.1 -0.4</direction>
+      <direction>-0.42 0.16 -0.89</direction>
     </light>
 
     <model name="shaderbox">

@@ -3,7 +3,7 @@ VERSION:2.0
 PRODID:-//O-Robotics//AMR Sweeper Simulation Schedule//EN
 CALSCALE:GREGORIAN
 METHOD:PUBLISH
-X-WR-CALNAME:AMR Sweeper Simulation - neighborhood
+X-WR-CALNAME:AMR Sweeper Simulation - medium_city
 X-WR-TIMEZONE:Europe/Copenhagen
 
 BEGIN:VTIMEZONE
@@ -26,16 +26,16 @@ END:STANDARD
 END:VTIMEZONE
 
 BEGIN:VEVENT
-UID:simulation-neighborhood-work-20260708t000000@amr_sweeper_scheduler
-DTSTAMP:20260708T000000Z
-SUMMARY:AMR Sweeper simulation mission neighborhood
-DESCRIPTION:Recurring simulation work window for neighborhood.
-DTSTART;TZID=Europe/Copenhagen:20260708T000000
+UID:simulation-medium_city-work-20260714t000000@amr_sweeper_scheduler
+DTSTAMP:20260714T000000Z
+SUMMARY:AMR Sweeper simulation mission medium city
+DESCRIPTION:Recurring simulation work window for medium_city.
+DTSTART;TZID=Europe/Copenhagen:20260714T000000
 DURATION:PT5M
 RRULE:FREQ=MINUTELY;INTERVAL=15
 X-ROBOT-ID:RBT-01
 X-SCHEDULE-TYPE:WORK
-X-MISSION-ID:neighborhood
+X-MISSION-ID:medium_city
 X-RECORD-ROSBAG:FALSE
 END:VEVENT
 

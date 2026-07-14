@@ -5,8 +5,8 @@ simulation worlds.
 
 Most city environment models were copied from `osrf/gazebo_models` at commit
 `8163eb4b5e7e21985c6591d1c0bfb56468c0093f` so the simulation can resolve the
-model references used by the `small_city`, `test_city`, `neighborhood`, and
-`simple_city` worlds without modifying the checked-out model/world collections.
+model references used by the `small_city`, `test_city`, `medium_city`, and
+`large_city` worlds without modifying the checked-out model/world collections.
 
 The `city_terrain` and `ocean` models originate from `osrf/citysim` at commit
 `3928b08e2598f5ead2e9b24640fe1bde262a136d`. The `asphalt_plane` model
@@ -17,7 +17,7 @@ compatibility fixes applied in this package-local copy.
 These two repositories used to be vendored in full as git submodules under
 `worlds/citysim` and `worlds/gazebo_models_worlds_collection`, but were removed
 because only a handful of their hundreds of models are actually used by the
-`small_city`, `test_city`, `neighborhood`, and `simple_city` worlds. Only the
+`small_city`, `test_city`, `medium_city`, and `large_city` worlds. Only the
 models actually referenced by those four worlds are kept here. If a world
 needs a model that isn't in this directory, pull it from the source repo/
 commit below (or a newer commit, re-verifying compatibility) rather than
