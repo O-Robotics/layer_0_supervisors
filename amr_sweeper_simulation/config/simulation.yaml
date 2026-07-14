@@ -126,10 +126,10 @@ bridges:
     ros_type_name: sensor_msgs/msg/CameraInfo
     gz_type_name: gz.msgs.CameraInfo
     direction: GZ_TO_ROS
-  - ros_topic_name: drive_controller/odom
-    gz_topic_name: /gazebo/drive_controller/odom
-    ros_type_name: nav_msgs/msg/Odometry
-    gz_type_name: gz.msgs.Odometry
+  - ros_topic_name: simulation/robot_pose
+    gz_topic_name: /model/{entity_name}/pose
+    ros_type_name: geometry_msgs/msg/PoseStamped
+    gz_type_name: gz.msgs.Pose
     direction: GZ_TO_ROS
   - ros_topic_name: sweeping_controller/cmd_vel_drive
     gz_topic_name: /gazebo/sweeping_controller/cmd_vel_drive

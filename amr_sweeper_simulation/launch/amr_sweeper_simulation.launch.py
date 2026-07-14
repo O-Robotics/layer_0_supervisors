@@ -272,18 +272,26 @@ def _upgrade_legacy_materials(world_sdf: str) -> tuple[str, int]:
     return ET.tostring(root, encoding="unicode"), upgraded_material_count
 
 
-def _bridge_config(bridge: dict, namespace: str, world_name: str) -> dict:
-    ros_topic_name = bridge["ros_topic_name"].replace("{world_name}", world_name)
+def _expand_bridge_template(value: str, world_name: str, entity_name: str) -> str:
+    return value.replace("{world_name}", world_name).replace("{entity_name}", entity_name)
+
+
+def _bridge_config(bridge: dict, namespace: str, world_name: str, entity_name: str) -> dict:
+    ros_topic_name = _expand_bridge_template(bridge["ros_topic_name"], world_name, entity_name)
     if not ros_topic_name.startswith("/"):
         ros_topic_name = _absolute_topic(namespace, ros_topic_name)
-    gz_topic_name = bridge.get("gz_topic_name", bridge["ros_topic_name"]).replace("{world_name}", world_name)
+    gz_topic_name = _expand_bridge_template(
+        bridge.get("gz_topic_name", bridge["ros_topic_name"]),
+        world_name,
+        entity_name,
+    )
     if not gz_topic_name.startswith("/"):
         gz_topic_name = "/" + gz_topic_name.lstrip("/")
     return {
         "ros_topic_name": ros_topic_name,
         "gz_topic_name": gz_topic_name,
         "ros_type_name": bridge["ros_type_name"],
-        "gz_type_name": bridge["gz_type_name"].replace("{world_name}", world_name),
+        "gz_type_name": _expand_bridge_template(bridge["gz_type_name"], world_name, entity_name),
         "direction": bridge["direction"],
     }
 
@@ -539,9 +547,8 @@ def _launch_setup(context, *args, **kwargs):
             "-allow_renaming", "false",
         ],
     )
-
     bridge_configs = {
-        f"bridge_{index}": _bridge_config(bridge, namespace, world_name)
+        f"bridge_{index}": _bridge_config(bridge, namespace, world_name, entity_name)
         for index, bridge in enumerate(config["bridges"])
     }
     bridge = Node(
@@ -605,18 +612,14 @@ def _launch_setup(context, *args, **kwargs):
                     "use_nmea_to_caster": use_ntrip_client,
                     "gnss_frame_id": gnss_config["frame_id"],
                     "fix_topic": "navsat",
-                    "world_name": world_name,
-                    "pose_topic": _absolute_topic(namespace, "simulation/pose/info"),
+                    "robot_pose_topic": _absolute_topic(namespace, "simulation/robot_pose"),
                     "navsat_topic": gnss_config["navsat_topic"],
                     "gpsfix_topic": gnss_config["gpsfix_topic"],
                     "odometry_topic": gnss_config["odometry_topic"],
-                    "status_marker_topic": gnss_config["status_marker_topic"],
                     "rtcm_topic": gnss_config.get("rtcm_topic", "ntrip_client/rtcm"),
                     "origin_lat": str(georeference["latitude_deg"]),
                     "origin_lon": str(georeference["longitude_deg"]),
                     "origin_alt": str(georeference["elevation_m"]),
-                    "spawn_x": str(spawn_pose["x"]),
-                    "spawn_y": str(spawn_pose["y"]),
                     "publish_rate_hz": str(gnss_config.get("publish_rate_hz", 5.0)),
                     "noise_correlation_tau_s": str(gnss_config.get("noise_correlation_tau_s", 12.0)),
                     "autonomous_noise_h_m": str(gnss_config.get("autonomous_noise_h_m", 1.25)),
@@ -667,9 +670,3 @@ def generate_launch_description():
         DeclareLaunchArgument("override_timestamps_with_wall_time", default_value="false"),
         OpaqueFunction(function=_launch_setup),
     ])
-
-
-
-
-
-

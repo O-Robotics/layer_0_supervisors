@@ -15,6 +15,7 @@
   <exec_depend>amr_sweeper_fsm</exec_depend>
   <exec_depend>amr_sweeper_gnss</exec_depend>
   <exec_depend>amr_sweeper_mission_executor</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>gps_msgs</exec_depend>
   <exec_depend>nav_msgs</exec_depend>
   <exec_depend>python3-yaml</exec_depend>
