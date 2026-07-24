@@ -1,5 +1,8 @@
 ﻿import copy
+import json
+import math
 import os
+import random
 import re
 import subprocess
 import tempfile
@@ -74,6 +77,142 @@ def _resolve_world_path(simulation_pkg: str, world_file: str) -> str:
     if os.path.isabs(world_file):
         return world_file
     return os.path.join(simulation_pkg, "worlds", world_file)
+
+
+def _as_bool(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _point_in_polygon(point: tuple[float, float], polygon: list[tuple[float, float]]) -> bool:
+    x, y = point
+    inside = False
+    j = len(polygon) - 1
+    for i, (xi, yi) in enumerate(polygon):
+        xj, yj = polygon[j]
+        denominator = yj - yi
+        if abs(denominator) < 1.0e-12:
+            denominator = 1.0e-12
+        if ((yi > y) != (yj > y)) and (
+            x < (xj - xi) * (y - yi) / denominator + xi
+        ):
+            inside = not inside
+        j = i
+    return inside
+
+
+def _node_sequence_from_edges(
+    edge_ids: list[str],
+    edges_by_id: dict[str, dict],
+    close_loop: bool,
+) -> list[str]:
+    sequence: list[str] = []
+    for edge_id in edge_ids:
+        edge = edges_by_id[edge_id]
+        start_node_id = edge["startNodeId"]
+        end_node_id = edge["endNodeId"]
+        if not sequence:
+            sequence.append(start_node_id)
+        elif sequence[-1] != start_node_id:
+            sequence.append(start_node_id)
+        sequence.append(end_node_id)
+    if close_loop and len(sequence) > 1 and sequence[0] == sequence[-1]:
+        sequence.pop()
+    return sequence
+
+
+def _load_mission_polygon(mission_path: str) -> tuple[list[tuple[float, float]], str]:
+    with open(mission_path, "r", encoding="utf-8") as mission_file:
+        mission = json.load(mission_file)
+
+    reference = mission.get("missionReference", {})
+    coordinate_frame = str(reference.get("coordinateFrame", "")).strip().lower()
+    frame = "local" if coordinate_frame in {"local", "odom"} else "wgs84"
+
+    nodes_by_id = {
+        node["nodeId"]: node["nodePosition"]
+        for node in mission.get("nodes", [])
+    }
+    edges_by_id = {
+        edge["edgeId"]: edge
+        for edge in mission.get("edges", [])
+    }
+    working_zones = mission.get("missionGeometries", {}).get("workingZones", [])
+    if not working_zones:
+        raise ValueError(f"Mission {mission_path} has no working zones")
+
+    edge_ids = working_zones[0].get("edgeIds", [])
+    node_ids = _node_sequence_from_edges(edge_ids, edges_by_id, close_loop=True)
+    polygon = [
+        (float(nodes_by_id[node_id]["x"]), float(nodes_by_id[node_id]["y"]))
+        for node_id in node_ids
+    ]
+    if len(polygon) < 3:
+        raise ValueError(f"Mission {mission_path} working zone has fewer than three vertices")
+    return polygon, frame
+
+
+def _invert_affine_xy_to_wgs84(point: tuple[float, float], georeference: dict) -> tuple[float, float]:
+    lon, lat = point
+    lon_coefficients = georeference["longitude_coefficients"]
+    lat_coefficients = georeference["latitude_coefficients"]
+    a, b, c = [float(value) for value in lon_coefficients]
+    d, e, f = [float(value) for value in lat_coefficients]
+    determinant = a * e - b * d
+    if abs(determinant) < 1.0e-18:
+        raise ValueError("Mission georeference affine transform is singular")
+    lon_delta = lon - c
+    lat_delta = lat - f
+    x = (lon_delta * e - b * lat_delta) / determinant
+    y = (a * lat_delta - d * lon_delta) / determinant
+    return x, y
+
+
+def _resolve_mission_file_path(simulation_config: dict) -> str:
+    configured_path = simulation_config.get("random_spawn_mission_path", "")
+    if not configured_path:
+        configured_path = os.path.join(
+            "missions",
+            "database",
+            "simulations",
+            f"{simulation_config['mission_id']}.json",
+        )
+    if os.path.isabs(configured_path):
+        return configured_path
+    return os.path.join(os.getcwd(), configured_path)
+
+
+def _resolve_spawn_pose(simulation_config: dict) -> dict:
+    spawn_pose = copy.deepcopy(simulation_config["spawn_pose"])
+    if not _as_bool(simulation_config.get("random_spawn", False)):
+        return spawn_pose
+
+    mission_path = _resolve_mission_file_path(simulation_config)
+    polygon, frame = _load_mission_polygon(mission_path)
+    if frame == "wgs84":
+        georeference = simulation_config.get("mission_georeference", {})
+        polygon = [
+            _invert_affine_xy_to_wgs84(point, georeference)
+            for point in polygon
+        ]
+
+    min_x = min(point[0] for point in polygon)
+    max_x = max(point[0] for point in polygon)
+    min_y = min(point[1] for point in polygon)
+    max_y = max(point[1] for point in polygon)
+
+    for _ in range(1000):
+        candidate = (random.uniform(min_x, max_x), random.uniform(min_y, max_y))
+        if _point_in_polygon(candidate, polygon):
+            spawn_pose["x"] = candidate[0]
+            spawn_pose["y"] = candidate[1]
+            spawn_pose["yaw"] = random.uniform(-math.pi, math.pi)
+            return spawn_pose
+
+    raise RuntimeError(f"Failed to sample random spawn inside {mission_path}")
 
 
 def _simulation_resource_paths(simulation_pkg: str, description_share: str) -> list[str]:
@@ -203,6 +342,38 @@ def _strip_actor_elements(world_sdf: str) -> tuple[str, int]:
         removed_actor_count += 1
 
     return ET.tostring(root, encoding="unicode"), removed_actor_count
+
+
+def _strip_road_elements(world_sdf: str) -> tuple[str, int]:
+    root = ET.fromstring(world_sdf)
+    parent_map = {child: parent for parent in root.iter() for child in parent}
+    removed_road_count = 0
+
+    for road in list(root.iter("road")):
+        parent = parent_map.get(road)
+        if parent is None:
+            continue
+        parent.remove(road)
+        removed_road_count += 1
+
+    return ET.tostring(root, encoding="unicode"), removed_road_count
+
+
+def _strip_inline_mesh_collision_elements(world_sdf: str) -> tuple[str, int]:
+    root = ET.fromstring(world_sdf)
+    parent_map = {child: parent for parent in root.iter() for child in parent}
+    removed_collision_count = 0
+
+    for collision in list(root.iter("collision")):
+        if collision.find(".//mesh") is None:
+            continue
+        parent = parent_map.get(collision)
+        if parent is None:
+            continue
+        parent.remove(collision)
+        removed_collision_count += 1
+
+    return ET.tostring(root, encoding="unicode"), removed_collision_count
 
 
 def _set_child_text(element: ET.Element, tag_name: str, value: str) -> None:
@@ -388,6 +559,20 @@ def _render_world_with_georeference(
             "[amr_sweeper_simulation] Removed legacy actor animations: "
             f"{removed_actor_count}"
         )
+    world_sdf, removed_road_count = _strip_road_elements(world_sdf)
+    if removed_road_count:
+        print(
+            "[amr_sweeper_simulation] Removed Gazebo road collision geometry: "
+            f"{removed_road_count}"
+        )
+    world_sdf, removed_inline_mesh_collision_count = _strip_inline_mesh_collision_elements(
+        world_sdf
+    )
+    if removed_inline_mesh_collision_count:
+        print(
+            "[amr_sweeper_simulation] Removed inline mesh collision geometry: "
+            f"{removed_inline_mesh_collision_count}"
+        )
     world_sdf = _ensure_gz_sim_system_plugins(world_sdf)
     world_sdf, removed_model_names = _strip_missing_model_elements(
         world_sdf, available_model_names
@@ -511,7 +696,7 @@ def _launch_setup(context, *args, **kwargs):
     robot_urdf = _render_simulation_robot(namespace, entity_name)
     rendered_rviz_config = _render_rviz_config(rviz_config, namespace)
 
-    spawn_pose = simulation_config["spawn_pose"]
+    spawn_pose = _resolve_spawn_pose(simulation_config)
     launch_gz_gui_enabled = launch_gz_gui.strip().lower() in {"1", "true", "yes", "on"}
     gazebo_cmd = ["gz", "sim", "-r", world] if launch_gz_gui_enabled else ["gz", "sim", "-s", "-r", world]
     gazebo_kwargs = {

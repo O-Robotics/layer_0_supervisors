@@ -26,6 +26,7 @@ def generate_launch_description():
     idling_profile_id = LaunchConfiguration("idling_profile_id")
     mission_parser_node_name = LaunchConfiguration("mission_parser_node_name")
     mission_parser_build_service = LaunchConfiguration("mission_parser_build_service")
+    mission_parser_build_timeout_seconds = LaunchConfiguration("mission_parser_build_timeout_seconds")
 
     return LaunchDescription([
         DeclareLaunchArgument("namespace", default_value="amr_sweeper"),
@@ -57,6 +58,7 @@ def generate_launch_description():
         DeclareLaunchArgument("idling_profile_id", default_value="101"),
         DeclareLaunchArgument("mission_parser_node_name", default_value="vda5050_parser_node"),
         DeclareLaunchArgument("mission_parser_build_service", default_value="build_current_mission"),
+        DeclareLaunchArgument("mission_parser_build_timeout_seconds", default_value="300.0"),
         Node(
             package="amr_sweeper_mission_executor",
             executable="mission_executor_node",
@@ -82,6 +84,7 @@ def generate_launch_description():
                 "idling_profile_id": idling_profile_id,
                 "mission_parser_node_name": mission_parser_node_name,
                 "mission_parser_build_service": mission_parser_build_service,
+                "mission_parser_build_timeout_seconds": mission_parser_build_timeout_seconds,
             }],
         ),
     ])

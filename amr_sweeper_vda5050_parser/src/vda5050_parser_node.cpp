@@ -900,6 +900,14 @@ MissionParserNode::MissionParserNode(const rclcpp::NodeOptions & options)
   mission_build_padding_meters_ = declare_parameter<double>("mission_build_padding_meters", 2.0);
   mission_build_coverage_path_clearance_meters_ = declare_parameter<double>(
     "mission_build_coverage_path_clearance_meters", 1.0);
+  mission_projection_use_first_polygon_vertex_as_origin_ = declare_parameter<bool>(
+    "mission_projection_use_first_polygon_vertex_as_origin", true);
+  mission_projection_origin_latitude_ = declare_parameter<double>(
+    "mission_projection_origin_latitude", 0.0);
+  mission_projection_origin_longitude_ = declare_parameter<double>(
+    "mission_projection_origin_longitude", 0.0);
+  mission_projection_origin_altitude_ = declare_parameter<double>(
+    "mission_projection_origin_altitude", 0.0);
   auto_build_on_start_ = declare_parameter<bool>("auto_build_on_start", true);
   watch_for_updates_ = declare_parameter<bool>("watch_for_updates", true);
   build_discovered_missions_ = declare_parameter<bool>("build_discovered_missions", false);
@@ -1102,6 +1110,11 @@ bool MissionParserNode::buildArtifactsForMission(const std::filesystem::path & m
     Vda5050MissionBuildConfig config;
     config.mission_path = staged_mission_path.string();
     config.coverage_path_clearance_meters = mission_build_coverage_path_clearance_meters_;
+    config.use_first_polygon_vertex_as_origin =
+      mission_projection_use_first_polygon_vertex_as_origin_;
+    config.origin_latitude = mission_projection_origin_latitude_;
+    config.origin_longitude = mission_projection_origin_longitude_;
+    config.origin_altitude = mission_projection_origin_altitude_;
     mission_parser_->loadMission(config);
     const RasterizedMap rasterized_map = mission_parser_->buildSuggestedGlobalCostmap(
       mission_build_resolution_,

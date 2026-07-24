@@ -125,35 +125,35 @@
       <link name="link"><visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>144 0.14 0.01</size></box></geometry><material><ambient>0.95 0.78 0.12 1</ambient><diffuse>0.95 0.78 0.12 1</diffuse><specular>0.05 0.05 0.05 1</specular></material></visual></link>
     </model>
 
-    <include><name>city_apartment_west</name><pose>-43 49 0 0 0 1.57</pose><uri>model://apartment</uri></include>
-    <include><name>city_school_north</name><pose>-6 57 0 0 0 3.14</pose><uri>model://school</uri></include>
-    <include><name>city_police_east</name><pose>39 51 0 0 0 -1.57</pose><uri>model://police_station</uri></include>
-    <include><name>city_post_office_southwest</name><pose>-46 -48 0 0 0 0</pose><uri>model://post_office</uri></include>
-    <include><name>city_grocery_south</name><pose>0 -60 0 0 0 0</pose><uri>model://grocery_store</uri></include>
-    <include><name>city_parking_garage_east</name><pose>58 -46 0 0 0 -1.57</pose><uri>model://parking_garage</uri></include>
-    <include><name>city_salon_west</name><pose>-61 2 0 0 0 1.57</pose><uri>model://salon</uri></include>
-    <include><name>city_thrift_shop_northwest</name><pose>-59 34 0 0 0 1.57</pose><uri>model://thrift_shop</uri></include>
-    <include><name>city_fountain_plaza</name><pose>3 2 0 0 0 0</pose><uri>model://fountain</uri></include>
-    <include><name>city_postbox_plaza</name><pose>-11 8 0 0 0 0</pose><uri>model://postbox</uri></include>
-    <include><name>city_bus_terminal</name><pose>60 14 0 0 0 3.14</pose><uri>model://bus</uri></include>
-    <include><name>city_hatchback_blue</name><pose>44 -12 0 0 0 1.57</pose><uri>model://hatchback_blue</uri></include>
-    <include><name>city_hatchback_red</name><pose>45 12 0 0 0 1.57</pose><uri>model://hatchback_red</uri></include>
-    <include><name>city_suv_west_parking</name><pose>-48 -10 0 0 0 -1.57</pose><uri>model://suv</uri></include>
-    <include><name>city_pickup_market</name><pose>19 -58 0 0 0 0.3</pose><uri>model://pickup</uri></include>
-    <include><name>city_tree_nw</name><pose>-27 43 0 0 0 0</pose><uri>model://oak_tree</uri></include>
-    <include><name>city_tree_ne</name><pose>27 43 0 0 0 0</pose><uri>model://oak_tree</uri></include>
-    <include><name>city_tree_sw</name><pose>-24 -47 0 0 0 0</pose><uri>model://oak_tree</uri></include>
-    <include><name>city_tree_se</name><pose>25 -46 0 0 0 0</pose><uri>model://oak_tree</uri></include>
-    <include><name>city_lamp_nw</name><pose>-10 18 0 0 0 0</pose><uri>model://lamp_post</uri></include>
-    <include><name>city_lamp_ne</name><pose>10 18 0 0 0 0</pose><uri>model://lamp_post</uri></include>
-    <include><name>city_lamp_sw</name><pose>-10 -18 0 0 0 0</pose><uri>model://lamp_post</uri></include>
-    <include><name>city_lamp_se</name><pose>10 -18 0 0 0 0</pose><uri>model://lamp_post</uri></include>
-    <include><name>city_stop_light_nw</name><pose>-8 8 0 0 0 0</pose><uri>model://stop_light_post</uri></include>
-    <include><name>city_stop_light_ne</name><pose>8 8 0 0 0 -1.57</pose><uri>model://stop_light_post</uri></include>
-    <include><name>city_stop_light_sw</name><pose>-8 -8 0 0 0 1.57</pose><uri>model://stop_light_post</uri></include>
-    <include><name>city_stop_light_se</name><pose>8 -8 0 0 0 3.14</pose><uri>model://stop_light_post</uri></include>
-    <include><name>city_cafe_table_1</name><pose>-18 -54 0 0 0 0</pose><uri>model://cafe_table</uri></include>
-    <include><name>city_cafe_table_2</name><pose>-12 -54 0 0 0 0</pose><uri>model://cafe_table</uri></include>
-    <include><name>city_person_plaza</name><pose>9 -3 0 0 0 1.4</pose><uri>model://person_standing</uri></include>
+    <include><static>true</static><name>city_apartment_west</name><pose>-43 49 0 0 0 1.57</pose><uri>model://apartment</uri></include>
+    <include><static>true</static><name>city_school_north</name><pose>-6 57 0 0 0 3.14</pose><uri>model://school</uri></include>
+    <include><static>true</static><name>city_police_east</name><pose>39 51 0 0 0 -1.57</pose><uri>model://police_station</uri></include>
+    <include><static>true</static><name>city_post_office_southwest</name><pose>-46 -48 0 0 0 0</pose><uri>model://post_office</uri></include>
+    <include><static>true</static><name>city_grocery_south</name><pose>0 -60 0 0 0 0</pose><uri>model://grocery_store</uri></include>
+    <include><static>true</static><name>city_parking_garage_east</name><pose>58 -46 0 0 0 -1.57</pose><uri>model://parking_garage</uri></include>
+    <include><static>true</static><name>city_salon_west</name><pose>-61 2 0 0 0 1.57</pose><uri>model://salon</uri></include>
+    <include><static>true</static><name>city_thrift_shop_northwest</name><pose>-59 34 0 0 0 1.57</pose><uri>model://thrift_shop</uri></include>
+    <include><static>true</static><name>city_fountain_plaza</name><pose>3 2 0 0 0 0</pose><uri>model://fountain</uri></include>
+    <include><static>true</static><name>city_postbox_plaza</name><pose>-11 8 0 0 0 0</pose><uri>model://postbox</uri></include>
+    <include><static>true</static><name>city_bus_terminal</name><pose>60 14 0 0 0 3.14</pose><uri>model://bus</uri></include>
+    <include><static>true</static><name>city_hatchback_blue</name><pose>44 -12 0 0 0 1.57</pose><uri>model://hatchback_blue</uri></include>
+    <include><static>true</static><name>city_hatchback_red</name><pose>45 12 0 0 0 1.57</pose><uri>model://hatchback_red</uri></include>
+    <include><static>true</static><name>city_suv_west_parking</name><pose>-48 -10 0 0 0 -1.57</pose><uri>model://suv</uri></include>
+    <include><static>true</static><name>city_pickup_market</name><pose>19 -58 0 0 0 0.3</pose><uri>model://pickup</uri></include>
+    <include><static>true</static><name>city_tree_nw</name><pose>-27 43 0 0 0 0</pose><uri>model://oak_tree</uri></include>
+    <include><static>true</static><name>city_tree_ne</name><pose>27 43 0 0 0 0</pose><uri>model://oak_tree</uri></include>
+    <include><static>true</static><name>city_tree_sw</name><pose>-24 -47 0 0 0 0</pose><uri>model://oak_tree</uri></include>
+    <include><static>true</static><name>city_tree_se</name><pose>25 -46 0 0 0 0</pose><uri>model://oak_tree</uri></include>
+    <include><static>true</static><name>city_lamp_nw</name><pose>-10 18 0 0 0 0</pose><uri>model://lamp_post</uri></include>
+    <include><static>true</static><name>city_lamp_ne</name><pose>10 18 0 0 0 0</pose><uri>model://lamp_post</uri></include>
+    <include><static>true</static><name>city_lamp_sw</name><pose>-10 -18 0 0 0 0</pose><uri>model://lamp_post</uri></include>
+    <include><static>true</static><name>city_lamp_se</name><pose>10 -18 0 0 0 0</pose><uri>model://lamp_post</uri></include>
+    <include><static>true</static><name>city_stop_light_nw</name><pose>-8 8 0 0 0 0</pose><uri>model://stop_light_post</uri></include>
+    <include><static>true</static><name>city_stop_light_ne</name><pose>8 8 0 0 0 -1.57</pose><uri>model://stop_light_post</uri></include>
+    <include><static>true</static><name>city_stop_light_sw</name><pose>-8 -8 0 0 0 1.57</pose><uri>model://stop_light_post</uri></include>
+    <include><static>true</static><name>city_stop_light_se</name><pose>8 -8 0 0 0 3.14</pose><uri>model://stop_light_post</uri></include>
+    <include><static>true</static><name>city_cafe_table_1</name><pose>-18 -54 0 0 0 0</pose><uri>model://cafe_table</uri></include>
+    <include><static>true</static><name>city_cafe_table_2</name><pose>-12 -54 0 0 0 0</pose><uri>model://cafe_table</uri></include>
+    <include><static>true</static><name>city_person_plaza</name><pose>9 -3 0 0 0 1.4</pose><uri>model://person_standing</uri></include>
   </world>
 </sdf>

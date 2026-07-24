@@ -158,10 +158,10 @@
     </model>
     <model name="curb_w_ns_lower">
       <static>1</static>
-      <pose>15.400 -20.000 0.060 0 0 0.000000</pose>
+      <pose>15.400 -15.000 0.060 0 0 0.000000</pose>
       <link name="link">
-        <collision name="collision"><geometry><box><size>0.250 25.000 0.120</size></box></geometry></collision>
-        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>0.250 25.000 0.120</size></box></geometry><material><ambient>0.72 0.71 0.67 1</ambient><diffuse>0.72 0.71 0.67 1</diffuse><specular>0.08 0.08 0.08 1</specular><pbr><metal><albedo_map>model://urban_surface/materials/textures/curb_concrete.png</albedo_map><roughness>0.8</roughness><metalness>0.0</metalness></metal></pbr></material></visual>
+        <collision name="collision"><geometry><box><size>0.250 15.000 0.120</size></box></geometry></collision>
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>0.250 15.000 0.120</size></box></geometry><material><ambient>0.72 0.71 0.67 1</ambient><diffuse>0.72 0.71 0.67 1</diffuse><specular>0.08 0.08 0.08 1</specular><pbr><metal><albedo_map>model://urban_surface/materials/textures/curb_concrete.png</albedo_map><roughness>0.8</roughness><metalness>0.0</metalness></metal></pbr></material></visual>
       </link>
     </model>
     <model name="curb_e_ns_upper">
@@ -174,10 +174,10 @@
     </model>
     <model name="curb_e_ns_lower">
       <static>1</static>
-      <pose>24.600 -20.000 0.060 0 0 0.000000</pose>
+      <pose>24.600 -15.000 0.060 0 0 0.000000</pose>
       <link name="link">
-        <collision name="collision"><geometry><box><size>0.250 25.000 0.120</size></box></geometry></collision>
-        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>0.250 25.000 0.120</size></box></geometry><material><ambient>0.72 0.71 0.67 1</ambient><diffuse>0.72 0.71 0.67 1</diffuse><specular>0.08 0.08 0.08 1</specular><pbr><metal><albedo_map>model://urban_surface/materials/textures/curb_concrete.png</albedo_map><roughness>0.8</roughness><metalness>0.0</metalness></metal></pbr></material></visual>
+        <collision name="collision"><geometry><box><size>0.250 15.000 0.120</size></box></geometry></collision>
+        <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>0.250 15.000 0.120</size></box></geometry><material><ambient>0.72 0.71 0.67 1</ambient><diffuse>0.72 0.71 0.67 1</diffuse><specular>0.08 0.08 0.08 1</specular><pbr><metal><albedo_map>model://urban_surface/materials/textures/curb_concrete.png</albedo_map><roughness>0.8</roughness><metalness>0.0</metalness></metal></pbr></material></visual>
       </link>
     </model>
     <model name="curb_n_ew_left">
@@ -568,19 +568,19 @@
       <name>house_west</name>
       <uri>model://house_3</uri>
       <static>1</static>
-      <pose>-15.000 14.000 0.000 0 0 0.000000</pose>
+      <pose>-24.000 14.000 0.000 0 0 0.000000</pose>
     </include>
     <include>
       <name>house_center</name>
       <uri>model://house_2</uri>
       <static>1</static>
-      <pose>-4.000 15.000 0.000 0 0 0.000000</pose>
+      <pose>-5.000 15.000 0.000 0 0 0.000000</pose>
     </include>
     <include>
       <name>house_east</name>
       <uri>model://house_1</uri>
       <static>1</static>
-      <pose>8.000 15.000 0.000 0 0 0.000000</pose>
+      <pose>13.000 15.000 0.000 0 0 0.000000</pose>
     </include>
     <include>
       <name>gas_station_forecourt</name>
@@ -610,25 +610,25 @@
       <name>cafe_table_3</name>
       <uri>model://cafe_table</uri>
       <static>1</static>
-      <pose>-12.400 -25.000 0.000 0 0 0.800000</pose>
+      <pose>-12.400 -26.200 0.000 0 0 0.800000</pose>
     </include>
     <include>
       <name>dumpster_service</name>
       <uri>model://dumpster</uri>
       <static>1</static>
-      <pose>-18.000 -25.000 0.000 0 0 1.570800</pose>
+      <pose>-22.000 -27.000 0.000 0 0 1.570800</pose>
     </include>
     <include>
       <name>cardboard_stack_1</name>
       <uri>model://cardboard_box</uri>
       <static>1</static>
-      <pose>-16.000 -26.200 0.000 0 0 0.300000</pose>
+      <pose>-19.000 -28.500 0.000 0 0 0.300000</pose>
     </include>
     <include>
       <name>cardboard_stack_2</name>
       <uri>model://cardboard_box</uri>
       <static>1</static>
-      <pose>-15.000 -25.700 0.000 0 0 -0.200000</pose>
+      <pose>-17.800 -27.800 0.000 0 0 -0.200000</pose>
     </include>
     <include>
       <name>hydrant_sw_corner</name>
@@ -664,7 +664,7 @@
       <name>suv_parallel_parked</name>
       <uri>model://suv</uri>
       <static>1</static>
-      <pose>36.000 -5.800 0.000 0 0 -1.570800</pose>
+      <pose>41.000 -7.500 0.000 0 0 -1.570800</pose>
     </include>
     <include>
       <name>bus_at_stop</name>
@@ -694,7 +694,7 @@
       <name>traffic_light_secondary</name>
       <uri>model://stop_light_post</uri>
       <static>1</static>
-      <pose>14.800 5.200 0.000 0 0 3.141600</pose>
+      <pose>10.000 5.200 0.000 0 0 3.141600</pose>
     </include>
     <include>
       <name>lamp_post_nw_1</name>
@@ -766,7 +766,7 @@
       <name>construction_barrel_1</name>
       <uri>model://construction_barrel</uri>
       <static>1</static>
-      <pose>24.000 -29.000 0.000 0 0 0.000000</pose>
+      <pose>26.000 -29.000 0.000 0 0 0.000000</pose>
     </include>
     <include>
       <name>cinder_block_1</name>
@@ -792,7 +792,7 @@
     </model>
     <model name="parking_sign_post">
       <static>1</static>
-      <pose>-2.400 -31.700 1.000 0 0 0.000000</pose>
+      <pose>-2.400 -30.700 1.000 0 0 0.000000</pose>
       <link name="link">
         <collision name="collision"><geometry><box><size>0.080 0.080 2.000</size></box></geometry></collision>
         <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>0.080 0.080 2.000</size></box></geometry><material><ambient>0.32 0.32 0.30 1</ambient><diffuse>0.32 0.32 0.30 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>
@@ -800,7 +800,7 @@
     </model>
     <model name="parking_sign_plate">
       <static>1</static>
-      <pose>-2.400 -31.700 2.100 0 0 0.000000</pose>
+      <pose>-2.400 -30.700 2.100 0 0 0.000000</pose>
       <link name="link">
         
         <visual name="visual"><cast_shadows>0</cast_shadows><geometry><box><size>0.750 0.080 0.550</size></box></geometry><material><ambient>0.05 0.23 0.85 1</ambient><diffuse>0.05 0.23 0.85 1</diffuse><specular>0.05 0.05 0.05 1</specular><pbr><metal><roughness>0.8</roughness><metalness>0</metalness></metal></pbr></material></visual>

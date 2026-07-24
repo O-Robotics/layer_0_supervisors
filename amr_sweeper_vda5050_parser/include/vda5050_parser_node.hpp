@@ -193,6 +193,10 @@ private:
   double mission_build_resolution_{0.1};
   double mission_build_padding_meters_{2.0};
   double mission_build_coverage_path_clearance_meters_{1.0};
+  double mission_projection_origin_latitude_{0.0};
+  double mission_projection_origin_longitude_{0.0};
+  double mission_projection_origin_altitude_{0.0};
+  bool mission_projection_use_first_polygon_vertex_as_origin_{true};
   bool auto_build_on_start_{true};
   bool watch_for_updates_{true};
   bool build_discovered_missions_{false};

@@ -936,10 +936,10 @@ SchedulerNode::SchedulerNode(const rclcpp::NodeOptions & options)
   parser_ = std::make_unique<IcalParserMinimal>();
   expander_ = std::make_unique<ScheduleExpanderStub>();
 
-  tick_timer_ = create_timer(
+  tick_timer_ = create_wall_timer(
     std::chrono::duration<double>(tick_seconds_),
     std::bind(&SchedulerNode::tick, this));
-  poll_timer_ = create_timer(
+  poll_timer_ = create_wall_timer(
     std::chrono::duration<double>(schedule_poll_interval_sec_),
     std::bind(&SchedulerNode::poll_schedule, this));
 

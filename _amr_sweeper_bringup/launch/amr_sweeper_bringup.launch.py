@@ -1,10 +1,13 @@
 ﻿"""Launch the AMR Sweeper layer 0 supervisor stack from one bringup entrypoint."""
 
+import copy
 import os
 import re
 import tempfile
 from datetime import datetime, timezone
 
+import yaml
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
@@ -56,6 +59,35 @@ def _simulation_profile_from_value(value: str) -> str:
     if stripped.lower() in {"", "1", "true", "yes", "on"}:
         return "empty1"
     return stripped
+
+
+def _deep_merge_dict(base: dict, override: dict) -> dict:
+    result = copy.deepcopy(base)
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(result.get(key), dict):
+            result[key] = _deep_merge_dict(result[key], value)
+        else:
+            result[key] = copy.deepcopy(value)
+    return result
+
+
+def _load_simulation_profile_config(profile_name: str) -> dict:
+    simulation_pkg = get_package_share_directory("amr_sweeper_simulation")
+    config_path = os.path.join(simulation_pkg, "config", "simulation.yaml")
+    with open(config_path, encoding="utf-8") as stream:
+        config = yaml.safe_load(stream)
+
+    simulation_config = config["simulation"]
+    profiles = simulation_config.get("profiles", {})
+    if profile_name not in profiles:
+        return {}
+
+    defaults = {
+        key: value
+        for key, value in simulation_config.items()
+        if key not in {"default_profile", "profiles"}
+    }
+    return _deep_merge_dict(defaults, profiles[profile_name])
 
 
 def _normalize_namespace(namespace: str) -> str:
@@ -147,9 +179,20 @@ def _resolve_simulation_launch_settings(context, *args, **kwargs):
     raw_use_simulation = LaunchConfiguration("use_simulation").perform(context)
     enabled = _simulation_enabled(raw_use_simulation)
     actions = [SetLaunchConfiguration("use_simulation", "true" if enabled else "false")]
+    launch_rviz = LaunchConfiguration("launch_rviz").perform(context).strip().lower()
+    launch_gz_gui = LaunchConfiguration("launch_gz_gui").perform(context).strip().lower()
     if not enabled:
         actions.append(SetLaunchConfiguration("simulation_profile", ""))
+        if launch_rviz == "auto":
+            actions.append(SetLaunchConfiguration("launch_rviz", "false"))
+        if launch_gz_gui == "auto":
+            actions.append(SetLaunchConfiguration("launch_gz_gui", "false"))
         return actions
+
+    if launch_rviz == "auto":
+        actions.append(SetLaunchConfiguration("launch_rviz", "true"))
+    if launch_gz_gui == "auto":
+        actions.append(SetLaunchConfiguration("launch_gz_gui", "true"))
 
     raw_profile = _simulation_profile_from_value(raw_use_simulation)
     configured_profile = LaunchConfiguration("simulation_profile").perform(context).strip()
@@ -159,6 +202,27 @@ def _resolve_simulation_launch_settings(context, *args, **kwargs):
         simulation_profile = raw_profile
 
     actions.append(SetLaunchConfiguration("simulation_profile", simulation_profile))
+    simulation_config = _load_simulation_profile_config(simulation_profile)
+    georeference = simulation_config.get("georeference", {})
+    if georeference:
+        actions.extend([
+            SetLaunchConfiguration(
+                "mission_projection_use_first_polygon_vertex_as_origin",
+                "false",
+            ),
+            SetLaunchConfiguration(
+                "mission_projection_origin_latitude",
+                str(georeference.get("latitude_deg", 0.0)),
+            ),
+            SetLaunchConfiguration(
+                "mission_projection_origin_longitude",
+                str(georeference.get("longitude_deg", 0.0)),
+            ),
+            SetLaunchConfiguration(
+                "mission_projection_origin_altitude",
+                str(georeference.get("elevation_m", 0.0)),
+            ),
+        ])
 
     schedule_ics_path = LaunchConfiguration("schedule_ics_path").perform(context).strip()
     if not schedule_ics_path:
@@ -400,6 +464,12 @@ def generate_launch_description():
     auto_build_on_start = LaunchConfiguration("auto_build_on_start")
     watch_for_updates = LaunchConfiguration("watch_for_updates")
     build_discovered_missions = LaunchConfiguration("build_discovered_missions")
+    mission_projection_use_first_polygon_vertex_as_origin = LaunchConfiguration(
+        "mission_projection_use_first_polygon_vertex_as_origin"
+    )
+    mission_projection_origin_latitude = LaunchConfiguration("mission_projection_origin_latitude")
+    mission_projection_origin_longitude = LaunchConfiguration("mission_projection_origin_longitude")
+    mission_projection_origin_altitude = LaunchConfiguration("mission_projection_origin_altitude")
     http_host = LaunchConfiguration("http_host")
     http_port = LaunchConfiguration("http_port")
     gnss_topic = LaunchConfiguration("gnss_topic")
@@ -451,8 +521,8 @@ def generate_launch_description():
         DeclareLaunchArgument("namespace", default_value="amr_sweeper"),
         DeclareLaunchArgument("use_simulation", default_value="false"),
         DeclareLaunchArgument("use_sim_time", default_value="false"),
-        DeclareLaunchArgument("launch_rviz", default_value="true"),
-        DeclareLaunchArgument("launch_gz_gui", default_value="true"),
+        DeclareLaunchArgument("launch_rviz", default_value="auto"),
+        DeclareLaunchArgument("launch_gz_gui", default_value="auto"),
         DeclareLaunchArgument("rviz_config", default_value=""),
         DeclareLaunchArgument(
             "simulation_profile",
@@ -505,6 +575,10 @@ def generate_launch_description():
         DeclareLaunchArgument("auto_build_on_start", default_value="true"),
         DeclareLaunchArgument("watch_for_updates", default_value="true"),
         DeclareLaunchArgument("build_discovered_missions", default_value="false"),
+        DeclareLaunchArgument("mission_projection_use_first_polygon_vertex_as_origin", default_value="true"),
+        DeclareLaunchArgument("mission_projection_origin_latitude", default_value="0.0"),
+        DeclareLaunchArgument("mission_projection_origin_longitude", default_value="0.0"),
+        DeclareLaunchArgument("mission_projection_origin_altitude", default_value="0.0"),
         DeclareLaunchArgument("http_host", default_value="0.0.0.0"),
         DeclareLaunchArgument("http_port", default_value="8080"),
         DeclareLaunchArgument("gnss_topic", default_value="gnss/navsat"),
@@ -592,6 +666,11 @@ def generate_launch_description():
                 "auto_build_on_start": auto_build_on_start,
                 "watch_for_updates": watch_for_updates,
                 "build_discovered_missions": build_discovered_missions,
+                "mission_projection_use_first_polygon_vertex_as_origin":
+                    mission_projection_use_first_polygon_vertex_as_origin,
+                "mission_projection_origin_latitude": mission_projection_origin_latitude,
+                "mission_projection_origin_longitude": mission_projection_origin_longitude,
+                "mission_projection_origin_altitude": mission_projection_origin_altitude,
             }.items(),
             condition=IfCondition(launch_vda5050_parser),
         ),
@@ -615,5 +694,3 @@ def generate_launch_description():
         ),
         OpaqueFunction(function=_start_fault_shutdown_watcher),
     ])
-
-

@@ -8,8 +8,10 @@
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
+  <exec_depend>ament_index_python</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
   <exec_depend>amr_sweeper_simulation</exec_depend>
   <exec_depend>amr_sweeper_layer_1_hardware_bringup</exec_depend>
   <exec_depend>amr_sweeper_navigation</exec_depend>

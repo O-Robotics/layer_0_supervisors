@@ -189,6 +189,7 @@ private:
   bool record_mission_rosbag_{false};
   std::string mission_parser_node_name_;
   std::string mission_parser_build_service_;
+  double mission_parser_build_timeout_seconds_{300.0};
   std::string fsm_request_service_;
   bool use_simulation_{false};
   double manual_mission_inactivity_timeout_seconds_{300.0};

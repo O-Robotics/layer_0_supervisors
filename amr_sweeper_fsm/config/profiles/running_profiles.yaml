@@ -103,7 +103,7 @@ profiles:
               - type: "controller"
                 target: "joint_broad"
                 required: true
-            window_ms: 60000
+            window_ms: 180000
           rosout_triggers:
             - "node=system_info_node;level>=ERROR;action=FAULT"
             - "node=system_info_node;level>=WARN;action=DEGRADED"
@@ -175,7 +175,7 @@ profiles:
               - type: "controller"
                 target: "tool_controller"
                 required: true
-            window_ms: 30000
+            window_ms: 90000
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "node=bt_navigator;level>=ERROR;match=Goal failed;action=WARN_ONLY"
@@ -246,7 +246,7 @@ profiles:
               - type: "topic"
                 target: "mapping/status"
                 required: true
-            window_ms: 60000
+            window_ms: 180000
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "node=bt_navigator;level>=ERROR;match=Goal failed;action=WARN_ONLY"

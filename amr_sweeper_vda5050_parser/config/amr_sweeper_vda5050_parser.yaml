@@ -9,6 +9,10 @@
     mission_build_resolution:           0.1                  # Costmap raster resolution in meters per cell.
     mission_build_padding_meters:       2.0                  # Extra padding around the polygon envelope when exporting the costmap.
     mission_build_coverage_path_clearance_meters: 1.0                 # Keep the declared coverage path corridor free in the generated Nav2 costmap while preserving standard PGM semantics.
+    mission_projection_use_first_polygon_vertex_as_origin: true        # Anchor WGS84 mission projection at the first polygon vertex unless an external map/GNSS origin is supplied.
+    mission_projection_origin_latitude:  0.0                           # Latitude used when mission_projection_use_first_polygon_vertex_as_origin is false.
+    mission_projection_origin_longitude: 0.0                           # Longitude used when mission_projection_use_first_polygon_vertex_as_origin is false.
+    mission_projection_origin_altitude:  0.0                           # Altitude used when mission_projection_use_first_polygon_vertex_as_origin is false.
     auto_build_on_start:                true                 # Build the active mission immediately when the node starts.
     watch_for_updates:                  true                 # Keep scanning for new or changed mission files while IDLING.
     build_discovered_missions:          false                # When false, discovered source missions are built lazily only after a mission is selected/prepared.

@@ -4,11 +4,12 @@
     <static>true</static>
     <link name="link">
       <collision name="collision">
+        <pose>0 0 3.25 0 0 0</pose>
         <geometry>
-          <mesh>
-            <uri>model://lamp_post/meshes/lamp_post.dae</uri>
-            <scale>3 3 3</scale>
-          </mesh>
+          <cylinder>
+            <radius>0.08</radius>
+            <length>6.5</length>
+          </cylinder>
         </geometry>
       </collision>
       <visual name="visual">

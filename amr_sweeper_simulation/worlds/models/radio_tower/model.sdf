@@ -4,10 +4,12 @@
     <static>true</static>
     <link name="link">
       <collision name="collision">
+        <pose>0 0 22.5 0 0 0</pose>
         <geometry>
-          <mesh>
-            <uri>model://radio_tower/meshes/radio_tower.dae</uri>
-          </mesh>
+          <cylinder>
+            <radius>0.5</radius>
+            <length>45.0</length>
+          </cylinder>
         </geometry>
       </collision>
       <visual name="visual">

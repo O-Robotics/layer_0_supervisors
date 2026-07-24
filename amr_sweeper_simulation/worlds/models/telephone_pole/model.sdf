@@ -12,15 +12,6 @@
           </cylinder>
         </geometry>
       </collision>
-      <collision name="collision_cross">
-        <pose>0 -0.098806 8.048363126 0 0 0</pose>
-        <geometry>
-          <box>
-            <size>2.11605876 0.041763442 0.177805588</size>
-          </box>
-        </geometry>
-      </collision>
-
       <visual name="visual">
         <geometry>
           <mesh>

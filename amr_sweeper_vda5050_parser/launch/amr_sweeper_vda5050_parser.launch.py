@@ -15,6 +15,12 @@ def generate_launch_description():
     auto_build_on_start = LaunchConfiguration("auto_build_on_start")
     watch_for_updates = LaunchConfiguration("watch_for_updates")
     build_discovered_missions = LaunchConfiguration("build_discovered_missions")
+    mission_projection_use_first_polygon_vertex_as_origin = LaunchConfiguration(
+        "mission_projection_use_first_polygon_vertex_as_origin"
+    )
+    mission_projection_origin_latitude = LaunchConfiguration("mission_projection_origin_latitude")
+    mission_projection_origin_longitude = LaunchConfiguration("mission_projection_origin_longitude")
+    mission_projection_origin_altitude = LaunchConfiguration("mission_projection_origin_altitude")
     config_file = PathJoinSubstitution(
         [FindPackageShare("amr_sweeper_vda5050_parser"), "config", "amr_sweeper_vda5050_parser.yaml"]
     )
@@ -28,6 +34,10 @@ def generate_launch_description():
         DeclareLaunchArgument("auto_build_on_start", default_value="true"),
         DeclareLaunchArgument("watch_for_updates", default_value="true"),
         DeclareLaunchArgument("build_discovered_missions", default_value="false"),
+        DeclareLaunchArgument("mission_projection_use_first_polygon_vertex_as_origin", default_value="true"),
+        DeclareLaunchArgument("mission_projection_origin_latitude", default_value="0.0"),
+        DeclareLaunchArgument("mission_projection_origin_longitude", default_value="0.0"),
+        DeclareLaunchArgument("mission_projection_origin_altitude", default_value="0.0"),
         Node(
             package="amr_sweeper_vda5050_parser",
             executable="vda5050_parser_node",
@@ -44,6 +54,11 @@ def generate_launch_description():
                     "auto_build_on_start": auto_build_on_start,
                     "watch_for_updates": watch_for_updates,
                     "build_discovered_missions": build_discovered_missions,
+                    "mission_projection_use_first_polygon_vertex_as_origin":
+                        mission_projection_use_first_polygon_vertex_as_origin,
+                    "mission_projection_origin_latitude": mission_projection_origin_latitude,
+                    "mission_projection_origin_longitude": mission_projection_origin_longitude,
+                    "mission_projection_origin_altitude": mission_projection_origin_altitude,
                 },
             ],
         ),

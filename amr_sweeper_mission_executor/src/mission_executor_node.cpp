@@ -1915,6 +1915,15 @@ MissionExecutorNode::MissionExecutorNode(const rclcpp::NodeOptions & options)
   mission_parser_build_service_ = declare_parameter<std::string>(
     "mission_parser_build_service",
     "build_current_mission");
+  mission_parser_build_timeout_seconds_ = declare_parameter<double>(
+    "mission_parser_build_timeout_seconds",
+    300.0);
+  if (mission_parser_build_timeout_seconds_ < 1.0) {
+    RCLCPP_WARN(
+      get_logger(),
+      "mission_parser_build_timeout_seconds must be at least 1.0; using 1.0");
+    mission_parser_build_timeout_seconds_ = 1.0;
+  }
   fsm_request_service_ = declare_parameter<std::string>("fsm_request_service", "request_state");
   use_simulation_ = declare_parameter<bool>("use_simulation", false);
   manual_mission_inactivity_timeout_seconds_ = declare_parameter<double>(
@@ -4399,10 +4408,13 @@ bool MissionExecutorNode::ensureMissionArtifactsReady(
 
   auto build_request = std::make_shared<std_srvs::srv::Trigger::Request>();
   auto build_future = mission_parser_build_client_->async_send_request(build_request);
-  if (build_future.wait_for(std::chrono::seconds(30)) != std::future_status::ready) {
+  const auto build_timeout = std::chrono::duration<double>(
+    mission_parser_build_timeout_seconds_);
+  if (build_future.wait_for(build_timeout) != std::future_status::ready) {
     RCLCPP_WARN(
       get_logger(),
-      "Timed out waiting for the VDA5050 mission builder while preparing %s",
+      "Timed out waiting %.1f seconds for the VDA5050 mission builder while preparing %s",
+      mission_parser_build_timeout_seconds_,
       mission.mission_id.c_str());
     return false;
   }
