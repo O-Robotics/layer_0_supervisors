@@ -74,7 +74,7 @@
       "released": true,
       "nodePosition": {
         "x": 10.1451924715,
-        "y": 56.1643044856,
+        "y": 56.1643206515,
         "theta": 0.0,
         "mapId": "mission_wgs84"
       }
@@ -85,7 +85,7 @@
       "released": true,
       "nodePosition": {
         "x": 10.1455948615,
-        "y": 56.1643044855,
+        "y": 56.1643206515,
         "theta": 1.570796,
         "mapId": "mission_wgs84"
       }
@@ -118,7 +118,7 @@
       "released": true,
       "nodePosition": {
         "x": 10.1452021288,
-        "y": 56.1643098742,
+        "y": 56.1643206515,
         "theta": 1.570796,
         "mapId": "mission_wgs84"
       }
@@ -151,7 +151,7 @@
       "released": true,
       "nodePosition": {
         "x": 10.1452214436,
-        "y": 56.1643098743,
+        "y": 56.1643206515,
         "theta": -1.570796,
         "mapId": "mission_wgs84"
       }
@@ -162,7 +162,7 @@
       "released": true,
       "nodePosition": {
         "x": 10.1452407583,
-        "y": 56.1643098743,
+        "y": 56.1643206515,
         "theta": 1.570796,
         "mapId": "mission_wgs84"
       }
@@ -195,7 +195,7 @@
       "released": true,
       "nodePosition": {
         "x": 10.145260073,
-        "y": 56.1643098743,
+        "y": 56.1643206515,
         "theta": -1.570796,
         "mapId": "mission_wgs84"
       }
@@ -206,7 +206,7 @@
       "released": true,
       "nodePosition": {
         "x": 10.1452793877,
-        "y": 56.1643098743,
+        "y": 56.1643206515,
         "theta": 1.570796,
         "mapId": "mission_wgs84"
       }
@@ -239,7 +239,7 @@
       "released": true,
       "nodePosition": {
         "x": 10.1452987025,
-        "y": 56.1643098743,
+        "y": 56.1643206515,
         "theta": -1.570796,
         "mapId": "mission_wgs84"
       }
@@ -250,7 +250,7 @@
       "released": true,
       "nodePosition": {
         "x": 10.1453180172,
-        "y": 56.1643098743,
+        "y": 56.1643206515,
         "theta": 1.570796,
         "mapId": "mission_wgs84"
       }
@@ -283,7 +283,7 @@
       "released": true,
       "nodePosition": {
         "x": 10.1453373319,
-        "y": 56.1643098743,
+        "y": 56.1643206515,
         "theta": -1.570796,
         "mapId": "mission_wgs84"
       }
@@ -294,7 +294,7 @@
       "released": true,
       "nodePosition": {
         "x": 10.1453566466,
-        "y": 56.1643098743,
+        "y": 56.1643206515,
         "theta": 1.570796,
         "mapId": "mission_wgs84"
       }
@@ -327,7 +327,7 @@
       "released": true,
       "nodePosition": {
         "x": 10.1453759613,
-        "y": 56.1643098743,
+        "y": 56.1643206515,
         "theta": -1.570796,
         "mapId": "mission_wgs84"
       }
@@ -338,7 +338,7 @@
       "released": true,
       "nodePosition": {
         "x": 10.1453952761,
-        "y": 56.1643098743,
+        "y": 56.1643206515,
         "theta": 1.570796,
         "mapId": "mission_wgs84"
       }
@@ -371,7 +371,7 @@
       "released": true,
       "nodePosition": {
         "x": 10.1454145908,
-        "y": 56.1643098743,
+        "y": 56.1643206515,
         "theta": -1.570796,
         "mapId": "mission_wgs84"
       }
@@ -382,7 +382,7 @@
       "released": true,
       "nodePosition": {
         "x": 10.1454339055,
-        "y": 56.1643098743,
+        "y": 56.1643206515,
         "theta": 1.570796,
         "mapId": "mission_wgs84"
       }
@@ -415,7 +415,7 @@
       "released": true,
       "nodePosition": {
         "x": 10.1454532202,
-        "y": 56.1643098743,
+        "y": 56.1643206515,
         "theta": -1.570796,
         "mapId": "mission_wgs84"
       }
@@ -426,7 +426,7 @@
       "released": true,
       "nodePosition": {
         "x": 10.145472535,
-        "y": 56.1643098743,
+        "y": 56.1643206515,
         "theta": 1.570796,
         "mapId": "mission_wgs84"
       }
@@ -459,7 +459,7 @@
       "released": true,
       "nodePosition": {
         "x": 10.1454918497,
-        "y": 56.1643098742,
+        "y": 56.1643206515,
         "theta": -1.570796,
         "mapId": "mission_wgs84"
       }
@@ -470,7 +470,7 @@
       "released": true,
       "nodePosition": {
         "x": 10.1455111644,
-        "y": 56.1643098742,
+        "y": 56.1643206515,
         "theta": 1.570796,
         "mapId": "mission_wgs84"
       }
@@ -503,7 +503,7 @@
       "released": true,
       "nodePosition": {
         "x": 10.1455304791,
-        "y": 56.1643098742,
+        "y": 56.1643206515,
         "theta": -1.570796,
         "mapId": "mission_wgs84"
       }
@@ -514,7 +514,7 @@
       "released": true,
       "nodePosition": {
         "x": 10.1455497938,
-        "y": 56.1643098742,
+        "y": 56.1643206515,
         "theta": 1.570796,
         "mapId": "mission_wgs84"
       }
@@ -547,7 +547,7 @@
       "released": true,
       "nodePosition": {
         "x": 10.1455691086,
-        "y": 56.1643098741,
+        "y": 56.1643206515,
         "theta": -1.570796,
         "mapId": "mission_wgs84"
       }

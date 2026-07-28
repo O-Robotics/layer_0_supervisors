@@ -179,7 +179,9 @@ profiles:
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "node=bt_navigator;level>=ERROR;match=Goal failed;action=WARN_ONLY"
+            - "node=bt_navigator_navigate_through_poses_rclcpp_node;level>=ERROR;match=Failed to get result for follow_path in node halt!;action=WARN_ONLY"
             - "node=planner_server;level>=ERROR;match=Failed to create a plan from potential;action=WARN_ONLY"
+            - "node=controller_server;level>=ERROR;match=Resulting plan has 0 poses in it.;action=WARN_ONLY"
             - "level>=ERROR;action=FAULT"
           errors:
             on_readiness_fail: "FAULT"
@@ -250,7 +252,9 @@ profiles:
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "node=bt_navigator;level>=ERROR;match=Goal failed;action=WARN_ONLY"
+            - "node=bt_navigator_navigate_through_poses_rclcpp_node;level>=ERROR;match=Failed to get result for follow_path in node halt!;action=WARN_ONLY"
             - "node=planner_server;level>=ERROR;match=Failed to create a plan from potential;action=WARN_ONLY"
+            - "node=controller_server;level>=ERROR;match=Resulting plan has 0 poses in it.;action=WARN_ONLY"
             - "level>=ERROR;action=FAULT"
           errors:
             on_readiness_fail: "DEGRADED"
@@ -426,7 +430,9 @@ profiles:
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "node=bt_navigator;level>=ERROR;match=Goal failed;action=WARN_ONLY"
+            - "node=bt_navigator_navigate_through_poses_rclcpp_node;level>=ERROR;match=Failed to get result for follow_path in node halt!;action=WARN_ONLY"
             - "node=planner_server;level>=ERROR;match=Failed to create a plan from potential;action=WARN_ONLY"
+            - "node=controller_server;level>=ERROR;match=Resulting plan has 0 poses in it.;action=WARN_ONLY"
             - "level>=ERROR;action=FAULT"
           errors:
             on_readiness_fail: "FAULT"
@@ -504,7 +510,9 @@ profiles:
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "node=bt_navigator;level>=ERROR;match=Goal failed;action=WARN_ONLY"
+            - "node=bt_navigator_navigate_through_poses_rclcpp_node;level>=ERROR;match=Failed to get result for follow_path in node halt!;action=WARN_ONLY"
             - "node=planner_server;level>=ERROR;match=Failed to create a plan from potential;action=WARN_ONLY"
+            - "node=controller_server;level>=ERROR;match=Resulting plan has 0 poses in it.;action=WARN_ONLY"
             - "level>=ERROR;action=FAULT"
           errors:
             on_readiness_fail: "DEGRADED"
@@ -709,7 +717,9 @@ profiles:
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "node=bt_navigator;level>=ERROR;match=Goal failed;action=WARN_ONLY"
+            - "node=bt_navigator_navigate_through_poses_rclcpp_node;level>=ERROR;match=Failed to get result for follow_path in node halt!;action=WARN_ONLY"
             - "node=planner_server;level>=ERROR;match=Failed to create a plan from potential;action=WARN_ONLY"
+            - "node=controller_server;level>=ERROR;match=Resulting plan has 0 poses in it.;action=WARN_ONLY"
             - "level>=ERROR;action=FAULT"
           errors:
             on_readiness_fail: "FAULT"
@@ -788,7 +798,9 @@ profiles:
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "node=bt_navigator;level>=ERROR;match=Goal failed;action=WARN_ONLY"
+            - "node=bt_navigator_navigate_through_poses_rclcpp_node;level>=ERROR;match=Failed to get result for follow_path in node halt!;action=WARN_ONLY"
             - "node=planner_server;level>=ERROR;match=Failed to create a plan from potential;action=WARN_ONLY"
+            - "node=controller_server;level>=ERROR;match=Resulting plan has 0 poses in it.;action=WARN_ONLY"
             - "level>=ERROR;action=FAULT"
           errors:
             on_readiness_fail: "DEGRADED"
@@ -993,7 +1005,9 @@ profiles:
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "node=bt_navigator;level>=ERROR;match=Goal failed;action=WARN_ONLY"
+            - "node=bt_navigator_navigate_through_poses_rclcpp_node;level>=ERROR;match=Failed to get result for follow_path in node halt!;action=WARN_ONLY"
             - "node=planner_server;level>=ERROR;match=Failed to create a plan from potential;action=WARN_ONLY"
+            - "node=controller_server;level>=ERROR;match=Resulting plan has 0 poses in it.;action=WARN_ONLY"
             - "level>=ERROR;action=FAULT"
           errors:
             on_readiness_fail: "FAULT"
@@ -1072,7 +1086,9 @@ profiles:
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "node=bt_navigator;level>=ERROR;match=Goal failed;action=WARN_ONLY"
+            - "node=bt_navigator_navigate_through_poses_rclcpp_node;level>=ERROR;match=Failed to get result for follow_path in node halt!;action=WARN_ONLY"
             - "node=planner_server;level>=ERROR;match=Failed to create a plan from potential;action=WARN_ONLY"
+            - "node=controller_server;level>=ERROR;match=Resulting plan has 0 poses in it.;action=WARN_ONLY"
             - "level>=ERROR;action=FAULT"
           errors:
             on_readiness_fail: "DEGRADED"
@@ -1278,7 +1294,9 @@ profiles:
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "node=bt_navigator;level>=ERROR;match=Goal failed;action=WARN_ONLY"
+            - "node=bt_navigator_navigate_through_poses_rclcpp_node;level>=ERROR;match=Failed to get result for follow_path in node halt!;action=WARN_ONLY"
             - "node=planner_server;level>=ERROR;match=Failed to create a plan from potential;action=WARN_ONLY"
+            - "node=controller_server;level>=ERROR;match=Resulting plan has 0 poses in it.;action=WARN_ONLY"
             - "level>=ERROR;action=FAULT"
           errors:
             on_readiness_fail: "FAULT"
@@ -2224,7 +2242,9 @@ profiles:
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "node=bt_navigator;level>=ERROR;match=Goal failed;action=WARN_ONLY"
+            - "node=bt_navigator_navigate_through_poses_rclcpp_node;level>=ERROR;match=Failed to get result for follow_path in node halt!;action=WARN_ONLY"
             - "node=planner_server;level>=ERROR;match=Failed to create a plan from potential;action=WARN_ONLY"
+            - "node=controller_server;level>=ERROR;match=Resulting plan has 0 poses in it.;action=WARN_ONLY"
             - "level>=ERROR;action=FAULT"
           errors:
             on_readiness_fail: "FAULT"
@@ -2277,7 +2297,9 @@ profiles:
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "node=bt_navigator;level>=ERROR;match=Goal failed;action=WARN_ONLY"
+            - "node=bt_navigator_navigate_through_poses_rclcpp_node;level>=ERROR;match=Failed to get result for follow_path in node halt!;action=WARN_ONLY"
             - "node=planner_server;level>=ERROR;match=Failed to create a plan from potential;action=WARN_ONLY"
+            - "node=controller_server;level>=ERROR;match=Resulting plan has 0 poses in it.;action=WARN_ONLY"
             - "level>=ERROR;action=FAULT"
           errors:
             on_readiness_fail: "FAULT"
