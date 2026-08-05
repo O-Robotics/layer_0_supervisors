@@ -6,6 +6,7 @@ SRCS := \
 	cloud-listener-common.cpp \
 	cloud-listener-twin.cpp \
 	cloud-listener-direct.cpp \
+	cloud-listener-message-receiver.cpp \
 	azure_iot_hsm_stubs.cpp
 
 AZURE_IOT_PREFIX ?= /opt/azure-iot-sdk-c

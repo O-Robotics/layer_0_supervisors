@@ -106,6 +106,9 @@ std::filesystem::path message_output_path();
 std::filesystem::path content_output_path_from_manifest(
   const std::filesystem::path & manifest_path,
   const std::string & file_name);
+void save_payload_to_path(
+  const std::filesystem::path & output_path,
+  const std::string & payload);
 std::string payload_to_string(const unsigned char * payload, std::size_t size);
 
 void queue_twin_update(
@@ -149,6 +152,13 @@ IOTHUBMESSAGE_DISPOSITION_RESULT on_message_received(
   IOTHUB_MESSAGE_HANDLE message,
   void * user_context);
 void process_received_message(const PendingMessage & message);
+int on_direct_method_invoked(
+  const char * method_name,
+  const unsigned char * payload,
+  std::size_t size,
+  unsigned char ** response,
+  std::size_t * response_size,
+  void * user_context);
 
 class IoTHubRuntime
 {
@@ -176,4 +186,3 @@ private:
 };
 
 }  // namespace cloud_listener
-
