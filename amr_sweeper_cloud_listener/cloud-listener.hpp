@@ -23,7 +23,7 @@
 #error "Azure IoT C SDK headers not found. Install azure-iot-sdk-c or set CPPFLAGS."
 #endif
 
-#define VERSION "0.1 pre-alfa"
+#define VERSION "0.7 alfa"
 
 #define IDLING 101
 #define WORKING 201
