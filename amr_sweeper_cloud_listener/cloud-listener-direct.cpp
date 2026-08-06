@@ -27,6 +27,7 @@ namespace
 
 constexpr const char * kCommandMethodName = "command";
 constexpr const char * kLastCommandOutputFileName = "last_command.json";
+constexpr const char * kLastResponseOutputFileName = "last_response.json";
 
 constexpr const char * kClearActivePackageAction = "CLEAR_ACTIVE_PACKAGE";
 constexpr const char * kStartSingleMissionAction = "START_SINGLE_MISSION";
@@ -36,6 +37,7 @@ constexpr const char * kStopAction = "STOP";
 
 constexpr const char * kPreservedMessageFileName = "message.json";
 constexpr const char * kPreservedLastCommandFileName = "last_command.json";
+constexpr const char * kPreservedLastResponseFileName = "last_response.json";
 constexpr const char * kPreservedScheduleFileName = "schedule_20260000T000000Z.ics";
 
 constexpr const char * kExecuteMissionServiceName = "execute_mission";
@@ -233,6 +235,57 @@ struct DirectMethodCommand
   }
 };
 
+struct DirectMethodResponse
+{
+  int status {};
+  std::string payload;
+
+  static DirectMethodResponse from_json(const std::string & json_object)
+  {
+    DirectMethodResponse response;
+    response.status = static_cast<int>(require_json_integer_field(json_object, "status"));
+
+    const std::optional<std::string> payload_value =
+      extract_top_level_json_value(json_object, "payload");
+    if (!payload_value.has_value()) {
+      throw std::runtime_error(std::string(ERROR) + " JSON OBJECT DOES NOT INCLUDE REQUIRED KEY 'payload'");
+    }
+
+    response.payload = *payload_value;
+    return response;
+  }
+
+  static std::string to_json(int status, const std::string & payload)
+  {
+    std::ostringstream output;
+    output << "{\n"
+           << "    \"status\": " << status << ",\n"
+           << "    \"payload\": " << payload << "\n"
+           << "}";
+    return output.str();
+  }
+
+  static DirectMethodResponse load_from_file(const std::filesystem::path & path)
+  {
+    std::ifstream input(path, std::ios::binary);
+    if (!input) {
+      throw std::runtime_error(
+        std::string(ERROR) + " FAILED TO OPEN DIRECT METHOD RESPONSE FILE: " + path.string());
+    }
+
+    std::ostringstream buffer;
+    buffer << input.rdbuf();
+
+    try {
+      return from_json(buffer.str());
+    } catch (const std::exception & ex) {
+      throw std::runtime_error(
+        std::string(ERROR) + " FAILED TO PARSE DIRECT METHOD RESPONSE FILE '" +
+        path.string() + "'\n" + ex.what());
+    }
+  }
+};
+
 bool is_database_file_candidate_for_removal(const std::filesystem::path & path)
 {
   const std::string extension = path.extension().string();
@@ -244,6 +297,7 @@ bool is_database_file_preserved(const std::filesystem::path & path)
   const std::string file_name = path.filename().string();
   return file_name == kPreservedMessageFileName ||
          file_name == kPreservedLastCommandFileName ||
+         file_name == kPreservedLastResponseFileName ||
          file_name == kPreservedScheduleFileName;
 }
 
@@ -252,6 +306,11 @@ void clear_active_package_database_files();
 std::filesystem::path last_command_output_path()
 {
   return manifest_output_path_from_home().parent_path() / kLastCommandOutputFileName;
+}
+
+std::filesystem::path last_response_output_path()
+{
+  return manifest_output_path_from_home().parent_path() / kLastResponseOutputFileName;
 }
 
 std::string yaml_escape_double_quoted_string(const std::string & value)
@@ -757,10 +816,15 @@ void clear_active_package_database_files()
 }
 
 void set_method_response(
+  int status_code,
   const std::string & response_body,
   unsigned char ** response,
   std::size_t * response_size)
 {
+  save_payload_to_path(
+    last_response_output_path(),
+    DirectMethodResponse::to_json(status_code, response_body));
+
   if (response == nullptr || response_size == nullptr) {
     return;
   }
@@ -797,9 +861,9 @@ int on_direct_method_invoked(
   try {
     const std::string invoked_method = method_name == nullptr ? "" : method_name;
     if (invoked_method != kCommandMethodName) {
-      set_method_response("{\"status\":\"unsupported method\"}", response, response_size);
+      set_method_response(400, "{\"status\":\"unsupported method\"}", response, response_size);
       std::cout << WARNING << " UNSUPPORTED DIRECT METHOD: " << invoked_method << std::endl;
-      return 404;
+      return 400;
     }
 
     const std::filesystem::path output_path = last_command_output_path();
@@ -817,8 +881,14 @@ int on_direct_method_invoked(
 
     if (previous_command.has_value() && previous_command->cmd_id == parsed_command.cmd_id) {
       std::cout << WARNING << " RECEIVED DUPLICATE COMMAND" << std::endl;
-      set_method_response("{\"accepted\":true}", response, response_size);
-      return 200;
+      const DirectMethodResponse previous_response =
+        DirectMethodResponse::load_from_file(last_response_output_path());
+      set_method_response(
+        previous_response.status,
+        previous_response.payload,
+        response,
+        response_size);
+      return previous_response.status;
     }
 
     const PackageCommand package_command =
@@ -826,15 +896,15 @@ int on_direct_method_invoked(
     std::cout << WORKING << " RECEIVED COMMAND: " << package_command.action << std::endl;
 
     if (!handle_package_command(package_command)) {
-      set_method_response("{\"accepted\":false}", response, response_size);
-      return 404;
+      set_method_response(400, "{\"accepted\":false}", response, response_size);
+      return 400;
     }
 
-    set_method_response("{\"accepted\":true}", response, response_size);
+    set_method_response(200, "{\"accepted\":true}", response, response_size);
     return 200;
   } catch (const std::exception & ex) {
     try {
-      set_method_response("{\"status\":\"failed\"}", response, response_size);
+      set_method_response(500, "{\"status\":\"failed\"}", response, response_size);
     } catch (const std::exception &) {
     }
 
