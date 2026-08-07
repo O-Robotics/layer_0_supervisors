@@ -1,6 +1,6 @@
 #include "cloud-listener.hpp"
 
-#include <cstdio>
+#include <curl/curl.h>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
@@ -9,7 +9,6 @@
 #include <optional>
 #include <sstream>
 #include <stdexcept>
-#include <sys/wait.h>
 #include <vector>
 
 #undef WORKING
@@ -40,17 +39,8 @@ constexpr const char * kPreservedLastCommandFileName = "last_command.json";
 constexpr const char * kPreservedLastResponseFileName = "last_response.json";
 constexpr const char * kPreservedScheduleFileName = "schedule_20260000T000000Z.ics";
 
-constexpr const char * kExecuteMissionServiceName = "execute_mission";
-constexpr const char * kExecuteMissionServiceType =
-  "amr_sweeper_mission_executor/srv/ExecuteMission";
-constexpr const char * kEndMissionServiceName = "end_mission";
-constexpr const char * kEndMissionServiceType =
-  "amr_sweeper_mission_executor/srv/EndMission";
-constexpr const char * kClearSafetyStopServiceName =
-  "amr_sweeper_safety_controller/clear_safety_stop";
-constexpr const char * kClearSafetyStopServiceType = "std_srvs/srv/Trigger";
-constexpr const char * kSafetyStopTopicName = "safety_msgs/stop";
-constexpr const char * kSafetyStopTopicType = "amr_sweeper_safety_msgs/msg/SafetyStop";
+constexpr const char * kInterfaceBackendBaseUrlEnv = "INTERFACE_BACKEND_BASE_URL";
+constexpr const char * kDefaultInterfaceBackendBaseUrl = "http://127.0.0.1:8080";
 
 struct PackageCommand
 {
@@ -78,17 +68,6 @@ std::optional<std::string> optional_json_string_field(
   }
 
   return std::nullopt;
-}
-
-std::optional<std::int64_t> optional_json_integer_field(
-  const std::string & json_object,
-  const char * key)
-{
-  if (!extract_top_level_json_value(json_object, key).has_value()) {
-    return std::nullopt;
-  }
-
-  return require_json_integer_field(json_object, key);
 }
 
 std::optional<bool> optional_json_bool_field(
@@ -313,227 +292,6 @@ std::filesystem::path last_response_output_path()
   return manifest_output_path_from_home().parent_path() / kLastResponseOutputFileName;
 }
 
-std::string yaml_escape_double_quoted_string(const std::string & value)
-{
-  std::ostringstream escaped;
-
-  for (unsigned char ch : value) {
-    switch (ch) {
-      case '\\':
-        escaped << "\\\\";
-        break;
-      case '"':
-        escaped << "\\\"";
-        break;
-      case '\n':
-        escaped << "\\n";
-        break;
-      case '\r':
-        escaped << "\\r";
-        break;
-      case '\t':
-        escaped << "\\t";
-        break;
-      default:
-        escaped << static_cast<char>(ch);
-        break;
-    }
-  }
-
-  return escaped.str();
-}
-
-std::string shell_single_quote(const std::string & value)
-{
-  std::string quoted = "'";
-
-  for (char ch : value) {
-    if (ch == '\'') {
-      quoted += "'\"'\"'";
-    } else {
-      quoted.push_back(ch);
-    }
-  }
-
-  quoted += "'";
-  return quoted;
-}
-
-std::string yaml_string_field(const std::string & key, const std::string & value)
-{
-  return key + ": \"" + yaml_escape_double_quoted_string(value) + "\"";
-}
-
-std::string yaml_integer_field(const std::string & key, std::int64_t value)
-{
-  return key + ": " + std::to_string(value);
-}
-
-std::string yaml_bool_field(const std::string & key, bool value)
-{
-  return key + ": " + std::string(value ? "true" : "false");
-}
-
-std::string yaml_object_field(const std::string & key, const std::string & value)
-{
-  return key + ": " + value;
-}
-
-std::string join_yaml_object_fields(const std::vector<std::string> & fields)
-{
-  std::ostringstream output;
-  output << "{";
-
-  for (std::size_t i = 0; i < fields.size(); ++i) {
-    if (i > 0) {
-      output << ", ";
-    }
-    output << fields[i];
-  }
-
-  output << "}";
-  return output.str();
-}
-
-bool run_shell_command(
-  const std::string & command_line,
-  std::string * output,
-  std::string * error_message)
-{
-  const std::string command_with_stderr = command_line + " 2>&1";
-  FILE * pipe = ::popen(command_with_stderr.c_str(), "r");
-  if (pipe == nullptr) {
-    if (error_message != nullptr) {
-      *error_message = "failed to start shell command";
-    }
-    return false;
-  }
-
-  std::string command_output;
-  char buffer[512];
-  while (::fgets(buffer, sizeof(buffer), pipe) != nullptr) {
-    command_output.append(buffer);
-  }
-
-  const int close_status = ::pclose(pipe);
-  if (output != nullptr) {
-    *output = command_output;
-  }
-
-  if (close_status == -1) {
-    if (error_message != nullptr) {
-      *error_message = "failed to collect shell command exit status";
-    }
-    return false;
-  }
-
-  if (WIFEXITED(close_status) && WEXITSTATUS(close_status) == 0) {
-    return true;
-  }
-
-  if (error_message != nullptr) {
-    std::ostringstream formatted;
-    formatted << "shell command failed";
-    if (WIFEXITED(close_status)) {
-      formatted << " with exit code " << WEXITSTATUS(close_status);
-    }
-    if (!command_output.empty()) {
-      formatted << ": " << trim(command_output);
-    }
-    *error_message = formatted.str();
-  }
-  return false;
-}
-
-bool ros2_output_indicates_boolean_success(
-  const std::string & command_output,
-  const std::string & field_name,
-  std::string * error_message)
-{
-  const std::vector<std::string> true_patterns = {
-    field_name + "=True",
-    field_name + "=true",
-    field_name + ": true",
-    field_name + ": True"
-  };
-  const std::vector<std::string> false_patterns = {
-    field_name + "=False",
-    field_name + "=false",
-    field_name + ": false",
-    field_name + ": False"
-  };
-
-  for (const std::string & pattern : true_patterns) {
-    if (command_output.find(pattern) != std::string::npos) {
-      return true;
-    }
-  }
-
-  for (const std::string & pattern : false_patterns) {
-    if (command_output.find(pattern) != std::string::npos) {
-      if (error_message != nullptr) {
-        *error_message = trim(command_output);
-      }
-      return false;
-    }
-  }
-
-  if (error_message != nullptr) {
-    *error_message =
-      "unable to confirm ROS2 service result from output: " + trim(command_output);
-  }
-  return false;
-}
-
-bool call_ros2_service(
-  const std::string & service_name,
-  const std::string & service_type,
-  const std::string & request_payload,
-  const char * success_field_name,
-  std::string * command_output,
-  std::string * error_message)
-{
-  const std::string command_line =
-    "timeout 20s ros2 service call " +
-    service_name + " " + service_type + " " + shell_single_quote(request_payload);
-
-  if (!run_shell_command(command_line, command_output, error_message)) {
-    return false;
-  }
-
-  if (success_field_name != nullptr &&
-      !ros2_output_indicates_boolean_success(*command_output, success_field_name, error_message)) {
-    return false;
-  }
-
-  return true;
-}
-
-bool publish_ros2_message_once(
-  const std::string & topic_name,
-  const std::string & topic_type,
-  const std::string & message_payload,
-  std::string * command_output,
-  std::string * error_message)
-{
-  const std::string command_line =
-    "timeout 10s ros2 topic pub --once "
-    "--qos-reliability reliable --qos-durability transient_local " +
-    topic_name + " " + topic_type + " " + shell_single_quote(message_payload);
-
-  return run_shell_command(command_line, command_output, error_message);
-}
-
-std::string current_ros_time_yaml_object()
-{
-  const auto now = std::chrono::system_clock::now().time_since_epoch();
-  const auto seconds = std::chrono::duration_cast<std::chrono::seconds>(now);
-  const auto nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(now - seconds);
-
-  return "{sec: " + std::to_string(seconds.count()) +
-         ", nanosec: " + std::to_string(nanoseconds.count()) + "}";
-}
-
 std::string direct_method_requester_identity(const DirectMethodRequester & requester)
 {
   return requester.user_id + "@" + requester.client + "/" + requester.session_id;
@@ -588,60 +346,228 @@ PackageCommand build_package_command_from_direct_method(const DirectMethodComman
   return package_command;
 }
 
-std::string build_execute_mission_request(const PackageCommand & command)
+std::string interface_backend_base_url()
+{
+  const char * configured_url = std::getenv(kInterfaceBackendBaseUrlEnv);
+  std::string base_url = configured_url == nullptr || std::string(configured_url).empty()
+    ? kDefaultInterfaceBackendBaseUrl
+    : configured_url;
+  while (!base_url.empty() && base_url.back() == '/') {
+    base_url.pop_back();
+  }
+  return base_url;
+}
+
+bool ensure_direct_curl_initialized(std::string * error_message)
+{
+  static const CURLcode init_result = curl_global_init(CURL_GLOBAL_DEFAULT);
+  if (init_result != CURLE_OK) {
+    if (error_message != nullptr) {
+      *error_message = std::string("curl_global_init failed: ") + curl_easy_strerror(init_result);
+    }
+    return false;
+  }
+  return true;
+}
+
+std::size_t write_http_response_to_string(
+  char * ptr,
+  std::size_t size,
+  std::size_t nmemb,
+  void * userdata)
+{
+  std::string * output = static_cast<std::string *>(userdata);
+  if (output == nullptr) {
+    return 0;
+  }
+  const std::size_t bytes = size * nmemb;
+  output->append(ptr, bytes);
+  return bytes;
+}
+
+std::string url_encode_path_component(const std::string & value)
+{
+  std::string error_message;
+  if (!ensure_direct_curl_initialized(&error_message)) {
+    throw std::runtime_error(std::string(ERROR) + " " + error_message);
+  }
+
+  CURL * curl = curl_easy_init();
+  if (curl == nullptr) {
+    throw std::runtime_error(std::string(ERROR) + " curl_easy_init failed");
+  }
+
+  char * escaped = curl_easy_escape(curl, value.c_str(), static_cast<int>(value.size()));
+  if (escaped == nullptr) {
+    curl_easy_cleanup(curl);
+    throw std::runtime_error(std::string(ERROR) + " curl_easy_escape failed");
+  }
+
+  std::string encoded(escaped);
+  curl_free(escaped);
+  curl_easy_cleanup(curl);
+  return encoded;
+}
+
+std::string json_string_field(const std::string & key, const std::string & value)
+{
+  return "\"" + escape_json_string(key) + "\":\"" + escape_json_string(value) + "\"";
+}
+
+std::string json_integer_field(const std::string & key, std::int64_t value)
+{
+  return "\"" + escape_json_string(key) + "\":" + std::to_string(value);
+}
+
+std::string json_bool_field(const std::string & key, bool value)
+{
+  return "\"" + escape_json_string(key) + "\":" + std::string(value ? "true" : "false");
+}
+
+std::string join_json_object_fields(const std::vector<std::string> & fields)
+{
+  std::ostringstream output;
+  output << "{";
+  for (std::size_t i = 0; i < fields.size(); ++i) {
+    if (i > 0) {
+      output << ",";
+    }
+    output << fields[i];
+  }
+  output << "}";
+  return output.str();
+}
+
+bool backend_response_reports_success(const std::string & response_body)
+{
+  const std::optional<std::string> success_value =
+    extract_top_level_json_value(response_body, "success");
+  return success_value.has_value() && *success_value == "true";
+}
+
+bool post_interface_backend_json(
+  const std::string & path,
+  const std::string & request_body,
+  std::string * response_body,
+  long * response_code,
+  std::string * error_message)
+{
+  if (!ensure_direct_curl_initialized(error_message)) {
+    return false;
+  }
+
+  CURL * curl = curl_easy_init();
+  if (curl == nullptr) {
+    if (error_message != nullptr) {
+      *error_message = "curl_easy_init failed";
+    }
+    return false;
+  }
+
+  struct curl_slist * headers = nullptr;
+  headers = curl_slist_append(headers, "Content-Type: application/json");
+  headers = curl_slist_append(headers, "Accept: application/json");
+
+  std::string local_response_body;
+  const std::string url = interface_backend_base_url() + path;
+  curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+  curl_easy_setopt(curl, CURLOPT_POST, 1L);
+  curl_easy_setopt(curl, CURLOPT_POSTFIELDS, request_body.c_str());
+  curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(request_body.size()));
+  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_http_response_to_string);
+  curl_easy_setopt(curl, CURLOPT_WRITEDATA, &local_response_body);
+  curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 2000L);
+  curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, 20000L);
+
+  const CURLcode result = curl_easy_perform(curl);
+  long local_response_code = 0;
+  curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &local_response_code);
+  curl_slist_free_all(headers);
+  curl_easy_cleanup(curl);
+
+  if (response_body != nullptr) {
+    *response_body = local_response_body;
+  }
+  if (response_code != nullptr) {
+    *response_code = local_response_code;
+  }
+
+  if (result != CURLE_OK) {
+    if (error_message != nullptr) {
+      *error_message = std::string("backend request failed: ") + curl_easy_strerror(result);
+    }
+    return false;
+  }
+
+  if (local_response_code < 200 || local_response_code >= 300) {
+    if (error_message != nullptr) {
+      *error_message = "backend returned HTTP " + std::to_string(local_response_code) +
+        ": " + trim(local_response_body);
+    }
+    return false;
+  }
+
+  if (!backend_response_reports_success(local_response_body)) {
+    if (error_message != nullptr) {
+      *error_message = "backend rejected request: " + trim(local_response_body);
+    }
+    return false;
+  }
+
+  return true;
+}
+
+std::string build_execute_mission_json(const PackageCommand & command)
 {
   std::vector<std::string> fields;
-  fields.push_back(yaml_string_field("mission_id", *command.mission_id));
-  fields.push_back(yaml_string_field(
+  fields.push_back(json_string_field(
     "mission_execution_directory",
     command.mission_execution_directory.value_or("")));
-  fields.push_back(yaml_string_field(
+  fields.push_back(json_string_field(
     "mission_window_start",
     command.mission_window_start.value_or("")));
-  fields.push_back(yaml_string_field(
+  fields.push_back(json_string_field(
     "mission_window_end",
     command.mission_window_end.value_or("")));
-  fields.push_back(yaml_string_field(
+  fields.push_back(json_string_field(
     "requester",
     command.requester.value_or("cloud-listener-direct")));
-  fields.push_back(yaml_integer_field("priority", command.priority.value_or(200)));
-  fields.push_back(yaml_bool_field("force", command.force.value_or(false)));
-  fields.push_back(yaml_bool_field("record_rosbag", command.record_rosbag.value_or(false)));
-  fields.push_back(yaml_string_field(
+  fields.push_back(json_integer_field("priority", command.priority.value_or(200)));
+  fields.push_back(json_bool_field("force", command.force.value_or(false)));
+  fields.push_back(json_bool_field("record_rosbag", command.record_rosbag.value_or(false)));
+  fields.push_back(json_string_field(
     "reason",
     command.reason.value_or("startSingleMission requested from Azure IoT Hub direct method")));
-  return join_yaml_object_fields(fields);
+  return join_json_object_fields(fields);
 }
 
-std::string build_end_mission_request(const PackageCommand & command)
+std::string build_stop_mission_json(const PackageCommand & command)
 {
   std::vector<std::string> fields;
-  fields.push_back(yaml_string_field("mission_id", command.mission_id.value_or("")));
-  fields.push_back(yaml_string_field(
+  fields.push_back(json_string_field("mission_id", command.mission_id.value_or("")));
+  fields.push_back(json_string_field(
     "reason",
     command.reason.value_or("stop requested from Azure IoT Hub direct method")));
-  fields.push_back(yaml_string_field(
-    "outcome",
-    command.outcome.value_or("aborted")));
-  fields.push_back(yaml_string_field(
+  fields.push_back(json_string_field("outcome", command.outcome.value_or("aborted")));
+  fields.push_back(json_string_field(
     "requester",
     command.requester.value_or("cloud-listener-direct")));
-  fields.push_back(yaml_integer_field("priority", command.priority.value_or(200)));
-  fields.push_back(yaml_bool_field("force", command.force.value_or(false)));
-  fields.push_back(yaml_bool_field("request_idling", command.request_idling.value_or(true)));
-  return join_yaml_object_fields(fields);
+  fields.push_back(json_integer_field("priority", command.priority.value_or(200)));
+  fields.push_back(json_bool_field("force", command.force.value_or(false)));
+  fields.push_back(json_bool_field("request_idling", command.request_idling.value_or(true)));
+  return join_json_object_fields(fields);
 }
 
-std::string build_safety_stop_message(const PackageCommand & command)
+std::string build_safety_stop_json(const PackageCommand & command)
 {
   std::vector<std::string> fields;
-  fields.push_back(yaml_object_field("stamp", current_ros_time_yaml_object()));
-  fields.push_back(yaml_string_field("sender", command.sender.value_or(
+  fields.push_back(json_string_field("sender", command.sender.value_or(
     command.requester.value_or("cloud-listener-direct"))));
-  fields.push_back(yaml_string_field(
+  fields.push_back(json_string_field(
     "reason",
     command.reason.value_or("pause requested from Azure IoT Hub direct method")));
-  return join_yaml_object_fields(fields);
+  return join_json_object_fields(fields);
 }
 
 void send_start_single_mission_command(const PackageCommand & command)
@@ -651,81 +577,84 @@ void send_start_single_mission_command(const PackageCommand & command)
       std::string(ERROR) + " startSingleMission REQUIRES payload.mission_id");
   }
 
-  std::string command_output;
+  std::string response_body;
+  long response_code = 0;
   std::string error_message;
-  if (!call_ros2_service(
-        kExecuteMissionServiceName,
-        kExecuteMissionServiceType,
-        build_execute_mission_request(command),
-        "success",
-        &command_output,
+  const std::string path =
+    "/api/v1/missions/" + url_encode_path_component(*command.mission_id) + "/execute";
+  if (!post_interface_backend_json(
+        path,
+        build_execute_mission_json(command),
+        &response_body,
+        &response_code,
         &error_message)) {
     throw std::runtime_error(std::string(ERROR) + " " + error_message);
   }
 
-  std::cout << WORKING << " START MISSION SERVICE SENT: "
+  std::cout << WORKING << " START MISSION BACKEND API SENT: "
             << *command.mission_id << std::endl;
-  if (!command_output.empty()) {
-    std::cout << WORKING << " ROS2 RESPONSE: " << trim(command_output) << std::endl;
+  if (!response_body.empty()) {
+    std::cout << WORKING << " BACKEND RESPONSE: " << trim(response_body) << std::endl;
   }
 }
 
 void send_stop_command(const PackageCommand & command)
 {
-  std::string command_output;
+  std::string response_body;
+  long response_code = 0;
   std::string error_message;
-  if (!call_ros2_service(
-        kEndMissionServiceName,
-        kEndMissionServiceType,
-        build_end_mission_request(command),
-        "success",
-        &command_output,
+  if (!post_interface_backend_json(
+        "/api/v1/mission/stop",
+        build_stop_mission_json(command),
+        &response_body,
+        &response_code,
         &error_message)) {
     throw std::runtime_error(std::string(ERROR) + " " + error_message);
   }
 
-  std::cout << WORKING << " STOP MISSION SERVICE SENT" << std::endl;
-  if (!command_output.empty()) {
-    std::cout << WORKING << " ROS2 RESPONSE: " << trim(command_output) << std::endl;
+  std::cout << WORKING << " STOP MISSION BACKEND API SENT" << std::endl;
+  if (!response_body.empty()) {
+    std::cout << WORKING << " BACKEND RESPONSE: " << trim(response_body) << std::endl;
   }
 }
 
 void send_pause_command(const PackageCommand & command)
 {
-  std::string command_output;
+  std::string response_body;
+  long response_code = 0;
   std::string error_message;
-  if (!publish_ros2_message_once(
-        kSafetyStopTopicName,
-        kSafetyStopTopicType,
-        build_safety_stop_message(command),
-        &command_output,
+  if (!post_interface_backend_json(
+        "/api/v1/safety/stop",
+        build_safety_stop_json(command),
+        &response_body,
+        &response_code,
         &error_message)) {
     throw std::runtime_error(std::string(ERROR) + " " + error_message);
   }
 
-  std::cout << WORKING << " SAFETY STOP MESSAGE SENT FOR PAUSE" << std::endl;
-  if (!command_output.empty()) {
-    std::cout << WORKING << " ROS2 OUTPUT: " << trim(command_output) << std::endl;
+  std::cout << WORKING << " SAFETY STOP BACKEND API SENT FOR PAUSE" << std::endl;
+  if (!response_body.empty()) {
+    std::cout << WORKING << " BACKEND RESPONSE: " << trim(response_body) << std::endl;
   }
 }
 
 void send_resume_command()
 {
-  std::string command_output;
+  std::string response_body;
+  long response_code = 0;
   std::string error_message;
-  if (!call_ros2_service(
-        kClearSafetyStopServiceName,
-        kClearSafetyStopServiceType,
+  if (!post_interface_backend_json(
+        "/api/v1/safety/clear",
         "{}",
-        "success",
-        &command_output,
+        &response_body,
+        &response_code,
         &error_message)) {
     throw std::runtime_error(std::string(ERROR) + " " + error_message);
   }
 
-  std::cout << WORKING << " CLEAR SAFETY STOP SERVICE SENT FOR RESUME" << std::endl;
-  if (!command_output.empty()) {
-    std::cout << WORKING << " ROS2 RESPONSE: " << trim(command_output) << std::endl;
+  std::cout << WORKING << " CLEAR SAFETY STOP BACKEND API SENT FOR RESUME" << std::endl;
+  if (!response_body.empty()) {
+    std::cout << WORKING << " BACKEND RESPONSE: " << trim(response_body) << std::endl;
   }
 }
 

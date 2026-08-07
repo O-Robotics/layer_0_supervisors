@@ -2,322 +2,10 @@
 
 from __future__ import annotations
 
-import errno
-import json
-import socket
-import threading
-import urllib.parse
 from html import escape
-from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
-from typing import Any
-
-import rclpy
-from rclpy.executors import ExternalShutdownException, MultiThreadedExecutor
-
-from backend_node import MissionBackendNode
 
 
-class MissionThreadingHTTPServer(ThreadingHTTPServer):
-    allow_reuse_address = True
-    daemon_threads = True
-
-
-class MissionFrontendHttpNode(MissionBackendNode):
-    def __init__(self) -> None:
-        super().__init__("frontend_http_node")
-        self._http_server: ThreadingHTTPServer | None = None
-
-    def start_http_server(self) -> None:
-        handler = self._build_handler()
-        try:
-            self._http_server = MissionThreadingHTTPServer((self._http_host, self._http_port), handler)
-        except OSError as exc:
-            if exc.errno == errno.EADDRINUSE:
-                raise RuntimeError(
-                    f"HTTP listen address {self._http_host}:{self._http_port} is already in use. "
-                    "Another web server instance may still be running."
-                ) from exc
-            raise
-        self.get_logger().info(
-            f"Mission web server listening on http://{self._http_host}:{self._http_port}"
-        )
-
-    def stop_http_server(self) -> None:
-        if self._http_server is None:
-            return
-        self._http_server.shutdown()
-        self._http_server.server_close()
-        self._http_server = None
-
-    def serve_forever(self) -> None:
-        if self._http_server is None:
-            raise RuntimeError("HTTP server not initialized")
-        self._http_server.serve_forever()
-
-    def _build_handler(self):
-        node = self
-
-        class MissionWebRequestHandler(BaseHTTPRequestHandler):
-            def do_GET(self) -> None:  # noqa: N802
-                parsed = urllib.parse.urlparse(self.path)
-                if parsed.path == "/":
-                    self._send_html(node.render_index_html())
-                    return
-                if parsed.path == "/calendar":
-                    self._send_html(node.render_calendar_html())
-                    return
-                if parsed.path == "/map":
-                    self._send_html(node.render_map_html())
-                    return
-                if parsed.path == "/developer":
-                    self._send_html(node.render_developer_html())
-                    return
-                if parsed.path == "/record-map":
-                    self._send_html(node.render_record_map_html())
-                    return
-                if parsed.path == "/api/status":
-                    self._send_json(HTTPStatus.OK, node.status_snapshot())
-                    return
-                if parsed.path == "/api/missions":
-                    try:
-                        self._send_json(HTTPStatus.OK, node.list_executable_missions())
-                    except Exception as exc:  # noqa: BLE001
-                        self._send_json(HTTPStatus.BAD_GATEWAY, {"success": False, "message": str(exc)})
-                    return
-                if parsed.path.startswith("/api/missions/") and parsed.path.endswith("/download"):
-                    mission_segment = parsed.path[len("/api/missions/"):-len("/download")]
-                    mission_id = urllib.parse.unquote(mission_segment.rstrip("/"))
-                    if not mission_id:
-                        self._send_json(
-                            HTTPStatus.BAD_REQUEST,
-                            {"success": False, "message": "mission_id is required"},
-                        )
-                        return
-                    try:
-                        mission_path = node.mission_file_path(mission_id)
-                        self._send_download(mission_path, "application/json; charset=utf-8")
-                    except Exception as exc:  # noqa: BLE001
-                        self._send_json(HTTPStatus.NOT_FOUND, {"success": False, "message": str(exc)})
-                    return
-                if parsed.path == "/api/schedule":
-                    try:
-                        query = urllib.parse.parse_qs(parsed.query)
-                        week = query.get("week", [""])[0]
-                        self._send_json(HTTPStatus.OK, node.schedule_snapshot(week))
-                    except Exception as exc:  # noqa: BLE001
-                        self._send_json(HTTPStatus.BAD_GATEWAY, {"success": False, "message": str(exc)})
-                    return
-                if parsed.path == "/api/map-data":
-                    try:
-                        self._send_json(HTTPStatus.OK, node.map_snapshot())
-                    except Exception as exc:  # noqa: BLE001
-                        self._send_json(HTTPStatus.BAD_GATEWAY, {"success": False, "message": str(exc)})
-                    return
-                if parsed.path == "/api/record-map":
-                    try:
-                        self._send_json(HTTPStatus.OK, node.record_map_snapshot())
-                    except Exception as exc:  # noqa: BLE001
-                        self._send_json(HTTPStatus.BAD_GATEWAY, {"success": False, "message": str(exc)})
-                    return
-                self._send_json(HTTPStatus.NOT_FOUND, {"success": False, "message": "Not found"})
-
-            def do_POST(self) -> None:  # noqa: N802
-                parsed = urllib.parse.urlparse(self.path)
-                payload = self._read_json_body()
-
-                if parsed.path.startswith("/api/missions/") and parsed.path.endswith("/execute"):
-                    mission_segment = parsed.path[len("/api/missions/"):-len("/execute")]
-                    mission_id = urllib.parse.unquote(mission_segment.rstrip("/"))
-                    if not mission_id:
-                        self._send_json(
-                            HTTPStatus.BAD_REQUEST,
-                            {"success": False, "message": "mission_id is required"},
-                        )
-                        return
-                    try:
-                        response = node.execute_manual_mission(mission_id, payload)
-                        self._send_json(HTTPStatus.OK, response)
-                    except Exception as exc:  # noqa: BLE001
-                        self._send_json(HTTPStatus.BAD_GATEWAY, {"success": False, "message": str(exc)})
-                    return
-
-                if parsed.path == "/api/missions/upload-vda5050":
-                    try:
-                        response = node.upload_vda5050_mission(payload)
-                        self._send_json(HTTPStatus.OK, response)
-                    except Exception as exc:  # noqa: BLE001
-                        self._send_json(HTTPStatus.BAD_GATEWAY, {"success": False, "message": str(exc)})
-                    return
-
-                if parsed.path == "/api/stop":
-                    try:
-                        response = node.stop_active_mission(payload)
-                        self._send_json(HTTPStatus.OK, response)
-                    except Exception as exc:  # noqa: BLE001
-                        self._send_json(HTTPStatus.BAD_GATEWAY, {"success": False, "message": str(exc)})
-                    return
-
-                if parsed.path == "/api/reboot":
-                    try:
-                        response = node.request_reinitialize(payload)
-                        self._send_json(HTTPStatus.OK, response)
-                    except Exception as exc:  # noqa: BLE001
-                        self._send_json(HTTPStatus.BAD_GATEWAY, {"success": False, "message": str(exc)})
-                    return
-                if parsed.path == "/api/safety/clear":
-                    try:
-                        response = node.clear_safety_stop(payload)
-                        self._send_json(HTTPStatus.OK, response)
-                    except Exception as exc:  # noqa: BLE001
-                        self._send_json(HTTPStatus.BAD_GATEWAY, {"success": False, "message": str(exc)})
-                    return
-                if parsed.path == "/api/safety/stop":
-                    try:
-                        response = node.trigger_safety_stop(payload)
-                        self._send_json(HTTPStatus.OK, response)
-                    except Exception as exc:  # noqa: BLE001
-                        self._send_json(HTTPStatus.BAD_GATEWAY, {"success": False, "message": str(exc)})
-                    return
-                if parsed.path == "/api/record-map/start":
-                    try:
-                        response = node.start_record_map(payload)
-                        self._send_json(HTTPStatus.OK, response)
-                    except Exception as exc:  # noqa: BLE001
-                        self._send_json(HTTPStatus.BAD_GATEWAY, {"success": False, "message": str(exc)})
-                    return
-                if parsed.path == "/api/record-map/stop":
-                    try:
-                        response = node.stop_record_map(payload)
-                        self._send_json(HTTPStatus.OK, response)
-                    except Exception as exc:  # noqa: BLE001
-                        self._send_json(HTTPStatus.BAD_GATEWAY, {"success": False, "message": str(exc)})
-                    return
-                if parsed.path == "/api/record-map/save-mission":
-                    try:
-                        response = node.create_recorded_mission(payload)
-                        self._send_json(HTTPStatus.OK, response)
-                    except Exception as exc:  # noqa: BLE001
-                        self._send_json(HTTPStatus.BAD_GATEWAY, {"success": False, "message": str(exc)})
-                    return
-                if parsed.path == "/api/schedule/entry":
-                    try:
-                        response = node.save_planned_schedule_entry(payload)
-                        self._send_json(HTTPStatus.OK, response)
-                    except Exception as exc:  # noqa: BLE001
-                        self._send_json(HTTPStatus.BAD_GATEWAY, {"success": False, "message": str(exc)})
-                    return
-                if parsed.path == "/api/schedule/entry/delete":
-                    try:
-                        response = node.delete_planned_schedule_entry(payload)
-                        self._send_json(HTTPStatus.OK, response)
-                    except Exception as exc:  # noqa: BLE001
-                        self._send_json(HTTPStatus.BAD_GATEWAY, {"success": False, "message": str(exc)})
-                    return
-
-                self._send_json(HTTPStatus.NOT_FOUND, {"success": False, "message": "Not found"})
-
-            def log_message(self, format: str, *args: Any) -> None:
-                node.get_logger().debug(f"HTTP {self.address_string()} - {format % args}")
-
-            def _read_json_body(self) -> dict[str, Any]:
-                length = int(self.headers.get("Content-Length", "0"))
-                if length <= 0:
-                    return {}
-                raw_body = self.rfile.read(length)
-                if not raw_body:
-                    return {}
-                try:
-                    decoded = json.loads(raw_body.decode("utf-8"))
-                except json.JSONDecodeError as exc:
-                    raise RuntimeError(f"Invalid JSON body: {exc}") from exc
-                if not isinstance(decoded, dict):
-                    raise RuntimeError("JSON body must be an object")
-                return decoded
-
-            def _send_html(self, body: str) -> None:
-                encoded = body.encode("utf-8")
-                self._send_bytes(
-                    HTTPStatus.OK,
-                    encoded,
-                    {
-                        "Content-Type": "text/html; charset=utf-8",
-                        "Content-Length": str(len(encoded)),
-                    },
-                )
-
-            def _send_json(self, status: HTTPStatus, payload: dict[str, Any]) -> None:
-                encoded = json.dumps(payload).encode("utf-8")
-                self._send_bytes(
-                    status,
-                    encoded,
-                    {
-                        "Content-Type": "application/json; charset=utf-8",
-                        "Cache-Control": "no-store",
-                        "Content-Length": str(len(encoded)),
-                    },
-                )
-
-            def _send_file(self, path: Path, content_type: str) -> None:
-                if not path.exists() or not path.is_file():
-                    self._send_json(HTTPStatus.NOT_FOUND, {"success": False, "message": "Asset not found"})
-                    return
-                encoded = path.read_bytes()
-                self._send_bytes(
-                    HTTPStatus.OK,
-                    encoded,
-                    {
-                        "Content-Type": content_type,
-                        "Cache-Control": "public, max-age=3600",
-                        "Content-Length": str(len(encoded)),
-                    },
-                )
-
-            def _send_download(self, path: Path, content_type: str) -> None:
-                if not path.exists() or not path.is_file():
-                    self._send_json(HTTPStatus.NOT_FOUND, {"success": False, "message": "Mission file not found"})
-                    return
-                encoded = path.read_bytes()
-                self._send_bytes(
-                    HTTPStatus.OK,
-                    encoded,
-                    {
-                        "Content-Type": content_type,
-                        "Cache-Control": "no-store",
-                        "Content-Length": str(len(encoded)),
-                        "Content-Disposition": f'attachment; filename="{path.name}"',
-                    },
-                )
-
-            def _send_bytes(
-                self,
-                status: HTTPStatus,
-                body: bytes,
-                headers: dict[str, str],
-            ) -> None:
-                self.send_response(status)
-                for key, value in headers.items():
-                    self.send_header(key, value)
-                try:
-                    self.end_headers()
-                    self.wfile.write(body)
-                except OSError as exc:
-                    if self._is_client_disconnect(exc):
-                        node.get_logger().debug(
-                            f"HTTP client disconnected before response completed: {exc}"
-                        )
-                        return
-                    raise
-
-            @staticmethod
-            def _is_client_disconnect(exc: OSError) -> bool:
-                return isinstance(exc, (BrokenPipeError, ConnectionResetError, socket.timeout)) or (
-                    exc.errno in {errno.EPIPE, errno.ECONNRESET, errno.ECONNABORTED}
-                )
-
-        return MissionWebRequestHandler
-
+class MissionFrontendRenderer:
     def render_index_html(self) -> str:
         title = escape(self._site_title)
         public_base_url = escape(self._public_base_url)
@@ -799,7 +487,7 @@ class MissionFrontendHttpNode(MissionBackendNode):
     }}
 
     async function loadStatus() {{
-      const response = await fetch('/api/status', {{ cache: 'no-store' }});
+      const response = await fetch('/api/v1/status', {{ cache: 'no-store' }});
       const data = await response.json();
       const fsm = data.fsm_status || data.fsm_state || {{}};
       const fsmDisplay = data.fsm_display || {{}};
@@ -893,7 +581,7 @@ class MissionFrontendHttpNode(MissionBackendNode):
     }}
 
     document.getElementById('stop-button').addEventListener('click', async () => {{
-      const response = await fetch('/api/stop', {{
+      const response = await fetch('/api/v1/mission/stop', {{
         method: 'POST',
         headers: {{ 'Content-Type': 'application/json' }},
         body: JSON.stringify({{}})
@@ -904,7 +592,7 @@ class MissionFrontendHttpNode(MissionBackendNode):
     }});
 
     document.getElementById('reboot-button').addEventListener('click', async () => {{
-      const response = await fetch('/api/reboot', {{
+      const response = await fetch('/api/v1/system/reinitialize', {{
         method: 'POST',
         headers: {{ 'Content-Type': 'application/json' }},
         body: JSON.stringify({{}})
@@ -915,7 +603,7 @@ class MissionFrontendHttpNode(MissionBackendNode):
     }});
 
     document.getElementById('safety-stop-button').addEventListener('click', async () => {{
-      const path = lastSafetyLatched ? '/api/safety/clear' : '/api/safety/stop';
+      const path = lastSafetyLatched ? '/api/v1/safety/clear' : '/api/v1/safety/stop';
       const payload = lastSafetyLatched ? {{}} : {{
         sender: 'frontend_http_node',
         reason: 'safety stop requested from dashboard'
@@ -1509,7 +1197,7 @@ class MissionFrontendHttpNode(MissionBackendNode):
         const [editButton, deleteButton] = card.querySelectorAll('button');
         editButton.addEventListener('click', () => populateEntryForm(entry));
         deleteButton.addEventListener('click', async () => {{
-          const result = await postJson('/api/schedule/entry/delete', {{ uid: entry.uid }});
+          const result = await postJson('/api/v1/schedule/entry/delete', {{ uid: entry.uid }});
           if (!result.success) {{
             window.alert(result.message || 'Failed to delete schedule entry');
             return;
@@ -1521,7 +1209,7 @@ class MissionFrontendHttpNode(MissionBackendNode):
     }}
 
     async function loadCalendar(week) {{
-      const response = await fetch(`/api/schedule?week=${{encodeURIComponent(week)}}`, {{ cache: 'no-store' }});
+      const response = await fetch(`/api/v1/schedule?week=${{encodeURIComponent(week)}}`, {{ cache: 'no-store' }});
       const data = await response.json();
       activeScheduleData = data;
       activeWeek = data.week;
@@ -1657,7 +1345,7 @@ class MissionFrontendHttpNode(MissionBackendNode):
         recurrence_type: document.getElementById('entry-recurrence-type').value,
         description: document.getElementById('entry-description').value,
       }};
-      const result = await postJson('/api/schedule/entry', payload);
+      const result = await postJson('/api/v1/schedule/entry', payload);
       if (!result.success) {{
         window.alert(result.message || 'Failed to save schedule entry');
         return;
@@ -2099,7 +1787,7 @@ class MissionFrontendHttpNode(MissionBackendNode):
     }}
 
     async function loadRecordMapSnapshot() {{
-      const response = await fetch('/api/record-map', {{ cache: 'no-store' }});
+      const response = await fetch('/api/v1/record-map', {{ cache: 'no-store' }});
       const data = await response.json();
       chip.textContent = data.active_recording ? 'RecordMap recording' : 'RecordMap idle';
       chip.className = data.active_recording ? 'status-chip' : 'status-chip idle';
@@ -2137,13 +1825,13 @@ class MissionFrontendHttpNode(MissionBackendNode):
     }}
 
     document.getElementById('record-button').addEventListener('click', async () => {{
-      const data = await postJson('/api/record-map/start', {{}});
+      const data = await postJson('/api/v1/record-map/start', {{}});
       setBanner(data.success ? 'ok' : 'error', data.message || 'RecordMap request completed');
       await loadRecordMapSnapshot();
     }});
 
     document.getElementById('stop-button').addEventListener('click', async () => {{
-      const data = await postJson('/api/record-map/stop', {{}});
+      const data = await postJson('/api/v1/record-map/stop', {{}});
       setBanner(data.success ? 'ok' : 'error', data.message || 'RecordMap stop request completed');
       await loadRecordMapSnapshot();
     }});
@@ -2155,7 +1843,7 @@ class MissionFrontendHttpNode(MissionBackendNode):
         setBanner('error', 'Enter a mission name before saving.');
         return;
       }}
-      const data = await postJson('/api/record-map/save-mission', {{
+      const data = await postJson('/api/v1/record-map/save-mission', {{
         mission_name: missionName,
         sweep_pattern: selectedPattern(),
         overwrite_existing: false
@@ -2868,7 +2556,7 @@ class MissionFrontendHttpNode(MissionBackendNode):
         markerLabel = 'Waypoint 0';
       }}
 
-      const downloadHref = `/api/missions/${{encodeURIComponent(selectedMission.mission_id)}}/download`;
+      const downloadHref = `/api/v1/missions/${{encodeURIComponent(selectedMission.mission_id)}}/download`;
       const frameLabel = georeferenced ? 'North-up georeferenced preview' : 'Robot-frame preview (+X up, +Y left)';
       const item = document.createElement('div');
       item.className = 'legend-item';
@@ -2895,7 +2583,7 @@ class MissionFrontendHttpNode(MissionBackendNode):
     }}
 
     async function loadMap() {{
-      const response = await fetch('/api/map-data', {{ cache: 'no-store' }});
+      const response = await fetch('/api/v1/map-data', {{ cache: 'no-store' }});
       const data = await response.json();
       mapDataCache = data;
       if (!selectedMissionId) {{
@@ -2960,7 +2648,7 @@ class MissionFrontendHttpNode(MissionBackendNode):
     }}
 
     async function loadMissions() {{
-      const response = await fetch('/api/missions', {{ cache: 'no-store' }});
+      const response = await fetch('/api/v1/missions', {{ cache: 'no-store' }});
       const data = await response.json();
       missionsCache = data.missions || [];
       if (!selectedMissionId) {{
@@ -2990,7 +2678,7 @@ class MissionFrontendHttpNode(MissionBackendNode):
       const missionId = document.getElementById('upload-mission-id').value;
       const missionJson = document.getElementById('upload-json').value;
       const overwriteExisting = document.getElementById('upload-overwrite').checked;
-      const response = await fetch('/api/missions/upload-vda5050', {{
+      const response = await fetch('/api/v1/missions/upload-vda5050', {{
         method: 'POST',
         headers: {{ 'Content-Type': 'application/json' }},
         body: JSON.stringify({{
@@ -3020,7 +2708,7 @@ class MissionFrontendHttpNode(MissionBackendNode):
         setBanner('error', 'Select a mission before starting it.');
         return;
       }}
-      const executeResponse = await fetch(`/api/missions/${{encodeURIComponent(selectedMissionId)}}/execute`, {{
+      const executeResponse = await fetch(`/api/v1/missions/${{encodeURIComponent(selectedMissionId)}}/execute`, {{
         method: 'POST',
         headers: {{ 'Content-Type': 'application/json' }},
         body: JSON.stringify({{
@@ -3340,14 +3028,14 @@ class MissionFrontendHttpNode(MissionBackendNode):
     }}
 
     async function loadMissions() {{
-      const response = await fetch('/api/missions', {{ cache: 'no-store' }});
+      const response = await fetch('/api/v1/missions', {{ cache: 'no-store' }});
       const data = await response.json();
       executableMissions = data.missions || [];
       renderLayerToggles();
     }}
 
     async function loadStatus() {{
-      const response = await fetch('/api/status', {{ cache: 'no-store' }});
+      const response = await fetch('/api/v1/status', {{ cache: 'no-store' }});
       const data = await response.json();
       const recentLogs = data.recent_logs || [];
 
@@ -3379,64 +3067,3 @@ class MissionFrontendHttpNode(MissionBackendNode):
 </html>
 """
 
-
-def _spin_executor(executor: MultiThreadedExecutor, node: MissionFrontendHttpNode) -> None:
-    try:
-        executor.spin()
-    except KeyboardInterrupt:
-        return
-    except AttributeError as exc:
-        if not rclpy.ok():
-            node.get_logger().debug(f"Suppressing executor shutdown race during Ctrl-C: {exc}")
-            return
-        raise
-    except Exception as exc:  # noqa: BLE001
-        if not rclpy.ok():
-            node.get_logger().debug(f"Suppressing executor exception during shutdown: {exc}")
-            return
-        raise
-
-
-def main(args: list[str] | None = None) -> int:
-    rclpy.init(args=args)
-    node = MissionFrontendHttpNode()
-    executor = MultiThreadedExecutor()
-    executor.add_node(node)
-
-    spin_thread = threading.Thread(target=_spin_executor, args=(executor, node), daemon=True)
-    spin_thread.start()
-    server_thread: threading.Thread | None = None
-
-    try:
-        node.start_http_server()
-        server_thread = threading.Thread(target=node.serve_forever, name="mission_http_server", daemon=True)
-        server_thread.start()
-        while server_thread.is_alive():
-            server_thread.join(timeout=0.5)
-    except (KeyboardInterrupt, ExternalShutdownException):
-        pass
-    except Exception as exc:  # noqa: BLE001
-        node.get_logger().error(f"Mission frontend HTTP startup failed: {exc}")
-        return 1
-    finally:
-        try:
-            node.stop_http_server()
-        except RuntimeError:
-            pass
-        if server_thread is not None:
-            server_thread.join(timeout=2.0)
-        try:
-            executor.shutdown()
-        except RuntimeError:
-            pass
-        spin_thread.join(timeout=2.0)
-        try:
-            node.destroy_node()
-        except (KeyboardInterrupt, RuntimeError, AttributeError):
-            pass
-        rclpy.try_shutdown()
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

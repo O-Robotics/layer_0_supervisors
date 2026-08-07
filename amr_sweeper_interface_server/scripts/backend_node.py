@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import errno
 import re
+import socket
 import threading
 import time
 import urllib.parse
@@ -39,6 +40,8 @@ from rcl_interfaces.msg import Log
 from sensor_msgs.msg import BatteryState, NavSatFix
 from std_msgs.msg import String
 from std_srvs.srv import Trigger
+
+from frontend_http_node import MissionFrontendRenderer
 
 
 MISSION_LAYER_OVERRIDE_KEYS = (
@@ -335,7 +338,12 @@ def _load_running_profile_default_overrides() -> dict[int, dict[str, bool]]:
 
 
 
-class MissionBackendNode(Node):
+class MissionThreadingHTTPServer(ThreadingHTTPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+
+
+class MissionBackendNode(Node, MissionFrontendRenderer):
     def __init__(self, node_name: str = "backend_node") -> None:
         super().__init__(node_name)
 
@@ -469,6 +477,227 @@ class MissionBackendNode(Node):
         self.create_subscription(String, self._safety_web_status_topic, self._handle_safety_web_status, 10)
 
         self._http_server: ThreadingHTTPServer | None = None
+
+    def start_http_server(self) -> None:
+        handler = self._build_handler()
+        try:
+            self._http_server = MissionThreadingHTTPServer((self._http_host, self._http_port), handler)
+        except OSError as exc:
+            if exc.errno == errno.EADDRINUSE:
+                raise RuntimeError(
+                    f"HTTP listen address {self._http_host}:{self._http_port} is already in use. "
+                    "Another interface backend may still be running."
+                ) from exc
+            raise
+        self.get_logger().info(
+            f"Interface backend API listening on http://{self._http_host}:{self._http_port}"
+        )
+
+    def stop_http_server(self) -> None:
+        if self._http_server is None:
+            return
+        self._http_server.shutdown()
+        self._http_server.server_close()
+        self._http_server = None
+
+    def serve_forever(self) -> None:
+        if self._http_server is None:
+            raise RuntimeError("HTTP server not initialized")
+        self._http_server.serve_forever()
+
+    def _build_handler(self):
+        node = self
+
+        class MissionBackendRequestHandler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802
+                parsed = urllib.parse.urlparse(self.path)
+                if parsed.path == "/":
+                    self._send_html(node.render_index_html())
+                    return
+                if parsed.path == "/calendar":
+                    self._send_html(node.render_calendar_html())
+                    return
+                if parsed.path == "/map":
+                    self._send_html(node.render_map_html())
+                    return
+                if parsed.path == "/developer":
+                    self._send_html(node.render_developer_html())
+                    return
+                if parsed.path == "/record-map":
+                    self._send_html(node.render_record_map_html())
+                    return
+                if parsed.path == "/api/v1/status":
+                    self._send_json(HTTPStatus.OK, node.status_snapshot())
+                    return
+                if parsed.path == "/api/v1/missions":
+                    self._send_backend_json(lambda: node.list_executable_missions())
+                    return
+                if parsed.path.startswith("/api/v1/missions/") and parsed.path.endswith("/download"):
+                    mission_segment = parsed.path[len("/api/v1/missions/"):-len("/download")]
+                    mission_id = urllib.parse.unquote(mission_segment.rstrip("/"))
+                    if not mission_id:
+                        self._send_json(
+                            HTTPStatus.BAD_REQUEST,
+                            {"success": False, "message": "mission_id is required"},
+                        )
+                        return
+                    try:
+                        mission_path = node.mission_file_path(mission_id)
+                        self._send_download(mission_path, "application/json; charset=utf-8")
+                    except Exception as exc:  # noqa: BLE001
+                        self._send_json(HTTPStatus.NOT_FOUND, {"success": False, "message": str(exc)})
+                    return
+                if parsed.path == "/api/v1/schedule":
+                    query = urllib.parse.parse_qs(parsed.query)
+                    week = query.get("week", [""])[0]
+                    self._send_backend_json(lambda: node.schedule_snapshot(week))
+                    return
+                if parsed.path == "/api/v1/map-data":
+                    self._send_backend_json(lambda: node.map_snapshot())
+                    return
+                if parsed.path == "/api/v1/record-map":
+                    self._send_backend_json(lambda: node.record_map_snapshot())
+                    return
+                self._send_json(HTTPStatus.NOT_FOUND, {"success": False, "message": "Not found"})
+
+            def do_POST(self) -> None:  # noqa: N802
+                parsed = urllib.parse.urlparse(self.path)
+                try:
+                    payload = self._read_json_body()
+                except RuntimeError as exc:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"success": False, "message": str(exc)})
+                    return
+
+                if parsed.path.startswith("/api/v1/missions/") and parsed.path.endswith("/execute"):
+                    mission_segment = parsed.path[len("/api/v1/missions/"):-len("/execute")]
+                    mission_id = urllib.parse.unquote(mission_segment.rstrip("/"))
+                    if not mission_id:
+                        self._send_json(
+                            HTTPStatus.BAD_REQUEST,
+                            {"success": False, "message": "mission_id is required"},
+                        )
+                        return
+                    self._send_backend_json(lambda: node.execute_manual_mission(mission_id, payload))
+                    return
+
+                routes = {
+                    "/api/v1/missions/upload-vda5050": lambda: node.upload_vda5050_mission(payload),
+                    "/api/v1/mission/stop": lambda: node.stop_active_mission(payload),
+                    "/api/v1/system/reinitialize": lambda: node.request_reinitialize(payload),
+                    "/api/v1/safety/clear": lambda: node.clear_safety_stop(payload),
+                    "/api/v1/safety/stop": lambda: node.trigger_safety_stop(payload),
+                    "/api/v1/record-map/start": lambda: node.start_record_map(payload),
+                    "/api/v1/record-map/stop": lambda: node.stop_record_map(payload),
+                    "/api/v1/record-map/save-mission": lambda: node.create_recorded_mission(payload),
+                    "/api/v1/schedule/entry": lambda: node.save_planned_schedule_entry(payload),
+                    "/api/v1/schedule/entry/delete": lambda: node.delete_planned_schedule_entry(payload),
+                }
+                handler = routes.get(parsed.path)
+                if handler is None:
+                    self._send_json(HTTPStatus.NOT_FOUND, {"success": False, "message": "Not found"})
+                    return
+                self._send_backend_json(handler)
+
+            def log_message(self, format: str, *args: Any) -> None:
+                node.get_logger().debug(f"HTTP {self.address_string()} - {format % args}")
+
+            def _read_json_body(self) -> dict[str, Any]:
+                length = int(self.headers.get("Content-Length", "0"))
+                if length <= 0:
+                    return {}
+                raw_body = self.rfile.read(length)
+                if not raw_body:
+                    return {}
+                try:
+                    decoded = json.loads(raw_body.decode("utf-8"))
+                except json.JSONDecodeError as exc:
+                    raise RuntimeError(f"Invalid JSON body: {exc}") from exc
+                if not isinstance(decoded, dict):
+                    raise RuntimeError("JSON body must be an object")
+                return decoded
+
+            def _send_backend_json(self, callback) -> None:
+                try:
+                    payload = callback()
+                    status = HTTPStatus.OK if payload.get("success", True) else HTTPStatus.BAD_GATEWAY
+                    self._send_json(status, payload)
+                except ValueError as exc:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"success": False, "message": str(exc)})
+                except FileNotFoundError as exc:
+                    self._send_json(HTTPStatus.NOT_FOUND, {"success": False, "message": str(exc)})
+                except Exception as exc:  # noqa: BLE001
+                    self._send_json(HTTPStatus.BAD_GATEWAY, {"success": False, "message": str(exc)})
+
+            def _send_html(self, body: str) -> None:
+                encoded = body.encode("utf-8")
+                self._send_bytes(
+                    HTTPStatus.OK,
+                    encoded,
+                    {
+                        "Content-Type": "text/html; charset=utf-8",
+                        "Content-Length": str(len(encoded)),
+                    },
+                )
+
+            def _send_json(self, status: HTTPStatus, payload: dict[str, Any]) -> None:
+                if "success" not in payload:
+                    payload = {"success": status.value < 400, **payload}
+                if "message" not in payload:
+                    payload = {**payload, "message": ""}
+                encoded = json.dumps(payload).encode("utf-8")
+                self._send_bytes(
+                    status,
+                    encoded,
+                    {
+                        "Content-Type": "application/json; charset=utf-8",
+                        "Cache-Control": "no-store",
+                        "Content-Length": str(len(encoded)),
+                    },
+                )
+
+            def _send_download(self, path: Path, content_type: str) -> None:
+                if not path.exists() or not path.is_file():
+                    self._send_json(HTTPStatus.NOT_FOUND, {"success": False, "message": "Mission file not found"})
+                    return
+                encoded = path.read_bytes()
+                self._send_bytes(
+                    HTTPStatus.OK,
+                    encoded,
+                    {
+                        "Content-Type": content_type,
+                        "Cache-Control": "no-store",
+                        "Content-Length": str(len(encoded)),
+                        "Content-Disposition": f'attachment; filename="{path.name}"',
+                    },
+                )
+
+            def _send_bytes(
+                self,
+                status: HTTPStatus,
+                body: bytes,
+                headers: dict[str, str],
+            ) -> None:
+                self.send_response(status)
+                for key, value in headers.items():
+                    self.send_header(key, value)
+                try:
+                    self.end_headers()
+                    self.wfile.write(body)
+                except OSError as exc:
+                    if self._is_client_disconnect(exc):
+                        node.get_logger().debug(
+                            f"HTTP client disconnected before response completed: {exc}"
+                        )
+                        return
+                    raise
+
+            @staticmethod
+            def _is_client_disconnect(exc: OSError) -> bool:
+                return isinstance(exc, (BrokenPipeError, ConnectionResetError, socket.timeout)) or (
+                    exc.errno in {errno.EPIPE, errno.ECONNRESET, errno.ECONNABORTED}
+                )
+
+        return MissionBackendRequestHandler
 
     def _handle_fsm_state(self, message: FSMState) -> None:
         with self._state_lock:
@@ -1784,8 +2013,12 @@ def main(args: list[str] | None = None) -> int:
     node = MissionBackendNode()
     executor = MultiThreadedExecutor()
     executor.add_node(node)
+    server_thread: threading.Thread | None = None
 
     try:
+        node.start_http_server()
+        server_thread = threading.Thread(target=node.serve_forever, name="interface_backend_http", daemon=True)
+        server_thread.start()
         executor.spin()
     except KeyboardInterrupt:
         pass
@@ -1793,6 +2026,12 @@ def main(args: list[str] | None = None) -> int:
         node.get_logger().error(f"Mission backend startup failed: {exc}")
         return 1
     finally:
+        try:
+            node.stop_http_server()
+        except RuntimeError:
+            pass
+        if server_thread is not None:
+            server_thread.join(timeout=2.0)
         executor.shutdown()
         node.destroy_node()
         rclpy.shutdown()

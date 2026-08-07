@@ -37,8 +37,8 @@ def generate_launch_description():
         DeclareLaunchArgument("public_base_url", default_value="http://192.168.2.1:8080"),
         Node(
             package="amr_sweeper_interface_server",
-            executable="frontend_http_node.py",
-            name="frontend_http_node",
+            executable="backend_node.py",
+            name="backend_node",
             namespace=namespace,
             output="screen",
             parameters=[{
