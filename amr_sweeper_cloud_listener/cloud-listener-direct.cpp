@@ -39,8 +39,9 @@ constexpr const char * kPreservedLastCommandFileName = "last_command.json";
 constexpr const char * kPreservedLastResponseFileName = "last_response.json";
 constexpr const char * kPreservedScheduleFileName = "schedule_20260000T000000Z.ics";
 
-constexpr const char * kInterfaceBackendBaseUrlEnv = "INTERFACE_BACKEND_BASE_URL";
-constexpr const char * kDefaultInterfaceBackendBaseUrl = "http://127.0.0.1:8080";
+constexpr const char * kInterfaceBackendSocketPathEnv = "INTERFACE_BACKEND_SOCKET_PATH";
+constexpr const char * kDefaultInterfaceBackendSocketPath =
+  "/tmp/amr_sweeper_interface_backend.sock";
 
 struct PackageCommand
 {
@@ -346,16 +347,12 @@ PackageCommand build_package_command_from_direct_method(const DirectMethodComman
   return package_command;
 }
 
-std::string interface_backend_base_url()
+std::string interface_backend_socket_path()
 {
-  const char * configured_url = std::getenv(kInterfaceBackendBaseUrlEnv);
-  std::string base_url = configured_url == nullptr || std::string(configured_url).empty()
-    ? kDefaultInterfaceBackendBaseUrl
-    : configured_url;
-  while (!base_url.empty() && base_url.back() == '/') {
-    base_url.pop_back();
-  }
-  return base_url;
+  const char * configured_path = std::getenv(kInterfaceBackendSocketPathEnv);
+  return configured_path == nullptr || std::string(configured_path).empty()
+    ? kDefaultInterfaceBackendSocketPath
+    : configured_path;
 }
 
 bool ensure_direct_curl_initialized(std::string * error_message)
@@ -469,8 +466,10 @@ bool post_interface_backend_json(
   headers = curl_slist_append(headers, "Accept: application/json");
 
   std::string local_response_body;
-  const std::string url = interface_backend_base_url() + path;
+  const std::string socket_path = interface_backend_socket_path();
+  const std::string url = "http://localhost" + path;
   curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+  curl_easy_setopt(curl, CURLOPT_UNIX_SOCKET_PATH, socket_path.c_str());
   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
   curl_easy_setopt(curl, CURLOPT_POST, 1L);
   curl_easy_setopt(curl, CURLOPT_POSTFIELDS, request_body.c_str());

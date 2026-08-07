@@ -2,7 +2,40 @@
 
 from __future__ import annotations
 
+import errno
+import http.client
+import json
+import socket
+import threading
+import time
+import urllib.parse
 from html import escape
+from http import HTTPStatus
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any
+
+import rclpy
+from rclpy.node import Node
+
+
+DEFAULT_BACKEND_SOCKET_PATH = "/tmp/amr_sweeper_interface_backend.sock"
+
+
+class UnixHTTPConnection(http.client.HTTPConnection):
+    def __init__(self, socket_path: str, timeout: float = 20.0) -> None:
+        super().__init__("localhost", timeout=timeout)
+        self._socket_path = socket_path
+
+    def connect(self) -> None:
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.settimeout(self.timeout)
+        sock.connect(self._socket_path)
+        self.sock = sock
+
+
+class MissionThreadingHTTPServer(ThreadingHTTPServer):
+    allow_reuse_address = True
+    daemon_threads = True
 
 
 class MissionFrontendRenderer:
@@ -674,7 +707,6 @@ class MissionFrontendRenderer:
 </body>
 </html>
 """
-
     def render_calendar_html(self) -> str:
         title = escape(self._site_title)
         return f"""<!DOCTYPE html>
@@ -3067,3 +3099,231 @@ class MissionFrontendRenderer:
 </html>
 """
 
+
+class MissionFrontendHttpNode(Node, MissionFrontendRenderer):
+    def __init__(self) -> None:
+        super().__init__("frontend_http_node")
+        self._http_host = self.declare_parameter("http_host", "0.0.0.0").value
+        self._http_port = int(self.declare_parameter("http_port", 8080).value)
+        self._backend_socket_path = str(
+            self.declare_parameter("backend_socket_path", DEFAULT_BACKEND_SOCKET_PATH).value
+        )
+        self._site_title = self.declare_parameter("site_title", "AMR-Sweeper").value
+        self._public_base_url = self.declare_parameter(
+            "public_base_url",
+            "http://192.168.2.1:8080",
+        ).value
+        self._http_server: ThreadingHTTPServer | None = None
+
+    def start_http_server(self) -> None:
+        handler = self._build_handler()
+        try:
+            self._http_server = MissionThreadingHTTPServer((self._http_host, self._http_port), handler)
+        except OSError as exc:
+            if exc.errno == errno.EADDRINUSE:
+                raise RuntimeError(
+                    f"HTTP listen address {self._http_host}:{self._http_port} is already in use. "
+                    "Another web frontend instance may still be running."
+                ) from exc
+            raise
+        self.get_logger().info(
+            f"Mission web frontend listening on http://{self._http_host}:{self._http_port}"
+        )
+
+    def stop_http_server(self) -> None:
+        if self._http_server is None:
+            return
+        self._http_server.shutdown()
+        self._http_server.server_close()
+        self._http_server = None
+
+    def serve_forever(self) -> None:
+        if self._http_server is None:
+            raise RuntimeError("HTTP server not initialized")
+        self._http_server.serve_forever()
+
+    def _build_handler(self):
+        node = self
+
+        class MissionFrontendRequestHandler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802
+                parsed = urllib.parse.urlparse(self.path)
+                if parsed.path == "/":
+                    self._send_html(node.render_index_html())
+                    return
+                if parsed.path == "/calendar":
+                    self._send_html(node.render_calendar_html())
+                    return
+                if parsed.path == "/map":
+                    self._send_html(node.render_map_html())
+                    return
+                if parsed.path == "/developer":
+                    self._send_html(node.render_developer_html())
+                    return
+                if parsed.path == "/record-map":
+                    self._send_html(node.render_record_map_html())
+                    return
+                if parsed.path.startswith("/api/v1/"):
+                    self._proxy_to_backend()
+                    return
+                self._send_json(HTTPStatus.NOT_FOUND, {"success": False, "message": "Not found"})
+
+            def do_POST(self) -> None:  # noqa: N802
+                parsed = urllib.parse.urlparse(self.path)
+                if parsed.path.startswith("/api/v1/"):
+                    self._proxy_to_backend()
+                    return
+                self._send_json(HTTPStatus.NOT_FOUND, {"success": False, "message": "Not found"})
+
+            def log_message(self, format: str, *args: Any) -> None:
+                node.get_logger().debug(f"HTTP {self.address_string()} - {format % args}")
+
+            def _proxy_to_backend(self) -> None:
+                body = self._read_body()
+                request_headers: dict[str, str] = {}
+                for key, value in self.headers.items():
+                    lowered = key.lower()
+                    if lowered in {
+                        "connection",
+                        "content-length",
+                        "host",
+                        "keep-alive",
+                        "proxy-authenticate",
+                        "proxy-authorization",
+                        "te",
+                        "trailer",
+                        "transfer-encoding",
+                        "upgrade",
+                    }:
+                        continue
+                    request_headers[key] = value
+                if body:
+                    request_headers["Content-Length"] = str(len(body))
+
+                connection = UnixHTTPConnection(node._backend_socket_path, timeout=20.0)
+                try:
+                    connection.request(self.command, self.path, body=body, headers=request_headers)
+                    response = connection.getresponse()
+                    response_body = response.read()
+                    response_headers = {
+                        key: value
+                        for key, value in response.getheaders()
+                        if key.lower() not in {
+                            "connection",
+                            "content-length",
+                            "date",
+                            "keep-alive",
+                            "server",
+                            "te",
+                            "trailer",
+                            "transfer-encoding",
+                            "upgrade",
+                        }
+                    }
+                    response_headers["Content-Length"] = str(len(response_body))
+                    self._send_bytes(HTTPStatus(response.status), response_body, response_headers)
+                except (OSError, http.client.HTTPException, ValueError) as exc:
+                    self._send_json(
+                        HTTPStatus.BAD_GATEWAY,
+                        {
+                            "success": False,
+                            "message": f"Backend IPC request failed: {exc}",
+                        },
+                    )
+                finally:
+                    connection.close()
+
+            def _read_body(self) -> bytes:
+                try:
+                    length = int(self.headers.get("Content-Length", "0"))
+                except ValueError:
+                    return b""
+                if length <= 0:
+                    return b""
+                return self.rfile.read(length)
+
+            def _send_html(self, body: str) -> None:
+                encoded = body.encode("utf-8")
+                self._send_bytes(
+                    HTTPStatus.OK,
+                    encoded,
+                    {
+                        "Content-Type": "text/html; charset=utf-8",
+                        "Content-Length": str(len(encoded)),
+                    },
+                )
+
+            def _send_json(self, status: HTTPStatus, payload: dict[str, Any]) -> None:
+                encoded = json.dumps(payload).encode("utf-8")
+                self._send_bytes(
+                    status,
+                    encoded,
+                    {
+                        "Content-Type": "application/json; charset=utf-8",
+                        "Cache-Control": "no-store",
+                        "Content-Length": str(len(encoded)),
+                    },
+                )
+
+            def _send_bytes(
+                self,
+                status: HTTPStatus,
+                body: bytes,
+                headers: dict[str, str],
+            ) -> None:
+                self.send_response(status)
+                for key, value in headers.items():
+                    self.send_header(key, value)
+                try:
+                    self.end_headers()
+                    self.wfile.write(body)
+                except OSError as exc:
+                    if self._is_client_disconnect(exc):
+                        node.get_logger().debug(
+                            f"HTTP client disconnected before response completed: {exc}"
+                        )
+                        return
+                    raise
+
+            @staticmethod
+            def _is_client_disconnect(exc: OSError) -> bool:
+                return isinstance(exc, (BrokenPipeError, ConnectionResetError, socket.timeout)) or (
+                    exc.errno in {errno.EPIPE, errno.ECONNRESET, errno.ECONNABORTED}
+                )
+
+        return MissionFrontendRequestHandler
+
+
+def main(args: list[str] | None = None) -> int:
+    rclpy.init(args=args)
+    node = MissionFrontendHttpNode()
+    server_thread: threading.Thread | None = None
+
+    try:
+        node.start_http_server()
+        server_thread = threading.Thread(target=node.serve_forever, name="mission_http_frontend", daemon=True)
+        server_thread.start()
+        while rclpy.ok() and server_thread.is_alive():
+            time.sleep(0.5)
+    except KeyboardInterrupt:
+        pass
+    except Exception as exc:  # noqa: BLE001
+        node.get_logger().error(f"Mission frontend HTTP startup failed: {exc}")
+        return 1
+    finally:
+        try:
+            node.stop_http_server()
+        except RuntimeError:
+            pass
+        if server_thread is not None:
+            server_thread.join(timeout=2.0)
+        try:
+            node.destroy_node()
+        except (KeyboardInterrupt, RuntimeError, AttributeError):
+            pass
+        rclpy.try_shutdown()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

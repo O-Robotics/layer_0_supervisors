@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import json
 import errno
+import os
 import re
 import socket
+import socketserver
+import stat
 import threading
 import time
 import urllib.parse
@@ -14,7 +17,7 @@ from datetime import datetime, timedelta, timezone
 from collections import deque
 from html import escape
 from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -40,9 +43,6 @@ from rcl_interfaces.msg import Log
 from sensor_msgs.msg import BatteryState, NavSatFix
 from std_msgs.msg import String
 from std_srvs.srv import Trigger
-
-from frontend_http_node import MissionFrontendRenderer
-
 
 MISSION_LAYER_OVERRIDE_KEYS = (
     "use_amr_sweeper_ros2_control",
@@ -338,17 +338,20 @@ def _load_running_profile_default_overrides() -> dict[int, dict[str, bool]]:
 
 
 
-class MissionThreadingHTTPServer(ThreadingHTTPServer):
-    allow_reuse_address = True
+DEFAULT_BACKEND_SOCKET_PATH = "/tmp/amr_sweeper_interface_backend.sock"
+
+
+class MissionBackendUnixHTTPServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
     daemon_threads = True
 
 
-class MissionBackendNode(Node, MissionFrontendRenderer):
+class MissionBackendNode(Node):
     def __init__(self, node_name: str = "backend_node") -> None:
         super().__init__(node_name)
 
-        self._http_host = self.declare_parameter("http_host", "0.0.0.0").value
-        self._http_port = int(self.declare_parameter("http_port", 8080).value)
+        self._backend_socket_path = str(
+            self.declare_parameter("backend_socket_path", DEFAULT_BACKEND_SOCKET_PATH).value
+        )
         self._site_title = self.declare_parameter("site_title", "AMR-Sweeper").value
         self._public_base_url = self.declare_parameter(
             "public_base_url",
@@ -476,21 +479,29 @@ class MissionBackendNode(Node, MissionFrontendRenderer):
         self.create_subscription(Log, self._rosout_topic, self._handle_rosout, 100)
         self.create_subscription(String, self._safety_web_status_topic, self._handle_safety_web_status, 10)
 
-        self._http_server: ThreadingHTTPServer | None = None
+        self._http_server: MissionBackendUnixHTTPServer | None = None
 
     def start_http_server(self) -> None:
         handler = self._build_handler()
+        socket_path = Path(self._backend_socket_path)
+        if socket_path.exists():
+            if not stat.S_ISSOCK(socket_path.stat().st_mode):
+                raise RuntimeError(f"Backend socket path exists and is not a socket: {socket_path}")
+            socket_path.unlink()
+        socket_path.parent.mkdir(parents=True, exist_ok=True)
+        old_umask = os.umask(0o177)
         try:
-            self._http_server = MissionThreadingHTTPServer((self._http_host, self._http_port), handler)
+            self._http_server = MissionBackendUnixHTTPServer(str(socket_path), handler)
         except OSError as exc:
+            os.umask(old_umask)
             if exc.errno == errno.EADDRINUSE:
-                raise RuntimeError(
-                    f"HTTP listen address {self._http_host}:{self._http_port} is already in use. "
-                    "Another interface backend may still be running."
-                ) from exc
+                raise RuntimeError(f"Backend socket path is already in use: {socket_path}") from exc
             raise
+        finally:
+            os.umask(old_umask)
+        socket_path.chmod(0o600)
         self.get_logger().info(
-            f"Interface backend API listening on http://{self._http_host}:{self._http_port}"
+            f"Interface backend API listening on Unix socket {socket_path}"
         )
 
     def stop_http_server(self) -> None:
@@ -499,6 +510,12 @@ class MissionBackendNode(Node, MissionFrontendRenderer):
         self._http_server.shutdown()
         self._http_server.server_close()
         self._http_server = None
+        socket_path = Path(self._backend_socket_path)
+        try:
+            if socket_path.exists() and stat.S_ISSOCK(socket_path.stat().st_mode):
+                socket_path.unlink()
+        except OSError as exc:
+            self.get_logger().warning(f"Failed to remove backend socket {socket_path}: {exc}")
 
     def serve_forever(self) -> None:
         if self._http_server is None:
@@ -511,21 +528,6 @@ class MissionBackendNode(Node, MissionFrontendRenderer):
         class MissionBackendRequestHandler(BaseHTTPRequestHandler):
             def do_GET(self) -> None:  # noqa: N802
                 parsed = urllib.parse.urlparse(self.path)
-                if parsed.path == "/":
-                    self._send_html(node.render_index_html())
-                    return
-                if parsed.path == "/calendar":
-                    self._send_html(node.render_calendar_html())
-                    return
-                if parsed.path == "/map":
-                    self._send_html(node.render_map_html())
-                    return
-                if parsed.path == "/developer":
-                    self._send_html(node.render_developer_html())
-                    return
-                if parsed.path == "/record-map":
-                    self._send_html(node.render_record_map_html())
-                    return
                 if parsed.path == "/api/v1/status":
                     self._send_json(HTTPStatus.OK, node.status_snapshot())
                     return
@@ -599,7 +601,7 @@ class MissionBackendNode(Node, MissionFrontendRenderer):
                 self._send_backend_json(handler)
 
             def log_message(self, format: str, *args: Any) -> None:
-                node.get_logger().debug(f"HTTP {self.address_string()} - {format % args}")
+                node.get_logger().debug(f"Backend IPC - {format % args}")
 
             def _read_json_body(self) -> dict[str, Any]:
                 length = int(self.headers.get("Content-Length", "0"))
@@ -627,17 +629,6 @@ class MissionBackendNode(Node, MissionFrontendRenderer):
                     self._send_json(HTTPStatus.NOT_FOUND, {"success": False, "message": str(exc)})
                 except Exception as exc:  # noqa: BLE001
                     self._send_json(HTTPStatus.BAD_GATEWAY, {"success": False, "message": str(exc)})
-
-            def _send_html(self, body: str) -> None:
-                encoded = body.encode("utf-8")
-                self._send_bytes(
-                    HTTPStatus.OK,
-                    encoded,
-                    {
-                        "Content-Type": "text/html; charset=utf-8",
-                        "Content-Length": str(len(encoded)),
-                    },
-                )
 
             def _send_json(self, status: HTTPStatus, payload: dict[str, Any]) -> None:
                 if "success" not in payload:

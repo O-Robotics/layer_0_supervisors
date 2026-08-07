@@ -1,13 +1,14 @@
 # amr_sweeper_interface_server
 
-Provides the AMR Sweeper operator interface backend as a standalone layer 0 package.
+Provides the AMR Sweeper operator interface stack as a standalone layer 0 package.
 
 Structure:
-- `scripts/backend_node.py` is the single frontend-facing backend entry point. It owns ROS topics/services, mission files, schedule files, the HTTP listener, rendered operator pages, and the `/api/v1` HTTP/JSON API.
-- `scripts/frontend_http_node.py` contains only the rendered local operator pages used by the backend.
+- `scripts/backend_node.py` is the local-only backend entry point. It owns ROS topics/services, mission files, schedule files, and the `/api/v1` HTTP/JSON API over a Unix domain socket.
+- `scripts/frontend_http_node.py` is the network-facing web frontend. It serves the local operator pages and proxies `/api/v1` requests to the backend socket.
 
 Responsibilities:
-- expose a local dashboard and standardized HTTP/JSON API over HTTP
+- expose a local dashboard over TCP through the frontend node
+- keep the backend API reachable only through local IPC
 - show FSM state, GNSS latitude/longitude, battery state, and the active mission run folder
 - execute built-in manual missions and saved autonomous missions through `amr_sweeper_mission_executor`
 - stop the active mission through `amr_sweeper_mission_executor`
@@ -34,7 +35,13 @@ API:
 - `POST /api/v1/record-map/stop`
 - `POST /api/v1/record-map/save-mission`
 
-All frontend interfaces should use the backend HTTP API and should not call ROS2 services/topics directly.
+All frontend interfaces should use the backend HTTP API over the Unix domain socket and should not call ROS2 services/topics directly.
+
+Backend IPC:
+- Default socket: `/tmp/amr_sweeper_interface_backend.sock`
+- Launch override: `backend_socket_path:=/path/to/socket`
+- Cloud listener override: `INTERFACE_BACKEND_SOCKET_PATH=/path/to/socket`
+- The socket is created with owner-only permissions and removed on backend shutdown.
 
 Default operator URL:
 - `http://192.168.2.1:8080`
@@ -51,9 +58,10 @@ Network setup:
 - No changes should be done on the RUTX11 router.
 
 Notes:
-- the node binds to `0.0.0.0:8080` by default so operators on the router LAN can reach it
+- only `frontend_http_node.py` binds to `0.0.0.0:8080` by default so operators on the router LAN can reach it
+- `backend_node.py` must not bind TCP; it listens only on the Unix domain socket
 - the default public URL assumes the Jetson uses the Ethernet address `192.168.2.1`
-- plain HTTP should only be exposed on the trusted robot network; use HTTPS/auth at a gateway, reverse proxy, VPN, or tunnel before exposing the API outside that boundary
+- plain HTTP should only be exposed by frontend nodes on the trusted robot network; use HTTPS/auth at a gateway, reverse proxy, VPN, or tunnel before exposing the API outside that boundary
 - operators connect through the router's Wi-Fi network; the Jetson itself is expected to be wired to the router over Ethernet
 - this assumes the robot uplink and router LAN use the `192.168.2.0/24` subnet
 - the Missions page stores the selected mission and its launch preferences in browser local storage, so toggles such as `Record rosbag` persist per mission on that client

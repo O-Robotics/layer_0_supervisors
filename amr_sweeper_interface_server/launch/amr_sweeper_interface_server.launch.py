@@ -9,6 +9,7 @@ def generate_launch_description():
     missions_from_db_directory = LaunchConfiguration("missions_from_db_directory")
     missions_log_directory = LaunchConfiguration("missions_log_directory")
     actual_schedule_log_directory = LaunchConfiguration("actual_schedule_log_directory")
+    backend_socket_path = LaunchConfiguration("backend_socket_path")
     http_host = LaunchConfiguration("http_host")
     http_port = LaunchConfiguration("http_port")
     gnss_topic = LaunchConfiguration("gnss_topic")
@@ -25,6 +26,7 @@ def generate_launch_description():
         DeclareLaunchArgument("missions_from_db_directory", default_value="missions/database"),
         DeclareLaunchArgument("missions_log_directory", default_value="missions/logs"),
         DeclareLaunchArgument("actual_schedule_log_directory", default_value="missions/simulations"),
+        DeclareLaunchArgument("backend_socket_path", default_value="/tmp/amr_sweeper_interface_backend.sock"),
         DeclareLaunchArgument("http_host", default_value="0.0.0.0"),
         DeclareLaunchArgument("http_port", default_value="8080"),
         DeclareLaunchArgument("gnss_topic", default_value="gnss/navsat"),
@@ -42,8 +44,7 @@ def generate_launch_description():
             namespace=namespace,
             output="screen",
             parameters=[{
-                "http_host": http_host,
-                "http_port": http_port,
+                "backend_socket_path": backend_socket_path,
                 "site_title": site_title,
                 "public_base_url": public_base_url,
                 "missions_from_db_directory": missions_from_db_directory,
@@ -59,6 +60,20 @@ def generate_launch_description():
                 "rosout_topic": rosout_topic,
                 "gnss_topic": gnss_topic,
                 "battery_topic": battery_topic,
+            }],
+        ),
+        Node(
+            package="amr_sweeper_interface_server",
+            executable="frontend_http_node.py",
+            name="frontend_http_node",
+            namespace=namespace,
+            output="screen",
+            parameters=[{
+                "backend_socket_path": backend_socket_path,
+                "http_host": http_host,
+                "http_port": http_port,
+                "site_title": site_title,
+                "public_base_url": public_base_url,
             }],
         ),
     ])
