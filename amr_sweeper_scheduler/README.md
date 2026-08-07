@@ -46,7 +46,7 @@ The scheduler is intended to run as a lightweight ROS 2 node launched by FSM sta
 - `SchedulerNode` polls the schedule file at `schedule_poll_interval_sec` and reloads on file mtime change by default.
 - `IcalParserMinimal` parses the RFC 5545 subset used by the robot schedule, including `UID`, `DTSTART`, `DURATION` or `DTEND`, `RRULE`, `X-ROBOT-ID`, `X-SCHEDULE-TYPE`, and `X-MISSION-ID`.
 - Each `VEVENT` maps to a time window from `DTSTART` plus `DURATION` or `DTEND`.
-- `RRULE` entries are expanded within `horizon_hours`.
+- `RRULE` entries are expanded within `horizon_hours`; supported frequencies are `MINUTELY`, `HOURLY`, `DAILY`, `WEEKLY`, and `MONTHLY`, with `INTERVAL`, `COUNT`, `UNTIL`, `BYDAY`, `BYMONTH`, and monthly `BYSETPOS` handled for the supported patterns.
 - `NO_WORK` windows override `WORK` windows.
 - Overlapping `WORK` windows are handled deterministically by expanded start order.
 - Missed windows are not backfilled by default.

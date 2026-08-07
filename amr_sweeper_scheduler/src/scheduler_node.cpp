@@ -32,7 +32,6 @@ constexpr auto kLowerPriorityRetryCooldown = std::chrono::seconds(30);
 constexpr char kDefaultRobotConfigEnvPath[] = "/opt/robot_config/robot_config.global.env";
 
 std::string format_local_timestamp(const std::tm & tm);
-std::tm time_point_to_tm(const std::chrono::system_clock::time_point & time_point);
 
 bool has_timestamp_suffix(const std::string & candidate, const std::string & prefix)
 {
@@ -251,12 +250,6 @@ std::string format_local_timestamp(const std::tm & tm)
   return buffer;
 }
 
-std::tm time_point_to_tm(const std::chrono::system_clock::time_point & time_point)
-{
-  const std::time_t as_time_t = std::chrono::system_clock::to_time_t(time_point);
-  return *std::localtime(&as_time_t);
-}
-
 std::string trim_cr(std::string value)
 {
   if (!value.empty() && value.back() == '\r') {
@@ -330,8 +323,11 @@ struct ParsedRRule
 {
   std::string freq;
   int interval{1};
+  std::optional<int> count;
+  std::optional<std::string> until;
   std::optional<int> by_set_pos;
   std::vector<std::string> by_day;
+  std::vector<int> by_month;
 };
 
 std::chrono::seconds parse_duration_seconds(const std::string & value)
@@ -387,6 +383,10 @@ ParsedRRule parse_rrule(const std::string & rule)
       parsed.freq = value;
     } else if (key == "INTERVAL") {
       parsed.interval = std::max(1, std::stoi(value));
+    } else if (key == "COUNT") {
+      parsed.count = std::max(0, std::stoi(value));
+    } else if (key == "UNTIL") {
+      parsed.until = value;
     } else if (key == "BYSETPOS") {
       parsed.by_set_pos = std::stoi(value);
     } else if (key == "BYDAY") {
@@ -394,6 +394,12 @@ ParsedRRule parse_rrule(const std::string & rule)
       std::string day_token;
       while (std::getline(day_stream, day_token, ',')) {
         parsed.by_day.push_back(day_token);
+      }
+    } else if (key == "BYMONTH") {
+      std::stringstream month_stream(value);
+      std::string month_token;
+      while (std::getline(month_stream, month_token, ',')) {
+        parsed.by_month.push_back(std::stoi(month_token));
       }
     }
   }
@@ -404,7 +410,16 @@ int weekday_from_byday(const std::string & value)
 {
   static const std::unordered_map<std::string, int> lookup{
     {"SU", 0}, {"MO", 1}, {"TU", 2}, {"WE", 3}, {"TH", 4}, {"FR", 5}, {"SA", 6}};
+  if (value.size() >= 2U) {
+    return lookup.at(value.substr(value.size() - 2U));
+  }
   return lookup.at(value);
+}
+
+std::string byday_from_weekday(const int weekday)
+{
+  static const std::array<const char *, 7> lookup{"SU", "MO", "TU", "WE", "TH", "FR", "SA"};
+  return lookup.at(static_cast<std::size_t>(weekday));
 }
 
 int days_in_month(int year, int month)
@@ -485,6 +500,110 @@ TimeWindow build_window(
   window.start_local = format_local_timestamp(time_point_to_tm_in_timezone(start_time, event.dtstart_tzid));
   window.end_local = format_local_timestamp(time_point_to_tm_in_timezone(end_time, event.dtstart_tzid));
   return window;
+}
+
+std::optional<std::chrono::system_clock::time_point> rrule_until_time_point(
+  const ParsedRRule & rule,
+  const std::string & tzid)
+{
+  if (!rule.until) {
+    return std::nullopt;
+  }
+
+  std::string value = *rule.until;
+  if (!value.empty() && value.back() == 'Z') {
+    return utc_to_time_point(value);
+  }
+  if (value.size() == 8U) {
+    value += "T235959";
+  }
+  return to_time_point(value, tzid);
+}
+
+std::chrono::system_clock::time_point local_tm_to_time_point(std::tm tm, const std::string & tzid)
+{
+  std::lock_guard<std::mutex> lock(timezone_mutex());
+  const char * previous_tz = std::getenv("TZ");
+  const std::string previous_tz_value = previous_tz ? previous_tz : "";
+  const bool had_previous_tz = previous_tz != nullptr;
+  if (!tzid.empty()) {
+    setenv("TZ", tzid.c_str(), 1);
+  } else {
+    unsetenv("TZ");
+  }
+  tzset();
+  const std::time_t as_time_t = std::mktime(&tm);
+  if (had_previous_tz) {
+    setenv("TZ", previous_tz_value.c_str(), 1);
+  } else {
+    unsetenv("TZ");
+  }
+  tzset();
+  return std::chrono::system_clock::from_time_t(as_time_t);
+}
+
+std::chrono::system_clock::time_point add_local_time(
+  const std::chrono::system_clock::time_point & seed_start,
+  const std::string & tzid,
+  const int occurrence_index,
+  const int interval,
+  const char unit)
+{
+  std::tm occurrence_tm = time_point_to_tm_in_timezone(seed_start, tzid);
+  const int offset = occurrence_index * interval;
+  if (unit == 'm') {
+    occurrence_tm.tm_min += offset;
+  } else if (unit == 'h') {
+    occurrence_tm.tm_hour += offset;
+  } else if (unit == 'd') {
+    occurrence_tm.tm_mday += offset;
+  } else if (unit == 'w') {
+    occurrence_tm.tm_mday += offset * 7;
+  } else if (unit == 'M') {
+    occurrence_tm.tm_mon += offset;
+  }
+  occurrence_tm.tm_isdst = -1;
+  return local_tm_to_time_point(occurrence_tm, tzid);
+}
+
+bool day_matches_byday(const std::chrono::system_clock::time_point & time_point, const std::string & tzid,
+  const std::vector<std::string> & by_day)
+{
+  if (by_day.empty()) {
+    return true;
+  }
+  const std::tm local = time_point_to_tm_in_timezone(time_point, tzid);
+  return std::any_of(
+    by_day.begin(),
+    by_day.end(),
+    [&local](const std::string & day) {
+      return local.tm_wday == weekday_from_byday(day);
+    });
+}
+
+bool month_matches_bymonth(const std::tm & local, const std::vector<int> & by_month)
+{
+  if (by_month.empty()) {
+    return true;
+  }
+  const int month = local.tm_mon + 1;
+  return std::find(by_month.begin(), by_month.end(), month) != by_month.end();
+}
+
+void maybe_add_occurrence(
+  std::vector<TimeWindow> & windows,
+  const ScheduleEvent & event,
+  const std::chrono::system_clock::time_point & occurrence_start,
+  const std::chrono::system_clock::time_point & seed_start,
+  const std::chrono::system_clock::time_point & seed_end,
+  const std::chrono::system_clock::time_point & now,
+  const std::chrono::system_clock::time_point & horizon_end)
+{
+  const auto occurrence_end = occurrence_start + (seed_end - seed_start);
+  if (occurrence_end < now || occurrence_start > horizon_end) {
+    return;
+  }
+  windows.push_back(build_window(event, occurrence_start, occurrence_end));
 }
 
 bool overlaps(const TimeWindow & left, const TimeWindow & right)
@@ -679,59 +798,145 @@ std::vector<TimeWindow> ScheduleExpanderStub::expand(
     }
 
     const ParsedRRule rule = parse_rrule(*event.rrule);
-    if (rule.freq == "MINUTELY") {
-      const auto recurrence_step = std::chrono::minutes(rule.interval);
-      for (auto occurrence = seed_start; occurrence <= horizon_end; occurrence += recurrence_step) {
-        const auto occurrence_end = occurrence + (*seed_end - seed_start);
-        if (occurrence_end < now) {
-          continue;
+    const auto until = rrule_until_time_point(rule, event.dtstart_tzid);
+    auto reached_rrule_limit =
+      [&rule, &until](
+        const int occurrence_index,
+        const std::chrono::system_clock::time_point & occurrence_start) {
+        if (rule.count && occurrence_index >= *rule.count) {
+          return true;
         }
-        windows.push_back(build_window(event, occurrence, occurrence_end));
-      }
+        if (until && occurrence_start > *until) {
+          return true;
+        }
+        return false;
+      };
+
+    auto expand_fixed_interval =
+      [&](const char unit) {
+        for (int occurrence_index = 0; ; ++occurrence_index) {
+          const auto occurrence_start =
+            add_local_time(seed_start, event.dtstart_tzid, occurrence_index, rule.interval, unit);
+          if (reached_rrule_limit(occurrence_index, occurrence_start) ||
+            occurrence_start > horizon_end)
+          {
+            break;
+          }
+          if (unit == 'w' &&
+            !day_matches_byday(occurrence_start, event.dtstart_tzid, rule.by_day))
+          {
+            continue;
+          }
+          maybe_add_occurrence(
+            windows,
+            event,
+            occurrence_start,
+            seed_start,
+            *seed_end,
+            now,
+            horizon_end);
+        }
+      };
+
+    if (rule.freq == "MINUTELY") {
+      expand_fixed_interval('m');
+      continue;
+    }
+    if (rule.freq == "HOURLY") {
+      expand_fixed_interval('h');
       continue;
     }
     if (rule.freq == "DAILY") {
-      for (auto occurrence = seed_start; occurrence <= horizon_end; occurrence += std::chrono::hours(24)) {
-        const auto occurrence_end = occurrence + (*seed_end - seed_start);
-        if (occurrence_end < now) {
-          continue;
-        }
-        windows.push_back(build_window(event, occurrence, occurrence_end));
-      }
+      expand_fixed_interval('d');
       continue;
     }
-
-    if (rule.freq == "MONTHLY" && rule.by_set_pos && !rule.by_day.empty()) {
-      std::tm cursor = time_point_to_tm(now);
-      for (int month_offset = 0; month_offset <= horizon.count() / 24 / 28 + 2; ++month_offset) {
-        const int month_index = cursor.tm_mon + month_offset;
-        const int year = cursor.tm_year + 1900 + month_index / 12;
-        const int month = month_index % 12;
-        const auto occurrence_tm = nth_weekday_of_month(
-          seed_tm,
-          year,
-          month,
-          weekday_from_byday(rule.by_day.front()),
-          *rule.by_set_pos);
-        if (!occurrence_tm) {
-          continue;
-        }
-
-        auto occurrence_tm_value = *occurrence_tm;
+    if (rule.freq == "WEEKLY") {
+      int generated_count = 0;
+      const auto effective_by_day = rule.by_day.empty() ?
+        std::vector<std::string>{
+          byday_from_weekday(time_point_to_tm_in_timezone(seed_start, event.dtstart_tzid).tm_wday)}
+        : rule.by_day;
+      for (int day_offset = 0; ; ++day_offset) {
         const auto occurrence_start =
-          std::chrono::system_clock::from_time_t(std::mktime(&occurrence_tm_value));
-        if (occurrence_start < seed_start) {
-          continue;
-        }
-        const auto occurrence_end = occurrence_start + (*seed_end - seed_start);
-        if (occurrence_end < now) {
-          continue;
+          add_local_time(seed_start, event.dtstart_tzid, day_offset, 1, 'd');
+        if (until && occurrence_start > *until) {
+          break;
         }
         if (occurrence_start > horizon_end) {
           break;
         }
-        windows.push_back(build_window(event, occurrence_start, occurrence_end));
+        if ((day_offset / 7) % rule.interval != 0 ||
+          !day_matches_byday(occurrence_start, event.dtstart_tzid, effective_by_day))
+        {
+          continue;
+        }
+        if (rule.count && generated_count >= *rule.count) {
+          break;
+        }
+        ++generated_count;
+        maybe_add_occurrence(
+          windows,
+          event,
+          occurrence_start,
+          seed_start,
+          *seed_end,
+          now,
+          horizon_end);
       }
+      continue;
+    }
+
+    if (rule.freq == "MONTHLY") {
+      int generated_count = 0;
+      for (int occurrence_index = 0; ; ++occurrence_index) {
+        auto occurrence_start =
+          add_local_time(seed_start, event.dtstart_tzid, occurrence_index, rule.interval, 'M');
+
+        if (rule.by_set_pos && !rule.by_day.empty()) {
+          const auto occurrence_tm =
+            time_point_to_tm_in_timezone(occurrence_start, event.dtstart_tzid);
+          const auto nth_weekday = nth_weekday_of_month(
+            seed_tm,
+            occurrence_tm.tm_year + 1900,
+            occurrence_tm.tm_mon,
+            weekday_from_byday(rule.by_day.front()),
+            *rule.by_set_pos);
+          if (!nth_weekday) {
+            continue;
+          }
+          occurrence_start = local_tm_to_time_point(*nth_weekday, event.dtstart_tzid);
+        }
+
+        if (until && occurrence_start > *until) {
+          break;
+        }
+        if (occurrence_start > horizon_end) {
+          break;
+        }
+        const auto occurrence_tm =
+          time_point_to_tm_in_timezone(occurrence_start, event.dtstart_tzid);
+        if (!month_matches_bymonth(occurrence_tm, rule.by_month) ||
+          !day_matches_byday(occurrence_start, event.dtstart_tzid, rule.by_day))
+        {
+          continue;
+        }
+        if (occurrence_start < seed_start) {
+          continue;
+        }
+        if (rule.count && generated_count >= *rule.count) {
+          break;
+        }
+        ++generated_count;
+        maybe_add_occurrence(
+          windows,
+          event,
+          occurrence_start,
+          seed_start,
+          *seed_end,
+          now,
+          horizon_end);
+      }
+      continue;
     }
   }
 
