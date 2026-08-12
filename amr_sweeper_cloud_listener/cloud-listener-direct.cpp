@@ -1,6 +1,6 @@
 #include "cloud-listener.hpp"
 
-#include <curl/curl.h>
+#include <cerrno>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
@@ -10,6 +10,11 @@
 #include <sstream>
 #include <stdexcept>
 #include <vector>
+
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <sys/un.h>
+#include <unistd.h>
 
 #undef WORKING
 #undef WARNING
@@ -42,6 +47,9 @@ constexpr const char * kPreservedScheduleFileName = "schedule_20260000T000000Z.i
 constexpr const char * kInterfaceBackendSocketPathEnv = "INTERFACE_BACKEND_SOCKET_PATH";
 constexpr const char * kDefaultInterfaceBackendSocketPath =
   "/tmp/amr_sweeper_interface_backend.sock";
+constexpr long kInterfaceBackendWriteTimeoutMs = 5000L;
+constexpr long kInterfaceBackendReadTimeoutMs = 20000L;
+constexpr std::size_t kMaxInterfaceBackendResponseBytes = 1024 * 1024;
 
 struct PackageCommand
 {
@@ -355,55 +363,142 @@ std::string interface_backend_socket_path()
     : configured_path;
 }
 
-bool ensure_direct_curl_initialized(std::string * error_message)
+struct ScopedSocket
 {
-  static const CURLcode init_result = curl_global_init(CURL_GLOBAL_DEFAULT);
-  if (init_result != CURLE_OK) {
+  explicit ScopedSocket(int socket_fd)
+  : fd(socket_fd)
+  {
+  }
+
+  ~ScopedSocket()
+  {
+    if (fd >= 0) {
+      ::close(fd);
+    }
+  }
+
+  ScopedSocket(const ScopedSocket &) = delete;
+  ScopedSocket & operator=(const ScopedSocket &) = delete;
+
+  int fd;
+};
+
+bool set_socket_timeout(
+  int socket_fd,
+  int option_name,
+  long timeout_ms,
+  std::string * error_message)
+{
+  timeval timeout {};
+  timeout.tv_sec = timeout_ms / 1000;
+  timeout.tv_usec = static_cast<suseconds_t>((timeout_ms % 1000) * 1000);
+  if (::setsockopt(
+        socket_fd,
+        SOL_SOCKET,
+        option_name,
+        &timeout,
+        static_cast<socklen_t>(sizeof(timeout))) != 0) {
     if (error_message != nullptr) {
-      *error_message = std::string("curl_global_init failed: ") + curl_easy_strerror(init_result);
+      *error_message = std::string("failed to configure socket timeout: ") +
+        std::strerror(errno);
     }
     return false;
   }
   return true;
 }
 
-std::size_t write_http_response_to_string(
-  char * ptr,
-  std::size_t size,
-  std::size_t nmemb,
-  void * userdata)
+bool send_all_on_socket(
+  int socket_fd,
+  const std::string & message,
+  std::string * error_message)
 {
-  std::string * output = static_cast<std::string *>(userdata);
-  if (output == nullptr) {
-    return 0;
+  std::size_t bytes_sent = 0;
+  while (bytes_sent < message.size()) {
+    const ssize_t result = ::send(
+      socket_fd,
+      message.data() + bytes_sent,
+      message.size() - bytes_sent,
+      0);
+    if (result > 0) {
+      bytes_sent += static_cast<std::size_t>(result);
+      continue;
+    }
+
+    if (result < 0 && errno == EINTR) {
+      continue;
+    }
+
+    if (error_message != nullptr) {
+      *error_message = result == 0
+        ? "failed to write backend request: socket closed"
+        : std::string("failed to write backend request: ") + std::strerror(errno);
+    }
+    return false;
   }
-  const std::size_t bytes = size * nmemb;
-  output->append(ptr, bytes);
-  return bytes;
+  return true;
 }
 
-std::string url_encode_path_component(const std::string & value)
+bool read_backend_response_line(
+  int socket_fd,
+  std::string * response_body,
+  std::string * error_message)
 {
-  std::string error_message;
-  if (!ensure_direct_curl_initialized(&error_message)) {
-    throw std::runtime_error(std::string(ERROR) + " " + error_message);
+  std::string buffer;
+  char chunk[512];
+
+  while (buffer.size() < kMaxInterfaceBackendResponseBytes) {
+    const ssize_t result = ::recv(socket_fd, chunk, sizeof(chunk), 0);
+    if (result == 0) {
+      break;
+    }
+
+    if (result < 0) {
+      if (errno == EINTR) {
+        continue;
+      }
+
+      if (error_message != nullptr) {
+        *error_message = std::string("failed to read backend response: ") +
+          std::strerror(errno);
+      }
+      return false;
+    }
+
+    buffer.append(chunk, static_cast<std::size_t>(result));
+    const std::size_t newline_pos = buffer.find('\n');
+    if (newline_pos != std::string::npos) {
+      const std::string line = trim(buffer.substr(0, newline_pos));
+      if (response_body != nullptr) {
+        *response_body = line;
+      }
+      if (line.empty()) {
+        if (error_message != nullptr) {
+          *error_message = "backend returned an empty response";
+        }
+        return false;
+      }
+      return true;
+    }
   }
 
-  CURL * curl = curl_easy_init();
-  if (curl == nullptr) {
-    throw std::runtime_error(std::string(ERROR) + " curl_easy_init failed");
+  if (buffer.size() >= kMaxInterfaceBackendResponseBytes) {
+    if (error_message != nullptr) {
+      *error_message = "backend response exceeded maximum size";
+    }
+    return false;
   }
 
-  char * escaped = curl_easy_escape(curl, value.c_str(), static_cast<int>(value.size()));
-  if (escaped == nullptr) {
-    curl_easy_cleanup(curl);
-    throw std::runtime_error(std::string(ERROR) + " curl_easy_escape failed");
+  const std::string line = trim(buffer);
+  if (response_body != nullptr) {
+    *response_body = line;
   }
-
-  std::string encoded(escaped);
-  curl_free(escaped);
-  curl_easy_cleanup(curl);
-  return encoded;
+  if (line.empty()) {
+    if (error_message != nullptr) {
+      *error_message = "backend closed the socket without a response";
+    }
+    return false;
+  }
+  return true;
 }
 
 std::string json_string_field(const std::string & key, const std::string & value)
@@ -419,6 +514,11 @@ std::string json_integer_field(const std::string & key, std::int64_t value)
 std::string json_bool_field(const std::string & key, bool value)
 {
   return "\"" + escape_json_string(key) + "\":" + std::string(value ? "true" : "false");
+}
+
+std::string json_object_field(const std::string & key, const std::string & object_json)
+{
+  return "\"" + escape_json_string(key) + "\":" + object_json;
 }
 
 std::string join_json_object_fields(const std::vector<std::string> & fields)
@@ -442,84 +542,117 @@ bool backend_response_reports_success(const std::string & response_body)
   return success_value.has_value() && *success_value == "true";
 }
 
-bool post_interface_backend_json(
-  const std::string & path,
-  const std::string & request_body,
-  std::string * response_body,
-  long * response_code,
-  std::string * error_message)
+std::string backend_response_error_detail(const std::string & response_body)
 {
-  if (!ensure_direct_curl_initialized(error_message)) {
-    return false;
+  const std::optional<std::string> error_value =
+    extract_top_level_json_value(response_body, "error");
+  if (!error_value.has_value()) {
+    return trim(response_body);
   }
 
-  CURL * curl = curl_easy_init();
-  if (curl == nullptr) {
+  const std::optional<std::string> error_string = parse_json_string_literal(*error_value);
+  return error_string.has_value() ? *error_string : trim(*error_value);
+}
+
+bool exchange_interface_backend_message(
+  const std::string & request_body,
+  std::string * response_body,
+  std::string * error_message)
+{
+  const std::string socket_path = interface_backend_socket_path();
+  if (socket_path.empty()) {
     if (error_message != nullptr) {
-      *error_message = "curl_easy_init failed";
+      *error_message = "interface backend socket path is empty";
     }
     return false;
   }
 
-  struct curl_slist * headers = nullptr;
-  headers = curl_slist_append(headers, "Content-Type: application/json");
-  headers = curl_slist_append(headers, "Accept: application/json");
+  sockaddr_un address {};
+  address.sun_family = AF_UNIX;
+  if (socket_path.size() >= sizeof(address.sun_path)) {
+    if (error_message != nullptr) {
+      *error_message = "interface backend socket path is too long: " + socket_path;
+    }
+    return false;
+  }
+  std::memcpy(address.sun_path, socket_path.c_str(), socket_path.size() + 1);
+
+  const int socket_fd = ::socket(AF_UNIX, SOCK_STREAM, 0);
+  if (socket_fd < 0) {
+    if (error_message != nullptr) {
+      *error_message = std::string("failed to create backend socket: ") +
+        std::strerror(errno);
+    }
+    return false;
+  }
+  ScopedSocket socket_guard(socket_fd);
+
+  if (!set_socket_timeout(socket_fd, SO_SNDTIMEO, kInterfaceBackendWriteTimeoutMs, error_message) ||
+      !set_socket_timeout(socket_fd, SO_RCVTIMEO, kInterfaceBackendReadTimeoutMs, error_message)) {
+    return false;
+  }
+
+  if (::connect(
+        socket_fd,
+        reinterpret_cast<const sockaddr *>(&address),
+        static_cast<socklen_t>(sizeof(address))) != 0) {
+    if (error_message != nullptr) {
+      *error_message = std::string("failed to connect to backend socket '") +
+        socket_path + "': " + std::strerror(errno);
+    }
+    return false;
+  }
+
+  // Raw UDS framing: one compact JSON request, one compact JSON response.
+  if (!send_all_on_socket(socket_fd, request_body + "\n", error_message)) {
+    return false;
+  }
+  if (::shutdown(socket_fd, SHUT_WR) != 0) {
+    if (error_message != nullptr) {
+      *error_message = std::string("failed to finalize backend request: ") +
+        std::strerror(errno);
+    }
+    return false;
+  }
+
+  return read_backend_response_line(socket_fd, response_body, error_message);
+}
+
+bool send_backend_command(
+  const std::string & action,
+  const std::string & payload_json,
+  std::string * response_body,
+  std::string * error_message)
+{
+  std::vector<std::string> request_fields;
+  request_fields.push_back(json_string_field("action", action));
+  request_fields.push_back(json_object_field("payload", payload_json));
 
   std::string local_response_body;
-  const std::string socket_path = interface_backend_socket_path();
-  const std::string url = "http://localhost" + path;
-  curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-  curl_easy_setopt(curl, CURLOPT_UNIX_SOCKET_PATH, socket_path.c_str());
-  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-  curl_easy_setopt(curl, CURLOPT_POST, 1L);
-  curl_easy_setopt(curl, CURLOPT_POSTFIELDS, request_body.c_str());
-  curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(request_body.size()));
-  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_http_response_to_string);
-  curl_easy_setopt(curl, CURLOPT_WRITEDATA, &local_response_body);
-  curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 2000L);
-  curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, 20000L);
-
-  const CURLcode result = curl_easy_perform(curl);
-  long local_response_code = 0;
-  curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &local_response_code);
-  curl_slist_free_all(headers);
-  curl_easy_cleanup(curl);
+  if (!exchange_interface_backend_message(
+        join_json_object_fields(request_fields),
+        &local_response_body,
+        error_message)) {
+    return false;
+  }
 
   if (response_body != nullptr) {
     *response_body = local_response_body;
   }
-  if (response_code != nullptr) {
-    *response_code = local_response_code;
-  }
-
-  if (result != CURLE_OK) {
-    if (error_message != nullptr) {
-      *error_message = std::string("backend request failed: ") + curl_easy_strerror(result);
-    }
-    return false;
-  }
-
-  if (local_response_code < 200 || local_response_code >= 300) {
-    if (error_message != nullptr) {
-      *error_message = "backend returned HTTP " + std::to_string(local_response_code) +
-        ": " + trim(local_response_body);
-    }
-    return false;
-  }
-
   if (!backend_response_reports_success(local_response_body)) {
     if (error_message != nullptr) {
-      *error_message = "backend rejected request: " + trim(local_response_body);
+      *error_message = "backend rejected request: " +
+        backend_response_error_detail(local_response_body);
     }
     return false;
   }
-
   return true;
 }
 
-std::string build_execute_mission_json(const PackageCommand & command)
+std::string build_start_single_mission_payload_json(const PackageCommand & command)
 {
   std::vector<std::string> fields;
+  fields.push_back(json_string_field("mission_id", *command.mission_id));
   fields.push_back(json_string_field(
     "mission_execution_directory",
     command.mission_execution_directory.value_or("")));
@@ -541,7 +674,7 @@ std::string build_execute_mission_json(const PackageCommand & command)
   return join_json_object_fields(fields);
 }
 
-std::string build_stop_mission_json(const PackageCommand & command)
+std::string build_stop_payload_json(const PackageCommand & command)
 {
   std::vector<std::string> fields;
   fields.push_back(json_string_field("mission_id", command.mission_id.value_or("")));
@@ -558,7 +691,7 @@ std::string build_stop_mission_json(const PackageCommand & command)
   return join_json_object_fields(fields);
 }
 
-std::string build_safety_stop_json(const PackageCommand & command)
+std::string build_pause_payload_json(const PackageCommand & command)
 {
   std::vector<std::string> fields;
   fields.push_back(json_string_field("sender", command.sender.value_or(
@@ -577,20 +710,16 @@ void send_start_single_mission_command(const PackageCommand & command)
   }
 
   std::string response_body;
-  long response_code = 0;
   std::string error_message;
-  const std::string path =
-    "/api/v1/missions/" + url_encode_path_component(*command.mission_id) + "/execute";
-  if (!post_interface_backend_json(
-        path,
-        build_execute_mission_json(command),
+  if (!send_backend_command(
+        kStartSingleMissionAction,
+        build_start_single_mission_payload_json(command),
         &response_body,
-        &response_code,
         &error_message)) {
     throw std::runtime_error(std::string(ERROR) + " " + error_message);
   }
 
-  std::cout << WORKING << " START MISSION BACKEND API SENT: "
+  std::cout << WORKING << " START MISSION BACKEND COMMAND SENT: "
             << *command.mission_id << std::endl;
   if (!response_body.empty()) {
     std::cout << WORKING << " BACKEND RESPONSE: " << trim(response_body) << std::endl;
@@ -600,18 +729,16 @@ void send_start_single_mission_command(const PackageCommand & command)
 void send_stop_command(const PackageCommand & command)
 {
   std::string response_body;
-  long response_code = 0;
   std::string error_message;
-  if (!post_interface_backend_json(
-        "/api/v1/mission/stop",
-        build_stop_mission_json(command),
+  if (!send_backend_command(
+        kStopAction,
+        build_stop_payload_json(command),
         &response_body,
-        &response_code,
         &error_message)) {
     throw std::runtime_error(std::string(ERROR) + " " + error_message);
   }
 
-  std::cout << WORKING << " STOP MISSION BACKEND API SENT" << std::endl;
+  std::cout << WORKING << " STOP MISSION BACKEND COMMAND SENT" << std::endl;
   if (!response_body.empty()) {
     std::cout << WORKING << " BACKEND RESPONSE: " << trim(response_body) << std::endl;
   }
@@ -620,18 +747,16 @@ void send_stop_command(const PackageCommand & command)
 void send_pause_command(const PackageCommand & command)
 {
   std::string response_body;
-  long response_code = 0;
   std::string error_message;
-  if (!post_interface_backend_json(
-        "/api/v1/safety/stop",
-        build_safety_stop_json(command),
+  if (!send_backend_command(
+        kPauseAction,
+        build_pause_payload_json(command),
         &response_body,
-        &response_code,
         &error_message)) {
     throw std::runtime_error(std::string(ERROR) + " " + error_message);
   }
 
-  std::cout << WORKING << " SAFETY STOP BACKEND API SENT FOR PAUSE" << std::endl;
+  std::cout << WORKING << " SAFETY STOP BACKEND COMMAND SENT FOR PAUSE" << std::endl;
   if (!response_body.empty()) {
     std::cout << WORKING << " BACKEND RESPONSE: " << trim(response_body) << std::endl;
   }
@@ -640,18 +765,16 @@ void send_pause_command(const PackageCommand & command)
 void send_resume_command()
 {
   std::string response_body;
-  long response_code = 0;
   std::string error_message;
-  if (!post_interface_backend_json(
-        "/api/v1/safety/clear",
+  if (!send_backend_command(
+        kResumeAction,
         "{}",
         &response_body,
-        &response_code,
         &error_message)) {
     throw std::runtime_error(std::string(ERROR) + " " + error_message);
   }
 
-  std::cout << WORKING << " CLEAR SAFETY STOP BACKEND API SENT FOR RESUME" << std::endl;
+  std::cout << WORKING << " CLEAR SAFETY STOP BACKEND COMMAND SENT FOR RESUME" << std::endl;
   if (!response_body.empty()) {
     std::cout << WORKING << " BACKEND RESPONSE: " << trim(response_body) << std::endl;
   }
