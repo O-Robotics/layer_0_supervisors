@@ -57,7 +57,7 @@ constexpr char kLatestRecordedMapMetadataFile[] = "latest_recorded_map.json";
 constexpr char kLatestRecordedMapRouteStem[] = "latest_recorded_map_path";
 constexpr char kLatestRecordedMapStaticCostmapStem[] = "latest_recorded_map_static_costmap";
 constexpr char kLatestRecordedMapNavSatStem[] = "latest_recorded_map_navsat";
-constexpr char kActualScheduleLogFilename[] = "actual_schedule.ics";
+constexpr char kActualScheduleLogFilename[] = "log.ics";
 constexpr char kSimulationActualScheduleLogFilename[] = "simulation_schedule.ics";
 constexpr char kDepthCameraScanTopic[] = "/amr_sweeper/depth_camera/scan";
 constexpr char kDepthCameraInfoTopic[] = "/amr_sweeper/depth_camera/depth/camera_info";
@@ -4226,33 +4226,28 @@ void MissionExecutorNode::recordSafetyEvent(
   const amr_sweeper_safety_msgs::msg::SafetyStop & event,
   const std::optional<nlohmann::json> & context_document) const
 {
-  std::string schedule_path_string = resolveScheduleSourcePath().string();
   std::string related_mission_id;
   std::string mission_run_directory;
+  std::string actual_schedule_path_string;
   if (context_document) {
-    if (schedule_path_string.empty()) {
-      schedule_path_string = context_document->value("schedule_log_path", std::string{});
-    }
     related_mission_id = context_document->value("mission_id", std::string{});
     mission_run_directory = context_document->value("mission_run_directory", std::string{});
-  }
-  if (schedule_path_string.empty()) {
-    return;
+    actual_schedule_path_string = context_document->value("actual_schedule_log_path", std::string{});
   }
 
-  const std::filesystem::path schedule_path(schedule_path_string);
-  if (!std::filesystem::exists(schedule_path)) {
+  std::filesystem::path actual_schedule_path;
+  if (!actual_schedule_path_string.empty()) {
+    actual_schedule_path = actual_schedule_path_string;
+  }
+  if (!use_simulation_ && actual_schedule_path.filename() != kActualScheduleLogFilename) {
+    actual_schedule_path.clear();
+  }
+  if (actual_schedule_path.empty() || !std::filesystem::exists(actual_schedule_path)) {
+    actual_schedule_path = ensureActualScheduleLogPath(resolveScheduleSourcePath());
+  }
+  if (actual_schedule_path.empty() || !std::filesystem::exists(actual_schedule_path)) {
     return;
   }
-
-  std::ifstream input_stream(schedule_path);
-  if (!input_stream.is_open()) {
-    return;
-  }
-  std::ostringstream buffer;
-  buffer << input_stream.rdbuf();
-  std::string schedule_text = buffer.str();
-  const std::string timezone = discoverScheduleTimezone(schedule_text);
 
   rclcpp::Time event_time(event.stamp);
   const auto time_point = std::chrono::system_clock::time_point(std::chrono::nanoseconds(event_time.nanoseconds()));
@@ -4272,13 +4267,22 @@ void MissionExecutorNode::recordSafetyEvent(
   const std::string escaped_debug_description = escapeIcsText(debug_description.str());
   const std::string escaped_reason = escapeIcsText(event.reason);
 
-  std::ostringstream event_stream;
-  event_stream
+
+  std::ifstream actual_input_stream(actual_schedule_path);
+  if (!actual_input_stream.is_open()) {
+    return;
+  }
+  std::ostringstream actual_buffer;
+  actual_buffer << actual_input_stream.rdbuf();
+  std::string actual_schedule_text = actual_buffer.str();
+  const std::string actual_timezone = discoverScheduleTimezone(actual_schedule_text);
+  std::ostringstream actual_event_stream;
+  actual_event_stream
     << "BEGIN:VEVENT\n"
-    << "UID:safety-" << sanitizeUidToken(event.sender) << "-" << sanitizeUidToken(event_utc) << "\n"
-    << "DTSTART;TZID=" << timezone << ":" << event_local << "\n"
+    << "UID:actual-safety-" << sanitizeUidToken(event.sender) << "-" << sanitizeUidToken(event_utc) << "\n"
+    << "DTSTART;TZID=" << actual_timezone << ":" << event_local << "\n"
     << "DURATION:PT0S\n"
-    << "SUMMARY:Safety stop " << event.sender << "\n"
+    << "SUMMARY:Actual safety stop " << event.sender << "\n"
     << "DESCRIPTION:" << escaped_debug_description << "\n"
     << "X-ROBOT-ID:" << robot_id_ << "\n"
     << "X-SCHEDULE-TYPE:" << kSafetyScheduleType << "\n"
@@ -4287,64 +4291,19 @@ void MissionExecutorNode::recordSafetyEvent(
     << "X-SAFETY-DEBUG:" << escaped_debug_description << "\n"
     << "X-ACTUAL-START-UTC:" << event_utc << "\n";
   if (!related_mission_id.empty()) {
-    event_stream << "X-MISSION-ID:" << related_mission_id << "\n";
+    actual_event_stream << "X-MISSION-ID:" << related_mission_id << "\n";
   }
   if (!mission_run_directory.empty()) {
-    event_stream << "X-MISSION-RUN-DIRECTORY:" << mission_run_directory << "\n";
+    actual_event_stream << "X-MISSION-RUN-DIRECTORY:" << mission_run_directory << "\n";
   }
-  event_stream << "END:VEVENT\n";
+  actual_event_stream << "END:VEVENT\n";
 
-  const auto calendar_end = schedule_text.rfind("END:VCALENDAR");
-  if (calendar_end == std::string::npos) {
-    return;
-  }
-  schedule_text.insert(calendar_end, event_stream.str());
-
-  std::ofstream output_stream(schedule_path, std::ios::trunc);
-  if (!output_stream.is_open()) {
-    return;
-  }
-  output_stream << schedule_text;
-
-  const std::filesystem::path actual_schedule_path =
-    ensureActualScheduleLogPath(resolveScheduleSourcePath());
-  if (!actual_schedule_path.empty() && std::filesystem::exists(actual_schedule_path)) {
-    std::ifstream actual_input_stream(actual_schedule_path);
-    if (actual_input_stream.is_open()) {
-      std::ostringstream actual_buffer;
-      actual_buffer << actual_input_stream.rdbuf();
-      std::string actual_schedule_text = actual_buffer.str();
-      const std::string actual_timezone = discoverScheduleTimezone(actual_schedule_text);
-      std::ostringstream actual_event_stream;
-      actual_event_stream
-        << "BEGIN:VEVENT\n"
-        << "UID:actual-safety-" << sanitizeUidToken(event.sender) << "-" << sanitizeUidToken(event_utc) << "\n"
-        << "DTSTART;TZID=" << actual_timezone << ":" << event_local << "\n"
-        << "DURATION:PT0S\n"
-        << "SUMMARY:Actual safety stop " << event.sender << "\n"
-        << "DESCRIPTION:" << escaped_debug_description << "\n"
-        << "X-ROBOT-ID:" << robot_id_ << "\n"
-        << "X-SCHEDULE-TYPE:" << kSafetyScheduleType << "\n"
-        << "X-SAFETY-SENDER:" << event.sender << "\n"
-        << "X-SAFETY-REASON:" << escaped_reason << "\n"
-        << "X-SAFETY-DEBUG:" << escaped_debug_description << "\n"
-        << "X-ACTUAL-START-UTC:" << event_utc << "\n";
-      if (!related_mission_id.empty()) {
-        actual_event_stream << "X-MISSION-ID:" << related_mission_id << "\n";
-      }
-      if (!mission_run_directory.empty()) {
-        actual_event_stream << "X-MISSION-RUN-DIRECTORY:" << mission_run_directory << "\n";
-      }
-      actual_event_stream << "END:VEVENT\n";
-
-      const auto calendar_end = actual_schedule_text.rfind("END:VCALENDAR");
-      if (calendar_end != std::string::npos) {
-        actual_schedule_text.insert(calendar_end, actual_event_stream.str());
-        std::ofstream actual_output_stream(actual_schedule_path, std::ios::trunc);
-        if (actual_output_stream.is_open()) {
-          actual_output_stream << actual_schedule_text;
-        }
-      }
+  const auto calendar_end = actual_schedule_text.rfind("END:VCALENDAR");
+  if (calendar_end != std::string::npos) {
+    actual_schedule_text.insert(calendar_end, actual_event_stream.str());
+    std::ofstream actual_output_stream(actual_schedule_path, std::ios::trunc);
+    if (actual_output_stream.is_open()) {
+      actual_output_stream << actual_schedule_text;
     }
   }
 }
@@ -4959,6 +4918,22 @@ std::filesystem::path MissionExecutorNode::ensureActualScheduleLogPath(
     (use_simulation_ ? kSimulationActualScheduleLogFilename : kActualScheduleLogFilename);
   if (std::filesystem::exists(actual_schedule_path)) {
     return actual_schedule_path;
+  }
+
+  if (!use_simulation_) {
+    for (const auto & legacy_filename : {"schedule.ics", "actual_schedule.ics"}) {
+      const std::filesystem::path legacy_schedule_path =
+        actual_schedule_log_directory / legacy_filename;
+      if (!std::filesystem::exists(legacy_schedule_path)) {
+        continue;
+      }
+      std::error_code rename_error;
+      std::filesystem::rename(legacy_schedule_path, actual_schedule_path, rename_error);
+      if (!rename_error) {
+        return actual_schedule_path;
+      }
+      break;
+    }
   }
 
   std::string timezone = "UTC";

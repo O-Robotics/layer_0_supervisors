@@ -33,7 +33,7 @@ def generate_launch_description():
         DeclareLaunchArgument("use_simulation", default_value="false"),
         DeclareLaunchArgument("missions_directory", default_value="missions/database"),
         DeclareLaunchArgument("missions_log_directory", default_value="missions/logs"),
-        DeclareLaunchArgument("actual_schedule_log_directory", default_value="missions/simulations"),
+        DeclareLaunchArgument("actual_schedule_log_directory", default_value="missions/logs"),
         DeclareLaunchArgument(
             "manual_missions_directory",
             default_value=PathJoinSubstitution(

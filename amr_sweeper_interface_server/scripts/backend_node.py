@@ -361,7 +361,7 @@ class MissionBackendNode(Node):
         ).value
         self._actual_schedule_log_directory = self.declare_parameter(
             "actual_schedule_log_directory",
-            "missions/simulations",
+            "missions/logs",
         ).value
         self._missions_from_db_directory = self.declare_parameter(
             "missions_from_db_directory",
@@ -1198,6 +1198,8 @@ class MissionBackendNode(Node):
         actual_schedule_log_directory = _resolve_path(self._actual_schedule_log_directory)
         missions_log_directory = _resolve_path(self._missions_log_directory)
         for candidate in (
+            missions_log_directory / "log.ics",
+            actual_schedule_log_directory / "log.ics",
             actual_schedule_log_directory / "simulation_schedule.ics",
             missions_log_directory / "actual_schedule.ics",
             actual_schedule_log_directory / "actual_schedule.ics",

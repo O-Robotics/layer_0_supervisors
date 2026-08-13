@@ -435,7 +435,11 @@ def generate_launch_description():
     tick_period_ms = LaunchConfiguration("tick_period_ms")
     missions_from_db_directory = LaunchConfiguration("missions_from_db_directory")
     missions_log_directory = LaunchConfiguration("missions_log_directory")
-    actual_schedule_log_directory = LaunchConfiguration("missions_simulations_directory")
+    missions_simulations_directory = LaunchConfiguration("missions_simulations_directory")
+    actual_schedule_log_directory = PythonExpression([
+        '"', missions_simulations_directory, '" if "', use_simulation, '" == "true" else "',
+        missions_log_directory, '"',
+    ])
     manual_missions_directory = LaunchConfiguration("manual_missions_directory")
     fsm_request_service = LaunchConfiguration("fsm_request_service")
     schedule_ics_path = LaunchConfiguration("schedule_ics_path")
