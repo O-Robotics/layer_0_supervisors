@@ -11,13 +11,11 @@ import socketserver
 import stat
 import threading
 import time
-import urllib.parse
 import calendar
 from datetime import datetime, timedelta, timezone
 from collections import deque
 from html import escape
 from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -341,7 +339,7 @@ def _load_running_profile_default_overrides() -> dict[int, dict[str, bool]]:
 DEFAULT_BACKEND_SOCKET_PATH = "/tmp/amr_sweeper_interface_backend.sock"
 
 
-class MissionBackendUnixHTTPServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
+class MissionBackendUnixJSONLServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
     daemon_threads = True
 
 
@@ -479,9 +477,9 @@ class MissionBackendNode(Node):
         self.create_subscription(Log, self._rosout_topic, self._handle_rosout, 100)
         self.create_subscription(String, self._safety_web_status_topic, self._handle_safety_web_status, 10)
 
-        self._http_server: MissionBackendUnixHTTPServer | None = None
+        self._ipc_server: MissionBackendUnixJSONLServer | None = None
 
-    def start_http_server(self) -> None:
+    def start_ipc_server(self) -> None:
         handler = self._build_handler()
         socket_path = Path(self._backend_socket_path)
         if socket_path.exists():
@@ -491,7 +489,7 @@ class MissionBackendNode(Node):
         socket_path.parent.mkdir(parents=True, exist_ok=True)
         old_umask = os.umask(0o177)
         try:
-            self._http_server = MissionBackendUnixHTTPServer(str(socket_path), handler)
+            self._ipc_server = MissionBackendUnixJSONLServer(str(socket_path), handler)
         except OSError as exc:
             os.umask(old_umask)
             if exc.errno == errno.EADDRINUSE:
@@ -501,15 +499,15 @@ class MissionBackendNode(Node):
             os.umask(old_umask)
         socket_path.chmod(0o600)
         self.get_logger().info(
-            f"Interface backend API listening on Unix socket {socket_path}"
+            f"Interface backend raw JSONL API listening on Unix socket {socket_path}"
         )
 
-    def stop_http_server(self) -> None:
-        if self._http_server is None:
+    def stop_ipc_server(self) -> None:
+        if self._ipc_server is None:
             return
-        self._http_server.shutdown()
-        self._http_server.server_close()
-        self._http_server = None
+        self._ipc_server.shutdown()
+        self._ipc_server.server_close()
+        self._ipc_server = None
         socket_path = Path(self._backend_socket_path)
         try:
             if socket_path.exists() and stat.S_ISSOCK(socket_path.stat().st_mode):
@@ -518,166 +516,30 @@ class MissionBackendNode(Node):
             self.get_logger().warning(f"Failed to remove backend socket {socket_path}: {exc}")
 
     def serve_forever(self) -> None:
-        if self._http_server is None:
-            raise RuntimeError("HTTP server not initialized")
-        self._http_server.serve_forever()
+        if self._ipc_server is None:
+            raise RuntimeError("Backend IPC server not initialized")
+        self._ipc_server.serve_forever()
 
     def _build_handler(self):
         node = self
 
-        class MissionBackendRequestHandler(BaseHTTPRequestHandler):
-            def do_GET(self) -> None:  # noqa: N802
-                parsed = urllib.parse.urlparse(self.path)
-                if parsed.path == "/api/v1/status":
-                    self._send_json(HTTPStatus.OK, node.status_snapshot())
-                    return
-                if parsed.path == "/api/v1/missions":
-                    self._send_backend_json(lambda: node.list_executable_missions())
-                    return
-                if parsed.path.startswith("/api/v1/missions/") and parsed.path.endswith("/download"):
-                    mission_segment = parsed.path[len("/api/v1/missions/"):-len("/download")]
-                    mission_id = urllib.parse.unquote(mission_segment.rstrip("/"))
-                    if not mission_id:
-                        self._send_json(
-                            HTTPStatus.BAD_REQUEST,
-                            {"success": False, "message": "mission_id is required"},
-                        )
-                        return
-                    try:
-                        mission_path = node.mission_file_path(mission_id)
-                        self._send_download(mission_path, "application/json; charset=utf-8")
-                    except Exception as exc:  # noqa: BLE001
-                        self._send_json(HTTPStatus.NOT_FOUND, {"success": False, "message": str(exc)})
-                    return
-                if parsed.path == "/api/v1/schedule":
-                    query = urllib.parse.parse_qs(parsed.query)
-                    week = query.get("week", [""])[0]
-                    self._send_backend_json(lambda: node.schedule_snapshot(week))
-                    return
-                if parsed.path == "/api/v1/map-data":
-                    self._send_backend_json(lambda: node.map_snapshot())
-                    return
-                if parsed.path == "/api/v1/record-map":
-                    self._send_backend_json(lambda: node.record_map_snapshot())
-                    return
-                self._send_json(HTTPStatus.NOT_FOUND, {"success": False, "message": "Not found"})
-
-            def do_POST(self) -> None:  # noqa: N802
-                parsed = urllib.parse.urlparse(self.path)
+        class MissionBackendRequestHandler(socketserver.StreamRequestHandler):
+            def handle(self) -> None:
                 try:
-                    payload = self._read_json_body()
-                except RuntimeError as exc:
-                    self._send_json(HTTPStatus.BAD_REQUEST, {"success": False, "message": str(exc)})
-                    return
-
-                if parsed.path.startswith("/api/v1/missions/") and parsed.path.endswith("/execute"):
-                    mission_segment = parsed.path[len("/api/v1/missions/"):-len("/execute")]
-                    mission_id = urllib.parse.unquote(mission_segment.rstrip("/"))
-                    if not mission_id:
-                        self._send_json(
-                            HTTPStatus.BAD_REQUEST,
-                            {"success": False, "message": "mission_id is required"},
-                        )
-                        return
-                    self._send_backend_json(lambda: node.execute_manual_mission(mission_id, payload))
-                    return
-
-                routes = {
-                    "/api/v1/missions/upload-vda5050": lambda: node.upload_vda5050_mission(payload),
-                    "/api/v1/mission/stop": lambda: node.stop_active_mission(payload),
-                    "/api/v1/system/reinitialize": lambda: node.request_reinitialize(payload),
-                    "/api/v1/safety/clear": lambda: node.clear_safety_stop(payload),
-                    "/api/v1/safety/stop": lambda: node.trigger_safety_stop(payload),
-                    "/api/v1/record-map/start": lambda: node.start_record_map(payload),
-                    "/api/v1/record-map/stop": lambda: node.stop_record_map(payload),
-                    "/api/v1/record-map/save-mission": lambda: node.create_recorded_mission(payload),
-                    "/api/v1/schedule/entry": lambda: node.save_planned_schedule_entry(payload),
-                    "/api/v1/schedule/entry/delete": lambda: node.delete_planned_schedule_entry(payload),
-                }
-                handler = routes.get(parsed.path)
-                if handler is None:
-                    self._send_json(HTTPStatus.NOT_FOUND, {"success": False, "message": "Not found"})
-                    return
-                self._send_backend_json(handler)
-
-            def log_message(self, format: str, *args: Any) -> None:
-                node.get_logger().debug(f"Backend IPC - {format % args}")
-
-            def _read_json_body(self) -> dict[str, Any]:
-                length = int(self.headers.get("Content-Length", "0"))
-                if length <= 0:
-                    return {}
-                raw_body = self.rfile.read(length)
-                if not raw_body:
-                    return {}
-                try:
-                    decoded = json.loads(raw_body.decode("utf-8"))
-                except json.JSONDecodeError as exc:
-                    raise RuntimeError(f"Invalid JSON body: {exc}") from exc
-                if not isinstance(decoded, dict):
-                    raise RuntimeError("JSON body must be an object")
-                return decoded
-
-            def _send_backend_json(self, callback) -> None:
-                try:
-                    payload = callback()
-                    status = HTTPStatus.OK if payload.get("success", True) else HTTPStatus.BAD_GATEWAY
-                    self._send_json(status, payload)
+                    request = node._read_raw_ipc_request(self.rfile)
+                    response = node._dispatch_ipc_request(request)
                 except ValueError as exc:
-                    self._send_json(HTTPStatus.BAD_REQUEST, {"success": False, "message": str(exc)})
-                except FileNotFoundError as exc:
-                    self._send_json(HTTPStatus.NOT_FOUND, {"success": False, "message": str(exc)})
+                    response = node._ipc_error_response(HTTPStatus.BAD_REQUEST, str(exc))
                 except Exception as exc:  # noqa: BLE001
-                    self._send_json(HTTPStatus.BAD_GATEWAY, {"success": False, "message": str(exc)})
-
-            def _send_json(self, status: HTTPStatus, payload: dict[str, Any]) -> None:
-                if "success" not in payload:
-                    payload = {"success": status.value < 400, **payload}
-                if "message" not in payload:
-                    payload = {**payload, "message": ""}
-                encoded = json.dumps(payload).encode("utf-8")
-                self._send_bytes(
-                    status,
-                    encoded,
-                    {
-                        "Content-Type": "application/json; charset=utf-8",
-                        "Cache-Control": "no-store",
-                        "Content-Length": str(len(encoded)),
-                    },
-                )
-
-            def _send_download(self, path: Path, content_type: str) -> None:
-                if not path.exists() or not path.is_file():
-                    self._send_json(HTTPStatus.NOT_FOUND, {"success": False, "message": "Mission file not found"})
-                    return
-                encoded = path.read_bytes()
-                self._send_bytes(
-                    HTTPStatus.OK,
-                    encoded,
-                    {
-                        "Content-Type": content_type,
-                        "Cache-Control": "no-store",
-                        "Content-Length": str(len(encoded)),
-                        "Content-Disposition": f'attachment; filename="{path.name}"',
-                    },
-                )
-
-            def _send_bytes(
-                self,
-                status: HTTPStatus,
-                body: bytes,
-                headers: dict[str, str],
-            ) -> None:
-                self.send_response(status)
-                for key, value in headers.items():
-                    self.send_header(key, value)
+                    node.get_logger().warning(f"Backend IPC request failed: {exc}")
+                    response = node._ipc_error_response(HTTPStatus.BAD_GATEWAY, str(exc))
+                encoded = json.dumps(response, separators=(",", ":")).encode("utf-8") + b"\n"
                 try:
-                    self.end_headers()
-                    self.wfile.write(body)
+                    self.wfile.write(encoded)
                 except OSError as exc:
                     if self._is_client_disconnect(exc):
                         node.get_logger().debug(
-                            f"HTTP client disconnected before response completed: {exc}"
+                            f"Backend IPC client disconnected before response completed: {exc}"
                         )
                         return
                     raise
@@ -689,6 +551,113 @@ class MissionBackendNode(Node):
                 )
 
         return MissionBackendRequestHandler
+
+    def _read_raw_ipc_request(self, reader) -> dict[str, Any]:
+        raw_line = reader.readline(1024 * 1024 + 1)
+        if len(raw_line) > 1024 * 1024:
+            raise ValueError("Backend IPC request exceeded maximum size")
+        if not raw_line:
+            raise ValueError("Backend IPC request was empty")
+        try:
+            decoded = json.loads(raw_line.decode("utf-8").strip())
+        except UnicodeDecodeError as exc:
+            raise ValueError(f"Backend IPC request was not valid UTF-8: {exc}") from exc
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Invalid backend IPC JSON request: {exc}") from exc
+        if not isinstance(decoded, dict):
+            raise ValueError("Backend IPC request must be a JSON object")
+        return decoded
+
+    def _dispatch_ipc_request(self, request: dict[str, Any]) -> dict[str, Any]:
+        raw_action = request.get("action")
+        if not isinstance(raw_action, str) or not raw_action.strip():
+            return self._ipc_error_response(HTTPStatus.BAD_REQUEST, "action is required")
+        action = raw_action.strip().upper()
+
+        payload = request.get("payload", {})
+        if payload is None:
+            payload = {}
+        if not isinstance(payload, dict):
+            return self._ipc_error_response(HTTPStatus.BAD_REQUEST, "payload must be an object")
+
+        try:
+            if action == "GET_STATUS":
+                return self._ipc_success_response(self.status_snapshot())
+            if action == "LIST_MISSIONS":
+                return self._ipc_backend_response(self.list_executable_missions())
+            if action == "DOWNLOAD_MISSION":
+                mission_id = str(payload.get("mission_id", "")).strip()
+                if not mission_id:
+                    return self._ipc_error_response(HTTPStatus.BAD_REQUEST, "mission_id is required")
+                mission_path = self.mission_file_path(mission_id)
+                if not mission_path.exists() or not mission_path.is_file():
+                    return self._ipc_error_response(HTTPStatus.NOT_FOUND, "Mission file not found")
+                return self._ipc_success_response(
+                    {
+                        "filename": mission_path.name,
+                        "content_type": "application/json; charset=utf-8",
+                        "body": mission_path.read_text(encoding="utf-8"),
+                    }
+                )
+            if action in {"EXECUTE_MISSION", "START_SINGLE_MISSION"}:
+                mission_id = str(payload.get("mission_id", "")).strip()
+                if not mission_id:
+                    return self._ipc_error_response(HTTPStatus.BAD_REQUEST, "mission_id is required")
+                return self._ipc_backend_response(self.execute_manual_mission(mission_id, payload))
+            if action == "UPLOAD_VDA5050_MISSION":
+                return self._ipc_backend_response(self.upload_vda5050_mission(payload))
+            if action in {"STOP_MISSION", "STOP"}:
+                return self._ipc_backend_response(self.stop_active_mission(payload))
+            if action == "REINITIALIZE_SYSTEM":
+                return self._ipc_backend_response(self.request_reinitialize(payload))
+            if action in {"TRIGGER_SAFETY_STOP", "PAUSE"}:
+                return self._ipc_backend_response(self.trigger_safety_stop(payload))
+            if action in {"CLEAR_SAFETY_STOP", "RESUME"}:
+                return self._ipc_backend_response(self.clear_safety_stop(payload))
+            if action == "GET_SCHEDULE":
+                return self._ipc_backend_response(self.schedule_snapshot(str(payload.get("week", ""))))
+            if action == "SAVE_SCHEDULE_ENTRY":
+                return self._ipc_backend_response(self.save_planned_schedule_entry(payload))
+            if action == "DELETE_SCHEDULE_ENTRY":
+                return self._ipc_backend_response(self.delete_planned_schedule_entry(payload))
+            if action == "GET_MAP_DATA":
+                return self._ipc_backend_response(self.map_snapshot())
+            if action == "GET_RECORD_MAP":
+                return self._ipc_backend_response(self.record_map_snapshot())
+            if action == "START_RECORD_MAP":
+                return self._ipc_backend_response(self.start_record_map(payload))
+            if action == "STOP_RECORD_MAP":
+                return self._ipc_backend_response(self.stop_record_map(payload))
+            if action == "SAVE_RECORDED_MISSION":
+                return self._ipc_backend_response(self.create_recorded_mission(payload))
+            return self._ipc_error_response(HTTPStatus.NOT_FOUND, f"Unknown backend action: {action}")
+        except ValueError as exc:
+            return self._ipc_error_response(HTTPStatus.BAD_REQUEST, str(exc))
+        except FileNotFoundError as exc:
+            return self._ipc_error_response(HTTPStatus.NOT_FOUND, str(exc))
+        except Exception as exc:  # noqa: BLE001
+            return self._ipc_error_response(HTTPStatus.BAD_GATEWAY, str(exc))
+
+    def _ipc_backend_response(self, payload: dict[str, Any]) -> dict[str, Any]:
+        status = HTTPStatus.OK if payload.get("success", True) else HTTPStatus.BAD_GATEWAY
+        return self._ipc_response(status, payload)
+
+    def _ipc_success_response(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._ipc_response(HTTPStatus.OK, payload)
+
+    def _ipc_error_response(self, status: HTTPStatus, message: str) -> dict[str, Any]:
+        return self._ipc_response(status, {"success": False, "message": message, "error": message})
+
+    def _ipc_response(self, status: HTTPStatus, payload: dict[str, Any]) -> dict[str, Any]:
+        response = dict(payload)
+        response.setdefault("success", status.value < 400)
+        response.setdefault("message", "")
+        if not response.get("success", False):
+            detail = str(response.get("message") or response.get("error") or status.phrase)
+            response["message"] = detail
+            response["error"] = detail
+        response["status_code"] = int(status)
+        return response
 
     def _handle_fsm_state(self, message: FSMState) -> None:
         with self._state_lock:
@@ -2007,8 +1976,8 @@ def main(args: list[str] | None = None) -> int:
     server_thread: threading.Thread | None = None
 
     try:
-        node.start_http_server()
-        server_thread = threading.Thread(target=node.serve_forever, name="interface_backend_http", daemon=True)
+        node.start_ipc_server()
+        server_thread = threading.Thread(target=node.serve_forever, name="interface_backend_jsonl", daemon=True)
         server_thread.start()
         executor.spin()
     except KeyboardInterrupt:
@@ -2018,7 +1987,7 @@ def main(args: list[str] | None = None) -> int:
         return 1
     finally:
         try:
-            node.stop_http_server()
+            node.stop_ipc_server()
         except RuntimeError:
             pass
         if server_thread is not None:
