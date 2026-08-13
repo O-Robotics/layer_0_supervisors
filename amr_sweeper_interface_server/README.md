@@ -3,8 +3,8 @@
 Provides the AMR Sweeper operator interface stack as a standalone layer 0 package.
 
 Structure:
-- `scripts/backend_node.py` is the local-only backend entry point. It owns ROS topics/services, mission files, schedule files, and the `/api/v1` HTTP/JSON API over a Unix domain socket.
-- `scripts/frontend_http_node.py` is the network-facing web frontend. It serves the local operator pages and proxies `/api/v1` requests to the backend socket.
+- `scripts/backend_node.py` is the local-only backend entry point. It owns ROS topics/services, mission files, schedule files, and the raw JSONL API over a Unix domain socket.
+- `scripts/frontend_http_node.py` is the network-facing web frontend. It serves the local operator pages and adapts `/api/v1` HTTP requests to backend JSONL requests.
 
 Responsibilities:
 - expose a local dashboard over TCP through the frontend node
@@ -35,12 +35,14 @@ API:
 - `POST /api/v1/record-map/stop`
 - `POST /api/v1/record-map/save-mission`
 
-All frontend interfaces should use the backend HTTP API over the Unix domain socket and should not call ROS2 services/topics directly.
+All frontend interfaces should use the backend raw JSONL API over the Unix domain socket and should not call ROS2 services/topics directly.
 
 Backend IPC:
 - Default socket: `/tmp/amr_sweeper_interface_backend.sock`
 - Launch override: `backend_socket_path:=/path/to/socket`
 - Cloud listener override: `INTERFACE_BACKEND_SOCKET_PATH=/path/to/socket`
+- Request framing: one compact JSON object plus `\n`, for example `{"action":"GET_STATUS","payload":{}}`
+- Response framing: one compact JSON object plus `\n`, including `success`, `message`, and `status_code`
 - The socket is created with owner-only permissions and removed on backend shutdown.
 
 Default operator URL:

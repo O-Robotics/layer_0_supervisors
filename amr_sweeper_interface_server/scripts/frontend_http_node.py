@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import errno
-import http.client
 import json
 import socket
 import threading
@@ -19,18 +18,6 @@ from rclpy.node import Node
 
 
 DEFAULT_BACKEND_SOCKET_PATH = "/tmp/amr_sweeper_interface_backend.sock"
-
-
-class UnixHTTPConnection(http.client.HTTPConnection):
-    def __init__(self, socket_path: str, timeout: float = 20.0) -> None:
-        super().__init__("localhost", timeout=timeout)
-        self._socket_path = socket_path
-
-    def connect(self) -> None:
-        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        sock.settimeout(self.timeout)
-        sock.connect(self._socket_path)
-        self.sock = sock
 
 
 class MissionThreadingHTTPServer(ThreadingHTTPServer):
@@ -3179,50 +3166,29 @@ class MissionFrontendHttpNode(Node, MissionFrontendRenderer):
                 node.get_logger().debug(f"HTTP {self.address_string()} - {format % args}")
 
             def _proxy_to_backend(self) -> None:
-                body = self._read_body()
-                request_headers: dict[str, str] = {}
-                for key, value in self.headers.items():
-                    lowered = key.lower()
-                    if lowered in {
-                        "connection",
-                        "content-length",
-                        "host",
-                        "keep-alive",
-                        "proxy-authenticate",
-                        "proxy-authorization",
-                        "te",
-                        "trailer",
-                        "transfer-encoding",
-                        "upgrade",
-                    }:
-                        continue
-                    request_headers[key] = value
-                if body:
-                    request_headers["Content-Length"] = str(len(body))
-
-                connection = UnixHTTPConnection(node._backend_socket_path, timeout=20.0)
                 try:
-                    connection.request(self.command, self.path, body=body, headers=request_headers)
-                    response = connection.getresponse()
-                    response_body = response.read()
-                    response_headers = {
-                        key: value
-                        for key, value in response.getheaders()
-                        if key.lower() not in {
-                            "connection",
-                            "content-length",
-                            "date",
-                            "keep-alive",
-                            "server",
-                            "te",
-                            "trailer",
-                            "transfer-encoding",
-                            "upgrade",
-                        }
-                    }
-                    response_headers["Content-Length"] = str(len(response_body))
-                    self._send_bytes(HTTPStatus(response.status), response_body, response_headers)
-                except (OSError, http.client.HTTPException, ValueError) as exc:
+                    backend_request = self._build_backend_request()
+                    backend_response = self._exchange_backend_jsonl(backend_request)
+                    status = self._backend_status(backend_response)
+                    if backend_request["action"] == "DOWNLOAD_MISSION" and status.value < 400:
+                        self._send_backend_download(status, backend_response)
+                        return
+                    public_response = dict(backend_response)
+                    public_response.pop("status_code", None)
+                    public_response.pop("error", None)
+                    self._send_json(status, public_response)
+                except ValueError as exc:
+                    status = HTTPStatus.NOT_FOUND if str(exc) == "Not found" else HTTPStatus.BAD_REQUEST
+                    self._send_json(
+                        status,
+                        {"success": False, "message": str(exc)},
+                    )
+                except RuntimeError as exc:
+                    self._send_json(
+                        HTTPStatus.BAD_GATEWAY,
+                        {"success": False, "message": f"Backend IPC request failed: {exc}"},
+                    )
+                except OSError as exc:
                     self._send_json(
                         HTTPStatus.BAD_GATEWAY,
                         {
@@ -3230,8 +3196,139 @@ class MissionFrontendHttpNode(Node, MissionFrontendRenderer):
                             "message": f"Backend IPC request failed: {exc}",
                         },
                     )
-                finally:
-                    connection.close()
+
+            def _build_backend_request(self) -> dict[str, Any]:
+                parsed = urllib.parse.urlparse(self.path)
+                payload: dict[str, Any] = {}
+                if self.command == "POST":
+                    payload = self._read_json_body()
+
+                if self.command == "GET" and parsed.path == "/api/v1/status":
+                    return {"action": "GET_STATUS", "payload": {}}
+                if self.command == "GET" and parsed.path == "/api/v1/missions":
+                    return {"action": "LIST_MISSIONS", "payload": {}}
+                if (
+                    self.command == "GET"
+                    and parsed.path.startswith("/api/v1/missions/")
+                    and parsed.path.endswith("/download")
+                ):
+                    mission_segment = parsed.path[len("/api/v1/missions/"):-len("/download")]
+                    mission_id = urllib.parse.unquote(mission_segment.rstrip("/"))
+                    if not mission_id:
+                        raise ValueError("mission_id is required")
+                    return {"action": "DOWNLOAD_MISSION", "payload": {"mission_id": mission_id}}
+                if self.command == "GET" and parsed.path == "/api/v1/schedule":
+                    query = urllib.parse.parse_qs(parsed.query)
+                    return {"action": "GET_SCHEDULE", "payload": {"week": query.get("week", [""])[0]}}
+                if self.command == "GET" and parsed.path == "/api/v1/map-data":
+                    return {"action": "GET_MAP_DATA", "payload": {}}
+                if self.command == "GET" and parsed.path == "/api/v1/record-map":
+                    return {"action": "GET_RECORD_MAP", "payload": {}}
+
+                if (
+                    self.command == "POST"
+                    and parsed.path.startswith("/api/v1/missions/")
+                    and parsed.path.endswith("/execute")
+                ):
+                    mission_segment = parsed.path[len("/api/v1/missions/"):-len("/execute")]
+                    mission_id = urllib.parse.unquote(mission_segment.rstrip("/"))
+                    if not mission_id:
+                        raise ValueError("mission_id is required")
+                    request_payload = dict(payload)
+                    request_payload["mission_id"] = mission_id
+                    return {"action": "EXECUTE_MISSION", "payload": request_payload}
+
+                post_routes = {
+                    "/api/v1/missions/upload-vda5050": "UPLOAD_VDA5050_MISSION",
+                    "/api/v1/mission/stop": "STOP_MISSION",
+                    "/api/v1/system/reinitialize": "REINITIALIZE_SYSTEM",
+                    "/api/v1/safety/clear": "CLEAR_SAFETY_STOP",
+                    "/api/v1/safety/stop": "TRIGGER_SAFETY_STOP",
+                    "/api/v1/record-map/start": "START_RECORD_MAP",
+                    "/api/v1/record-map/stop": "STOP_RECORD_MAP",
+                    "/api/v1/record-map/save-mission": "SAVE_RECORDED_MISSION",
+                    "/api/v1/schedule/entry": "SAVE_SCHEDULE_ENTRY",
+                    "/api/v1/schedule/entry/delete": "DELETE_SCHEDULE_ENTRY",
+                }
+                action = post_routes.get(parsed.path) if self.command == "POST" else None
+                if action is None:
+                    raise ValueError("Not found")
+                return {"action": action, "payload": payload}
+
+            def _exchange_backend_jsonl(self, request: dict[str, Any]) -> dict[str, Any]:
+                encoded = json.dumps(request, separators=(",", ":")).encode("utf-8") + b"\n"
+                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+                    connection.settimeout(20.0)
+                    connection.connect(node._backend_socket_path)
+                    connection.sendall(encoded)
+                    connection.shutdown(socket.SHUT_WR)
+                    raw_response = self._read_backend_line(connection)
+                try:
+                    decoded = json.loads(raw_response.decode("utf-8").strip())
+                except UnicodeDecodeError as exc:
+                    raise RuntimeError(f"Backend IPC response was not valid UTF-8: {exc}") from exc
+                except json.JSONDecodeError as exc:
+                    raise RuntimeError(f"Invalid backend IPC JSON response: {exc}") from exc
+                if not isinstance(decoded, dict):
+                    raise RuntimeError("Backend IPC response must be a JSON object")
+                return decoded
+
+            def _read_backend_line(self, connection: socket.socket) -> bytes:
+                chunks: list[bytes] = []
+                total_size = 0
+                while total_size <= 1024 * 1024:
+                    chunk = connection.recv(4096)
+                    if not chunk:
+                        break
+                    newline_index = chunk.find(b"\n")
+                    if newline_index >= 0:
+                        chunks.append(chunk[:newline_index])
+                        return b"".join(chunks)
+                    chunks.append(chunk)
+                    total_size += len(chunk)
+                if total_size > 1024 * 1024:
+                    raise RuntimeError("Backend IPC response exceeded maximum size")
+                response = b"".join(chunks)
+                if not response:
+                    raise RuntimeError("Backend IPC response was empty")
+                return response
+
+            def _read_json_body(self) -> dict[str, Any]:
+                body = self._read_body()
+                if not body:
+                    return {}
+                try:
+                    decoded = json.loads(body.decode("utf-8"))
+                except UnicodeDecodeError as exc:
+                    raise ValueError(f"Request body was not valid UTF-8: {exc}") from exc
+                except json.JSONDecodeError as exc:
+                    raise ValueError(f"Invalid JSON body: {exc}") from exc
+                if not isinstance(decoded, dict):
+                    raise ValueError("JSON body must be an object")
+                return decoded
+
+            @staticmethod
+            def _backend_status(response: dict[str, Any]) -> HTTPStatus:
+                try:
+                    default_status = 200 if response.get("success", True) else 502
+                    return HTTPStatus(int(response.get("status_code", default_status)))
+                except (TypeError, ValueError):
+                    return HTTPStatus.BAD_GATEWAY
+
+            def _send_backend_download(self, status: HTTPStatus, response: dict[str, Any]) -> None:
+                body = str(response.get("body", "")).encode("utf-8")
+                filename = str(response.get("filename", "mission.json")).replace('"', "")
+                content_type = str(response.get("content_type", "application/json; charset=utf-8"))
+                self._send_bytes(
+                    status,
+                    body,
+                    {
+                        "Content-Type": content_type,
+                        "Cache-Control": "no-store",
+                        "Content-Length": str(len(body)),
+                        "Content-Disposition": f'attachment; filename="{filename}"',
+                    },
+                )
 
             def _read_body(self) -> bytes:
                 try:
