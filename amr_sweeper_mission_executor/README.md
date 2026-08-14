@@ -30,7 +30,7 @@ Responsibilities:
 - source built-in manual mission templates from `amr_sweeper_navigation/missions`
 - support one rerecordable built-in working-area capture mission: `RecordMap`
 - build VDA5050 mission artifacts on demand when scheduled missions are not ready yet
-- read synced schedules and VDA5050 mission payloads from `/missions/database`
+- read synced schedules and VDA5050 mission packages from `/missions/database/<mission_id>/`
 - prepare mission-specific execution folders before the FSM handoff
 - write execution history under `/missions/logs` using `<mission_id>_vda5050.json`, `<mission_id>_path_planned.geojson`, and per-run `<mission_id>_<run_timestamp>_context.json` files inside each mission folder
 - honor mission start requests with `record_rosbag=true` by launching `ros2 bag record` from layer 0 and saving the bag under `<mission_run_directory>/artifacts/rosbag`

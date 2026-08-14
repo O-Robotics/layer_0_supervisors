@@ -17,6 +17,7 @@
 #include <future>
 #include <cmath>
 #include <iomanip>
+#include <map>
 #include <optional>
 #include <random>
 #include <set>
@@ -242,6 +243,165 @@ nlohmann::json loadJsonDocument(const std::filesystem::path & path)
   }
 
   throw std::runtime_error("Failed to parse JSON document: " + path.string());
+}
+
+std::filesystem::path vdaOrderPath(const std::filesystem::path & mission_path)
+{
+  if (std::filesystem::is_directory(mission_path)) {
+    return mission_path / "order.json";
+  }
+  return mission_path;
+}
+
+std::filesystem::path vdaZoneSetPath(const std::filesystem::path & order_path)
+{
+  return order_path.parent_path() / "zoneSet.json";
+}
+
+std::filesystem::path vdaMapGeoreferencePath(const std::filesystem::path & order_path)
+{
+  return order_path.parent_path() / "map_georeference.json";
+}
+
+bool isSupportedVda5050Version(const std::string & version)
+{
+  return version == "3.0.0" || version == "3.0.1" || version == "3.1.0";
+}
+
+void validateVda5050OrderDocument(const nlohmann::json & document)
+{
+  if (!document.is_object()) {
+    throw std::runtime_error("order.json must be a JSON object");
+  }
+  for (const auto & forbidden_key : {"missionReference", "missionGeometries", "coveragePathEdgeIds",
+      "workingZones", "noGoZones", "mission_type"})
+  {
+    if (document.contains(forbidden_key)) {
+      throw std::runtime_error(std::string("VDA5050 order contains non-compliant field: ") + forbidden_key);
+    }
+  }
+  for (const auto & key : {"headerId", "timestamp", "version", "manufacturer", "serialNumber",
+      "orderId", "orderUpdateId", "nodes", "edges"})
+  {
+    if (!document.contains(key)) {
+      throw std::runtime_error(std::string("VDA5050 order is missing required field: ") + key);
+    }
+  }
+  if (!document.at("version").is_string() ||
+    !isSupportedVda5050Version(document.at("version").get<std::string>()))
+  {
+    throw std::runtime_error("Unsupported VDA5050 order version");
+  }
+  const auto & nodes = document.at("nodes");
+  const auto & edges = document.at("edges");
+  if (!nodes.is_array() || nodes.empty() || !edges.is_array() || nodes.size() != edges.size() + 1U) {
+    throw std::runtime_error("VDA5050 order requires non-empty nodes and edges.size() == nodes.size() - 1");
+  }
+  std::map<int, std::string> node_id_by_sequence;
+  std::map<int, nlohmann::json> edge_by_sequence;
+  for (const auto & node : nodes) {
+    if (!node.contains("nodeId") || !node.at("nodeId").is_string() ||
+      !node.contains("sequenceId") || !node.at("sequenceId").is_number_integer() ||
+      !node.contains("released") || !node.at("released").is_boolean() ||
+      !node.contains("actions") || !node.at("actions").is_array() ||
+      !node.contains("nodePosition") || !node.at("nodePosition").is_object())
+    {
+      throw std::runtime_error("VDA5050 node is missing required fields");
+    }
+    const int sequence_id = node.at("sequenceId").get<int>();
+    if (sequence_id < 0 || (sequence_id % 2) != 0) {
+      throw std::runtime_error("VDA5050 node sequenceId must be non-negative and even");
+    }
+    const auto & position = node.at("nodePosition");
+    if (!position.contains("x") || !position.at("x").is_number() ||
+      !position.contains("y") || !position.at("y").is_number() ||
+      !position.contains("mapId") || !position.at("mapId").is_string())
+    {
+      throw std::runtime_error("VDA5050 nodePosition requires x/y/mapId");
+    }
+    node_id_by_sequence.emplace(sequence_id, node.at("nodeId").get<std::string>());
+  }
+  for (const auto & edge : edges) {
+    if (!edge.contains("edgeId") || !edge.at("edgeId").is_string() ||
+      !edge.contains("sequenceId") || !edge.at("sequenceId").is_number_integer() ||
+      !edge.contains("released") || !edge.at("released").is_boolean() ||
+      !edge.contains("actions") || !edge.at("actions").is_array() ||
+      !edge.contains("startNodeId") || !edge.at("startNodeId").is_string() ||
+      !edge.contains("endNodeId") || !edge.at("endNodeId").is_string())
+    {
+      throw std::runtime_error("VDA5050 edge is missing required fields");
+    }
+    const int sequence_id = edge.at("sequenceId").get<int>();
+    if (sequence_id < 0 || (sequence_id % 2) != 1) {
+      throw std::runtime_error("VDA5050 edge sequenceId must be non-negative and odd");
+    }
+    edge_by_sequence.emplace(sequence_id, edge);
+  }
+  for (int sequence_id = 0; sequence_id < static_cast<int>(nodes.size() * 2U); sequence_id += 2) {
+    if (node_id_by_sequence.find(sequence_id) == node_id_by_sequence.end()) {
+      throw std::runtime_error("VDA5050 node sequenceIds are not continuous");
+    }
+  }
+  for (int sequence_id = 1; sequence_id < static_cast<int>(edges.size() * 2U); sequence_id += 2) {
+    const auto edge_it = edge_by_sequence.find(sequence_id);
+    if (edge_it == edge_by_sequence.end()) {
+      throw std::runtime_error("VDA5050 edge sequenceIds are not continuous");
+    }
+    if (edge_it->second.at("startNodeId").get<std::string>() != node_id_by_sequence.at(sequence_id - 1) ||
+      edge_it->second.at("endNodeId").get<std::string>() != node_id_by_sequence.at(sequence_id + 1))
+    {
+      throw std::runtime_error("VDA5050 edge endpoints do not match adjacent nodes");
+    }
+  }
+}
+
+void validateVda5050Package(const std::filesystem::path & mission_path)
+{
+  const auto order_path = vdaOrderPath(mission_path);
+  const auto order_document = loadJsonDocument(order_path);
+  validateVda5050OrderDocument(order_document);
+  const auto map_georeference_path = vdaMapGeoreferencePath(order_path);
+  if (!std::filesystem::exists(map_georeference_path)) {
+    throw std::runtime_error("VDA5050 package is missing map_georeference.json");
+  }
+  const auto map_georeference = loadJsonDocument(map_georeference_path);
+  const auto maps = map_georeference.contains("maps") ?
+    map_georeference.at("maps") : nlohmann::json::array({map_georeference});
+  if (!maps.is_array() || maps.empty()) {
+    throw std::runtime_error("map_georeference.json must define at least one map");
+  }
+  std::set<std::string> georeferenced_map_ids;
+  for (const auto & map : maps) {
+    if (!map.contains("mapId") || !map.at("mapId").is_string() ||
+      !map.contains("originLatitude") || !map.at("originLatitude").is_number() ||
+      !map.contains("originLongitude") || !map.at("originLongitude").is_number() ||
+      !map.contains("bounds"))
+    {
+      throw std::runtime_error("map_georeference.json map is missing required fields");
+    }
+    georeferenced_map_ids.insert(map.at("mapId").get<std::string>());
+  }
+  std::set<std::string> required_map_ids;
+  for (const auto & node : order_document.at("nodes")) {
+    required_map_ids.insert(node.at("nodePosition").at("mapId").get<std::string>());
+  }
+  const auto zone_set_path = vdaZoneSetPath(order_path);
+  if (std::filesystem::exists(zone_set_path)) {
+    const auto zone_set_document = loadJsonDocument(zone_set_path);
+    if (!zone_set_document.is_object() || !zone_set_document.contains("zoneSet") ||
+      !zone_set_document.at("zoneSet").is_object() ||
+      !zone_set_document.at("zoneSet").contains("mapId") ||
+      !zone_set_document.at("zoneSet").at("mapId").is_string())
+    {
+      throw std::runtime_error("zoneSet.json must be an official VDA5050 zoneSet message");
+    }
+    required_map_ids.insert(zone_set_document.at("zoneSet").at("mapId").get<std::string>());
+  }
+  for (const auto & map_id : required_map_ids) {
+    if (georeferenced_map_ids.find(map_id) == georeferenced_map_ids.end()) {
+      throw std::runtime_error("VDA5050 package mapId lacks map_georeference: " + map_id);
+    }
+  }
 }
 
 void writeJsonDocumentAtomic(
@@ -480,12 +640,6 @@ bool arePointsNear(const MapPoint & lhs, const MapPoint & rhs, const double tole
   return std::abs(lhs.x - rhs.x) <= tolerance && std::abs(lhs.y - rhs.y) <= tolerance;
 }
 
-bool areGeoPointsNear(const GeoPoint & lhs, const GeoPoint & rhs, const double tolerance = 1.0e-9)
-{
-  return std::abs(lhs.latitude - rhs.latitude) <= tolerance &&
-         std::abs(lhs.longitude - rhs.longitude) <= tolerance;
-}
-
 double distanceToSegment(const MapPoint & point, const MapPoint & start, const MapPoint & end)
 {
   const double dx = end.x - start.x;
@@ -540,22 +694,6 @@ std::vector<MapPoint> closePolygon(std::vector<MapPoint> polygon)
 {
   if (polygon.size() >= 3U && !arePointsNear(polygon.front(), polygon.back())) {
     polygon.push_back(polygon.front());
-  }
-  return polygon;
-}
-
-std::vector<MapPoint> uniquePolygonVertices(std::vector<MapPoint> polygon)
-{
-  if (polygon.size() >= 2U && arePointsNear(polygon.front(), polygon.back())) {
-    polygon.pop_back();
-  }
-  return polygon;
-}
-
-std::vector<GeoPoint> uniqueGeoPolygonVertices(std::vector<GeoPoint> polygon)
-{
-  if (polygon.size() >= 2U && areGeoPointsNear(polygon.front(), polygon.back())) {
-    polygon.pop_back();
   }
   return polygon;
 }
@@ -1307,39 +1445,6 @@ GeoTransform buildGeoTransform(
   return transform;
 }
 
-GeoPoint applyGeoTransform(const GeoTransform & transform, const MapPoint & local_point)
-{
-  return {
-    transform.latitude_coefficients[0] * local_point.x +
-      transform.latitude_coefficients[1] * local_point.y +
-      transform.latitude_coefficients[2],
-    transform.longitude_coefficients[0] * local_point.x +
-      transform.longitude_coefficients[1] * local_point.y +
-      transform.longitude_coefficients[2]};
-}
-
-std::vector<GeoPoint> convertToGeoPoints(const std::vector<MapPoint> & points, const GeoTransform & transform)
-{
-  std::vector<GeoPoint> converted;
-  converted.reserve(points.size());
-  for (const auto & point : points) {
-    converted.push_back(applyGeoTransform(transform, point));
-  }
-  return converted;
-}
-
-std::vector<std::vector<GeoPoint>> convertZonesToGeo(
-  const std::vector<std::vector<MapPoint>> & zones,
-  const GeoTransform & transform)
-{
-  std::vector<std::vector<GeoPoint>> converted;
-  converted.reserve(zones.size());
-  for (const auto & zone : zones) {
-    converted.push_back(convertToGeoPoints(zone, transform));
-  }
-  return converted;
-}
-
 nlohmann::json buildNavSatGeoJson(
   const std::vector<geometry_msgs::msg::Point> & points,
   const std::string & name,
@@ -1486,74 +1591,51 @@ void refreshLocalPathGeoReferenceFromArtifacts(const nlohmann::json & context_do
   refreshLocalPathGeoReference(local_path_file, geographic_companion_path, geo_trace);
 }
 
-nlohmann::json buildGeoReferencedVda5050MissionDocument(
+nlohmann::json buildVda5050OrderDocument(
   const std::string & order_id,
   const std::string & timestamp,
-  const std::vector<GeoPoint> & perimeter,
-  const std::vector<GeoPoint> & coverage_route,
-  const std::vector<std::vector<GeoPoint>> & no_go_zones,
-  const std::string & applied_pattern,
-  const std::string & source_recorded_map_id,
-  const std::string & source_recorded_map_run_started_at)
+  const std::vector<MapPoint> & coverage_route)
 {
   nlohmann::json nodes = nlohmann::json::array();
   nlohmann::json edges = nlohmann::json::array();
-  nlohmann::json working_zone_edge_ids = nlohmann::json::array();
-  nlohmann::json coverage_edge_ids = nlohmann::json::array();
-  nlohmann::json no_go_zone_documents = nlohmann::json::array();
 
-  auto append_node = [&nodes](const std::string & node_id, const GeoPoint & point, const double theta) {
+  auto append_node =
+    [&nodes, &order_id](const std::string & node_id, const MapPoint & point, const double theta) {
     nodes.push_back({
       {"nodeId", node_id},
       {"sequenceId", static_cast<int>(nodes.size()) * 2},
       {"released", true},
+      {"actions", nlohmann::json::array()},
       {"nodePosition", {
-         {"x", point.longitude},
-         {"y", point.latitude},
+         {"x", point.x},
+         {"y", point.y},
          {"theta", theta},
-         {"mapId", "mission_wgs84"}}}
+         {"mapId", order_id + "_map"}}}
     });
   };
   auto append_edge = [&edges](
     const std::string & edge_id,
     const std::string & start_node_id,
-    const std::string & end_node_id,
-    const std::string & edge_type) {
+    const std::string & end_node_id) {
     edges.push_back({
       {"edgeId", edge_id},
       {"sequenceId", static_cast<int>(edges.size()) * 2 + 1},
       {"released", true},
       {"startNodeId", start_node_id},
       {"endNodeId", end_node_id},
-      {"edgeType", edge_type}});
+      {"actions", nlohmann::json::array()}});
   };
-
-  for (std::size_t index = 0U; index < perimeter.size(); ++index) {
-    const std::string node_id = "wz_node_" + std::to_string(index);
-    const GeoPoint & point = perimeter.at(index);
-    const GeoPoint & next = perimeter.at((index + 1U) % perimeter.size());
-    append_node(node_id, point, std::atan2(next.latitude - point.latitude, next.longitude - point.longitude));
-  }
-  for (std::size_t index = 0U; index < perimeter.size(); ++index) {
-    const std::string edge_id = "wz_edge_" + std::to_string(index);
-    append_edge(
-      edge_id,
-      "wz_node_" + std::to_string(index),
-      "wz_node_" + std::to_string((index + 1U) % perimeter.size()),
-      "boundary");
-    working_zone_edge_ids.push_back(edge_id);
-  }
 
   for (std::size_t index = 0U; index < coverage_route.size(); ++index) {
     const std::string node_id = "cp_node_" + std::to_string(index);
-    const GeoPoint & point = coverage_route.at(index);
+    const MapPoint & point = coverage_route.at(index);
     double theta = 0.0;
     if (index + 1U < coverage_route.size()) {
       const auto & next = coverage_route.at(index + 1U);
-      theta = std::atan2(next.latitude - point.latitude, next.longitude - point.longitude);
+      theta = std::atan2(next.y - point.y, next.x - point.x);
     } else if (index > 0U) {
       const auto & previous = coverage_route.at(index - 1U);
-      theta = std::atan2(point.latitude - previous.latitude, point.longitude - previous.longitude);
+      theta = std::atan2(point.y - previous.y, point.x - previous.x);
     }
     append_node(node_id, point, theta);
   }
@@ -1562,73 +1644,94 @@ nlohmann::json buildGeoReferencedVda5050MissionDocument(
     append_edge(
       edge_id,
       "cp_node_" + std::to_string(index),
-      "cp_node_" + std::to_string(index + 1U),
-      "coverage_path");
-    coverage_edge_ids.push_back(edge_id);
-  }
-
-  for (std::size_t zone_index = 0U; zone_index < no_go_zones.size(); ++zone_index) {
-    const auto & zone = no_go_zones.at(zone_index);
-    if (zone.size() < 4U) {
-      continue;
-    }
-    nlohmann::json zone_edge_ids = nlohmann::json::array();
-    for (std::size_t point_index = 0U; point_index < zone.size(); ++point_index) {
-      const std::string node_id =
-        "ngz_" + std::to_string(zone_index) + "_node_" + std::to_string(point_index);
-      const GeoPoint & point = zone.at(point_index);
-      const GeoPoint & next = zone.at((point_index + 1U) % zone.size());
-      append_node(node_id, point, std::atan2(next.latitude - point.latitude, next.longitude - point.longitude));
-    }
-    for (std::size_t point_index = 0U; point_index < zone.size(); ++point_index) {
-      const std::string edge_id =
-        "ngz_" + std::to_string(zone_index) + "_edge_" + std::to_string(point_index);
-      append_edge(
-        edge_id,
-        "ngz_" + std::to_string(zone_index) + "_node_" + std::to_string(point_index),
-        "ngz_" + std::to_string(zone_index) + "_node_" + std::to_string((point_index + 1U) % zone.size()),
-        "no_go_zone");
-      zone_edge_ids.push_back(edge_id);
-    }
-    no_go_zone_documents.push_back({
-      {"zoneId", "recorded_obstacle_" + std::to_string(zone_index)},
-      {"zoneType", "no_go"},
-      {"edgeIds", zone_edge_ids},
-    });
+      "cp_node_" + std::to_string(index + 1U));
   }
 
   return {
+    {"headerId", 1},
     {"orderId", order_id},
     {"timestamp", timestamp},
-    {"version", "2.0.0"},
+    {"version", "3.0.0"},
     {"manufacturer", "amr_sweeper"},
     {"serialNumber", "portable_recorded_mission"},
     {"orderUpdateId", 0},
-    {"description", "Autonomous mission generated from RecordMap perimeter and embedded obstacle zones."},
-    {"missionReference", {
-       {"missionId", order_id + "_" + sanitizeUidToken(timestamp)},
-       {"mapId", "mission_wgs84"},
-       {"coordinateReferenceSystem", "EPSG:4326"},
-       {"xIsLongitude", true},
-       {"yIsLatitude", true}}},
-    {"missionMetadata", {
-       {"sourceRecordedMapId", source_recorded_map_id},
-       {"sourceRecordedMapRunStartedAt", source_recorded_map_run_started_at},
-       {"selectedSweepPattern", applied_pattern},
-       {"embeddedNoGoZoneCount", no_go_zone_documents.size()},
-       {"portableMission", true}}},
+    {"orderDescription", "Autonomous mission generated from RecordMap perimeter."},
     {"nodes", nodes},
-    {"edges", edges},
-    {"missionGeometries", {
-       {"workingZones", nlohmann::json::array({
-         {
-           {"zoneId", "recorded_work_area"},
-           {"zoneType", "working_zone"},
-           {"edgeIds", working_zone_edge_ids}
-         }
-       })},
-       {"noGoZones", no_go_zone_documents},
-       {"coveragePathEdgeIds", coverage_edge_ids}}}
+    {"edges", edges}
+  };
+}
+
+nlohmann::json buildVda5050ZoneSetDocument(
+  const std::string & mission_id,
+  const std::string & timestamp,
+  const std::vector<std::vector<MapPoint>> & no_go_zones)
+{
+  nlohmann::json zones = nlohmann::json::array();
+  for (std::size_t zone_index = 0U; zone_index < no_go_zones.size(); ++zone_index) {
+    const auto & zone = no_go_zones.at(zone_index);
+    if (zone.size() < 3U) {
+      continue;
+    }
+    nlohmann::json vertices = nlohmann::json::array();
+    for (const auto & point : zone) {
+      vertices.push_back({{"x", point.x}, {"y", point.y}});
+    }
+    zones.push_back({
+      {"zoneId", "recorded_obstacle_" + std::to_string(zone_index)},
+      {"zoneType", "BLOCKED"},
+      {"zoneDescriptor", "Recorded obstacle no-go area"},
+      {"vertices", vertices}});
+  }
+
+  return {
+    {"headerId", 1},
+    {"timestamp", timestamp},
+    {"version", "3.0.0"},
+    {"manufacturer", "amr_sweeper"},
+    {"serialNumber", "portable_recorded_mission"},
+    {"zoneSet", {
+       {"mapId", mission_id + "_map"},
+       {"zoneSetId", mission_id + "_zones"},
+       {"zoneSetDescriptor", "Recorded mission blocked zones"},
+       {"zones", zones}}}
+  };
+}
+
+nlohmann::json buildMapGeoreferenceDocument(
+  const std::string & mission_id,
+  const GeoTransform & geo_transform,
+  const std::vector<MapPoint> & bounds_points)
+{
+  double min_x = std::numeric_limits<double>::max();
+  double min_y = std::numeric_limits<double>::max();
+  double max_x = std::numeric_limits<double>::lowest();
+  double max_y = std::numeric_limits<double>::lowest();
+  for (const auto & point : bounds_points) {
+    min_x = std::min(min_x, point.x);
+    min_y = std::min(min_y, point.y);
+    max_x = std::max(max_x, point.x);
+    max_y = std::max(max_y, point.y);
+  }
+  min_x -= kRecordMapCostmapPaddingMeters;
+  min_y -= kRecordMapCostmapPaddingMeters;
+  max_x += kRecordMapCostmapPaddingMeters;
+  max_y += kRecordMapCostmapPaddingMeters;
+
+  return {
+    {"mapId", mission_id + "_map"},
+    {"mapVersion", "1"},
+    {"crs", "EPSG:4326"},
+    {"units", "m"},
+    {"frame", "ENU"},
+    {"originLatitude", geo_transform.latitude_coefficients[2]},
+    {"originLongitude", geo_transform.longitude_coefficients[2]},
+    {"originAltitude", 0.0},
+    {"yaw", 0.0},
+    {"bounds", {
+       {"min_x", min_x},
+       {"min_y", min_y},
+       {"max_x", max_x},
+       {"max_y", max_y}}}
   };
 }
 
@@ -2105,43 +2208,52 @@ void MissionExecutorNode::handleUploadVda5050Mission(
   }
 
   try {
-    auto mission_document = nlohmann::json::parse(request->mission_json);
-    if (!mission_document.is_object()) {
+    auto package_document = nlohmann::json::parse(request->mission_json);
+    if (!package_document.is_object()) {
       throw std::runtime_error("mission_json must describe a JSON object");
     }
 
-    const std::string mission_id = deriveMissionId(mission_document, request->mission_id);
-    const auto missions_root = resolveMissionsFromDbDirectory();
-    const auto mission_file = missions_root / (mission_id + mission_file_extension_);
+    const nlohmann::json order_document = package_document.contains("order") ?
+      package_document.at("order") : package_document;
+    const std::optional<nlohmann::json> zone_set_document =
+      package_document.contains("zoneSet") ? std::make_optional(package_document.at("zoneSet")) :
+      std::nullopt;
+    if (!package_document.contains("map_georeference")) {
+      throw std::runtime_error("VDA5050 package upload requires map_georeference");
+    }
+    const nlohmann::json map_georeference_document = package_document.at("map_georeference");
+    validateVda5050OrderDocument(order_document);
 
-    if (std::filesystem::exists(mission_file) && !request->overwrite_existing)
+    const std::string mission_id = deriveMissionId(order_document, request->mission_id);
+    const auto missions_root = resolveMissionsFromDbDirectory();
+    const auto mission_folder = missions_root / mission_id;
+    const auto mission_file = mission_folder / "order.json";
+
+    if (std::filesystem::exists(mission_folder) && !request->overwrite_existing)
     {
       response->success = false;
       response->message = "Mission already exists for mission_id=" + mission_id;
       return;
     }
 
-    std::filesystem::create_directories(missions_root);
-
-    if (mission_document.contains("mission_type") &&
-      mission_document.at("mission_type").is_string() &&
-      toLower(mission_document.at("mission_type").get<std::string>()) != kScheduledMissionType)
-    {
-      throw std::runtime_error("upload_vda5050_mission only accepts autonomous VDA5050 missions");
+    std::filesystem::create_directories(mission_folder);
+    writeJsonDocumentAtomic(mission_file, order_document);
+    writeJsonDocumentAtomic(mission_folder / "map_georeference.json", map_georeference_document);
+    if (zone_set_document.has_value()) {
+      writeJsonDocumentAtomic(mission_folder / "zoneSet.json", *zone_set_document);
     }
-
-    mission_document["mission_type"] = kScheduledMissionType;
-
-    writeJsonDocumentAtomic(mission_file, mission_document);
+    validateVda5050Package(mission_folder);
 
     // Clear stale generated artifacts so the parser rebuilds from the new VDA5050 payload on execution.
-    const auto mission_folder = resolveMissionsLogDirectory() / mission_id;
-    std::filesystem::remove(mission_folder / (mission_id + "_static_costmap.yaml"));
-    std::filesystem::remove(mission_folder / (mission_id + "_static_costmap.pgm"));
-    std::filesystem::remove(mission_folder / (mission_id + "_costmap.yaml"));
-    std::filesystem::remove(mission_folder / (mission_id + "_costmap.pgm"));
-    std::filesystem::remove(mission_folder / (mission_id + "_path_planned.geojson"));
-    std::filesystem::remove(mission_folder / (mission_id + "_vda5050" + mission_file_extension_));
+    const auto artifact_folder = resolveMissionsLogDirectory() / mission_id;
+    std::filesystem::remove(artifact_folder / (mission_id + "_static_costmap.yaml"));
+    std::filesystem::remove(artifact_folder / (mission_id + "_static_costmap.pgm"));
+    std::filesystem::remove(artifact_folder / (mission_id + "_costmap.yaml"));
+    std::filesystem::remove(artifact_folder / (mission_id + "_costmap.pgm"));
+    std::filesystem::remove(artifact_folder / (mission_id + "_path_planned.geojson"));
+    std::filesystem::remove(artifact_folder / (mission_id + "_vda5050" + mission_file_extension_));
+    std::filesystem::remove(artifact_folder / "zoneSet.json");
+    std::filesystem::remove(artifact_folder / "map_georeference.json");
 
     const auto mission = classifyMissionFile(mission_file);
     if (!mission) {
@@ -2152,7 +2264,7 @@ void MissionExecutorNode::handleUploadVda5050Mission(
     response->message = "VDA5050 mission uploaded";
     response->mission_id = mission->mission_id;
     response->mission_file = mission->mission_path;
-    response->mission_folder = mission_folder.string();
+    response->mission_folder = artifact_folder.string();
     response->mission_type = mission->mission_type;
     response->running_profile_id = mission->running_profile_id;
   } catch (const std::exception & exception) {
@@ -2243,11 +2355,6 @@ void MissionExecutorNode::handleCreateRecordedMission(
     if (!geo_transform.valid) {
       throw std::runtime_error("Latest recorded map does not contain a valid WGS84 transform");
     }
-    const std::vector<GeoPoint> geo_perimeter =
-      uniqueGeoPolygonVertices(convertToGeoPoints(uniquePolygonVertices(perimeter), geo_transform));
-    const std::vector<GeoPoint> geo_route = convertToGeoPoints(route, geo_transform);
-    const auto geo_no_go_zones = convertZonesToGeo(no_go_zones, geo_transform);
-
     const auto now = std::chrono::system_clock::now();
     const std::string mission_id = sanitizeMissionId(defaultIfEmpty(
       request->mission_name,
@@ -2256,34 +2363,23 @@ void MissionExecutorNode::handleCreateRecordedMission(
       throw std::runtime_error("mission_name is required");
     }
 
-    const std::filesystem::path mission_file =
-      resolveMissionsFromDbDirectory() / (mission_id + mission_file_extension_);
-    if (std::filesystem::exists(mission_file) && !request->overwrite_existing) {
+    const std::filesystem::path mission_folder = resolveMissionsFromDbDirectory() / mission_id;
+    const std::filesystem::path mission_file = mission_folder / "order.json";
+    if (std::filesystem::exists(mission_folder) && !request->overwrite_existing) {
       throw std::runtime_error("Mission already exists for mission_name=" + mission_id);
     }
 
-    std::filesystem::create_directories(resolveMissionsFromDbDirectory());
+    std::filesystem::create_directories(mission_folder);
     const std::string timestamp = formatUtcTimestamp(now);
-    nlohmann::json mission_document =
-      buildGeoReferencedVda5050MissionDocument(
-        mission_id,
-        timestamp,
-        geo_perimeter,
-        geo_route,
-        geo_no_go_zones,
-        applied_pattern,
-        latest_metadata.value("mission_id", std::string("RecordMap")),
-        latest_metadata.value("run_started_at", std::string{}));
-    mission_document["mission_type"] = kScheduledMissionType;
-    mission_document["name"] = mission_id;
-
-    {
-      std::ofstream mission_stream(mission_file, std::ios::trunc);
-      if (!mission_stream.is_open()) {
-        throw std::runtime_error("Failed to write recorded mission file: " + mission_file.string());
-      }
-      writeJsonDocumentAtomic(mission_file, mission_document);
-    }
+    const nlohmann::json order_document = buildVda5050OrderDocument(mission_id, timestamp, route);
+    const nlohmann::json zone_set_document =
+      buildVda5050ZoneSetDocument(mission_id, timestamp, no_go_zones);
+    const nlohmann::json map_georeference_document =
+      buildMapGeoreferenceDocument(mission_id, geo_transform, perimeter);
+    writeJsonDocumentAtomic(mission_file, order_document);
+    writeJsonDocumentAtomic(mission_folder / "zoneSet.json", zone_set_document);
+    writeJsonDocumentAtomic(mission_folder / "map_georeference.json", map_georeference_document);
+    validateVda5050Package(mission_folder);
 
     response->success = true;
     response->message = "Recorded mission created";
@@ -2684,8 +2780,16 @@ std::vector<ManualMissionInfo> MissionExecutorNode::discoverManualMissions() con
       }
     };
 
-  const auto scan_directory = [&maybe_add](const std::filesystem::path & directory) {
+  const auto scan_directory = [&maybe_add](const std::filesystem::path & directory, const bool package_only) {
       if (!std::filesystem::exists(directory) || !std::filesystem::is_directory(directory)) {
+        return;
+      }
+      if (package_only) {
+        for (const auto & entry : std::filesystem::directory_iterator(directory)) {
+          if (entry.is_directory()) {
+            maybe_add(entry.path() / "order.json");
+          }
+        }
         return;
       }
       std::error_code error;
@@ -2711,8 +2815,8 @@ std::vector<ManualMissionInfo> MissionExecutorNode::discoverManualMissions() con
       }
     };
 
-  scan_directory(resolveManualMissionsDirectory());
-  scan_directory(resolveMissionsFromDbDirectory());
+  scan_directory(resolveManualMissionsDirectory(), false);
+  scan_directory(resolveMissionsFromDbDirectory(), true);
 
   std::sort(
     missions.begin(),
@@ -2917,6 +3021,9 @@ std::filesystem::path MissionExecutorNode::artifactsDirectoryForMission(
     if (mission_path.has_parent_path()) {
       const std::filesystem::path parent = mission_path.parent_path();
       const std::filesystem::path missions_database_directory = resolveMissionsFromDbDirectory();
+      if (mission_path.filename() == "order.json" && parent.parent_path() == missions_database_directory) {
+        return resolveMissionsLogDirectory() / mission.mission_id;
+      }
       if (parent != missions_database_directory &&
         !(parent.filename() == "simulations" && parent.parent_path() == missions_database_directory))
       {
@@ -2930,6 +3037,9 @@ std::filesystem::path MissionExecutorNode::artifactsDirectoryForMission(
 
 std::string MissionExecutorNode::missionStemForPath(const std::filesystem::path & mission_path) const
 {
+  if (mission_path.filename() == "order.json" && mission_path.has_parent_path()) {
+    return mission_path.parent_path().filename().string();
+  }
   const std::filesystem::path missions_database_directory = resolveMissionsFromDbDirectory();
   if (mission_path.has_parent_path() && mission_path.parent_path() != missions_database_directory) {
     const std::filesystem::path parent = mission_path.parent_path();
@@ -3029,6 +3139,12 @@ ManualMissionInfo MissionExecutorNode::resolveExecutableMissionSource(const Manu
   }
 
   const std::filesystem::path mission_path(mission.mission_path);
+  if (mission_path.filename() == "order.json" &&
+    mission_path.has_parent_path() &&
+    mission_path.parent_path().parent_path() == resolveMissionsFromDbDirectory())
+  {
+    // Continue below so package sources can resolve to staged parser artifacts.
+  } else
   if (mission_path.has_parent_path() &&
     mission_path.parent_path() != resolveMissionsFromDbDirectory())
   {
@@ -3068,10 +3184,18 @@ std::optional<ManualMissionInfo> MissionExecutorNode::classifyMissionFile(
   ManualMissionInfo mission;
   mission.mission_id = missionStemForPath(mission_path);
   mission.mission_path = mission_path.string();
-  mission.mission_type =
-    document.contains("mission_type") && document.at("mission_type").is_string() ?
-    document.at("mission_type").get<std::string>() :
-    kScheduledMissionType;
+  if (mission_path.filename() == "order.json") {
+    validateVda5050Package(mission_path.parent_path());
+    mission.mission_type = kScheduledMissionType;
+  } else {
+    mission.mission_type =
+      document.contains("mission_type") && document.at("mission_type").is_string() ?
+      document.at("mission_type").get<std::string>() :
+      kScheduledMissionType;
+    if (toLower(mission.mission_type) == kScheduledMissionType) {
+      validateVda5050Package(mission_path);
+    }
+  }
   mission.execution_mode = kNavigateThroughPosesExecutionMode;
 
   if (document.contains("execution_mode") && document.at("execution_mode").is_string()) {
@@ -3080,21 +3204,6 @@ std::optional<ManualMissionInfo> MissionExecutorNode::classifyMissionFile(
     mission.execution_mode = kManualMappingExecutionMode;
   } else if (toLower(mission.mission_type) == kBuiltinTeleopMissionType) {
     mission.execution_mode = kTeleoperationExecutionMode;
-  }
-
-  const std::string lowered_mission_type = toLower(mission.mission_type);
-  const bool scheduled_local_frame =
-    lowered_mission_type == kScheduledMissionType &&
-    document.contains("missionReference") &&
-    document.at("missionReference").is_object() &&
-    document.at("missionReference").contains("coordinateFrame") &&
-    document.at("missionReference").at("coordinateFrame").is_string() &&
-    [] (std::string value) {
-      value = toLower(std::move(value));
-      return value == "odom" || value == "local";
-    }(document.at("missionReference").at("coordinateFrame").get<std::string>());
-  if (scheduled_local_frame) {
-    mission.mission_type = kLocalScheduledMissionType;
   }
 
   const std::string effective_mission_type = toLower(mission.mission_type);

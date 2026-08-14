@@ -5,6 +5,8 @@
 #include <filesystem>
 #include <map>
 #include <memory>
+#include <optional>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -53,6 +55,7 @@ struct Vda5050MissionBuildConfig
   double origin_longitude{0.0};
   double origin_altitude{0.0};
   bool use_first_polygon_vertex_as_origin{true};
+  std::vector<std::string> supported_vda5050_versions{"3.0.0"};
 };
 
 struct MapExtent
@@ -89,6 +92,20 @@ struct MissionPathWaypoint
   bool use_local_frame{false};
 };
 
+struct MapGeoreference
+{
+  std::string map_id;
+  std::string map_version;
+  std::string crs{"EPSG:4326"};
+  std::string units{"m"};
+  std::string frame{"ENU"};
+  double origin_latitude{0.0};
+  double origin_longitude{0.0};
+  double origin_altitude{0.0};
+  double yaw{0.0};
+  MapExtent bounds{0.0, 0.0, 0.0, 0.0};
+};
+
 struct MissionIdentity
 {
   std::string order_id;
@@ -101,6 +118,12 @@ class Vda5050MissionParser
 public:
   void loadMission(const Vda5050MissionBuildConfig & config);
   [[nodiscard]] MissionIdentity inspectMissionIdentity(const std::string & mission_path) const;
+  [[nodiscard]] static std::filesystem::path packageOrderPath(
+    const std::filesystem::path & mission_path);
+  [[nodiscard]] static std::filesystem::path packageZoneSetPath(
+    const std::filesystem::path & order_path);
+  [[nodiscard]] static std::filesystem::path packageMapGeoreferencePath(
+    const std::filesystem::path & order_path);
   [[nodiscard]] RasterizedMap buildSuggestedGlobalCostmap(
     double resolution,
     double padding_meters) const;
@@ -125,12 +148,14 @@ private:
     const std::string & zone_name,
     const std::string & zone_type);
   void loadCoveragePath(
-    const nlohmann::json & coverage_edge_ids,
-    const std::unordered_map<std::string, GeoPoint> & nodes_by_id,
-    const std::unordered_map<std::string, double> & node_theta_by_id,
-    const std::unordered_map<std::string, nlohmann::json> & edges_by_id);
+    const std::vector<MissionPathWaypoint> & coverage_path);
   void loadFromLegacyGeoJson(const nlohmann::json & document);
-  void loadFromVda5050Mission(const nlohmann::json & document);
+  void loadFromVda5050Order(const nlohmann::json & document);
+  void loadVda5050ZoneSet(const nlohmann::json & document);
+  void loadMapGeoreference(const std::filesystem::path & order_path);
+  void validateVda5050Order(const nlohmann::json & document) const;
+  void validateVda5050ZoneSet(const nlohmann::json & document) const;
+  [[nodiscard]] bool isSupportedVda5050Version(const std::string & version) const;
   [[nodiscard]] bool pointInPolygon(const MapPoint & point, const PolygonZone & polygon) const;
   [[nodiscard]] double signedDistanceToPolygon(
     const MapPoint & point,
@@ -146,11 +171,12 @@ private:
   [[nodiscard]] static std::string sanitizeTimestamp(const std::string & timestamp);
   [[nodiscard]] static std::string sanitizeStemToken(const std::string & value);
   [[nodiscard]] static std::string normalizeZoneType(const std::string & zone_type);
-
   Vda5050MissionBuildConfig config_;
   std::vector<PolygonZone> working_zones_;
   std::vector<PolygonZone> no_go_zones_;
   std::vector<MissionPathWaypoint> mission_waypoints_;
+  std::map<std::string, MapGeoreference> map_georeferences_;
+  std::set<std::string> order_map_ids_;
   bool projection_initialized_{false};
   GeographicLib::LocalCartesian projector_;
 };
@@ -196,6 +222,7 @@ private:
   double mission_projection_origin_latitude_{0.0};
   double mission_projection_origin_longitude_{0.0};
   double mission_projection_origin_altitude_{0.0};
+  std::vector<std::string> supported_vda5050_versions_{"3.0.0"};
   bool mission_projection_use_first_polygon_vertex_as_origin_{true};
   bool auto_build_on_start_{true};
   bool watch_for_updates_{true};

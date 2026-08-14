@@ -606,6 +606,14 @@ class MissionBackendNode(Node):
                 return self._ipc_backend_response(self.execute_manual_mission(mission_id, payload))
             if action == "UPLOAD_VDA5050_MISSION":
                 return self._ipc_backend_response(self.upload_vda5050_mission(payload))
+            if action in {"IMPORT_VDA5050_PACKAGE", "APPLY_VDA5050_ORDER"}:
+                return self._ipc_backend_response(self.upload_vda5050_mission(payload))
+            if action == "VALIDATE_VDA5050_PACKAGE":
+                return self._ipc_backend_response(self.validate_vda5050_package(payload))
+            if action == "APPLY_VDA5050_ZONESET":
+                return self._ipc_backend_response(self.apply_vda5050_zoneset(payload))
+            if action == "GET_VDA5050_STATE_SNAPSHOT":
+                return self._ipc_backend_response(self.vda5050_state_snapshot())
             if action in {"STOP_MISSION", "STOP"}:
                 return self._ipc_backend_response(self.stop_active_mission(payload))
             if action == "REINITIALIZE_SYSTEM":
@@ -886,6 +894,74 @@ class MissionBackendNode(Node):
             "mission_folder": response.mission_folder,
             "mission_type": response.mission_type,
             "running_profile_id": int(response.running_profile_id),
+        }
+
+    @staticmethod
+    def _decode_vda5050_package_payload(payload: dict[str, Any]) -> dict[str, Any]:
+        if "mission_json" in payload:
+            document = json.loads(str(payload.get("mission_json", "")))
+        else:
+            document = dict(payload)
+        if not isinstance(document, dict):
+            raise RuntimeError("VDA5050 package payload must be a JSON object")
+        order = document.get("order", document)
+        if not isinstance(order, dict):
+            raise RuntimeError("VDA5050 package requires an order object")
+        if not str(order.get("version", "")).startswith("3."):
+            raise RuntimeError("Only VDA5050 major version 3 packages are supported")
+        if any(key in order for key in ("missionReference", "missionGeometries", "coveragePathEdgeIds")):
+            raise RuntimeError("VDA5050 order contains non-compliant custom mission fields")
+        if "map_georeference" not in document:
+            raise RuntimeError("VDA5050 package requires map_georeference")
+        return document
+
+    def validate_vda5050_package(self, payload: dict[str, Any]) -> dict[str, Any]:
+        try:
+            document = self._decode_vda5050_package_payload(payload)
+            order = document.get("order", document)
+            return {
+                "success": True,
+                "message": "VDA5050 package is structurally acceptable for backend import",
+                "order_id": str(order.get("orderId", "")),
+                "version": str(order.get("version", "")),
+                "has_zone_set": isinstance(document.get("zoneSet"), dict),
+            }
+        except Exception as exc:
+            return {"success": False, "message": str(exc)}
+
+    def apply_vda5050_zoneset(self, payload: dict[str, Any]) -> dict[str, Any]:
+        mission_id = str(payload.get("mission_id", "")).strip()
+        zone_set = payload.get("zoneSet")
+        if not mission_id:
+            return {"success": False, "message": "mission_id is required"}
+        if not isinstance(zone_set, dict):
+            return {"success": False, "message": "zoneSet object is required"}
+        mission_file = self.mission_file_path(mission_id)
+        if not mission_file.exists():
+            return {"success": False, "message": "Mission order.json not found"}
+        package = {
+            "order": json.loads(mission_file.read_text(encoding="utf-8")),
+            "zoneSet": zone_set,
+            "map_georeference": json.loads(
+                (mission_file.parent / "map_georeference.json").read_text(encoding="utf-8")
+            ),
+        }
+        return self.upload_vda5050_mission(
+            {
+                "mission_id": mission_id,
+                "mission_json": json.dumps(package),
+                "overwrite_existing": True,
+            }
+        )
+
+    def vda5050_state_snapshot(self) -> dict[str, Any]:
+        status = self.status_snapshot()
+        missions = self.list_executable_missions()
+        return {
+            "success": True,
+            "message": "VDA5050 bridge state snapshot",
+            "status": status,
+            "missions": missions.get("missions", []),
         }
 
     def start_record_map(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -1809,33 +1885,36 @@ class MissionBackendNode(Node):
 
     @staticmethod
     def _route_geojson_from_vda5050(document: dict[str, Any], mission_id: str) -> dict[str, Any] | None:
-        nodes = {node["nodeId"]: node["nodePosition"] for node in document.get("nodes", []) if "nodeId" in node and "nodePosition" in node}
-        edges = {edge["edgeId"]: edge for edge in document.get("edges", []) if "edgeId" in edge}
-        coverage_edge_ids = document.get("missionGeometries", {}).get("coveragePathEdgeIds", [])
-        if not coverage_edge_ids:
+        nodes_by_sequence = {
+            int(node["sequenceId"]): node
+            for node in document.get("nodes", [])
+            if "sequenceId" in node and "nodePosition" in node
+        }
+        edges_by_sequence = {
+            int(edge["sequenceId"]): edge
+            for edge in document.get("edges", [])
+            if "sequenceId" in edge
+        }
+        if not nodes_by_sequence:
             return None
 
         coordinates: list[list[float]] = []
-        tail_node_id = None
-        for edge_id in coverage_edge_ids:
-            edge = edges.get(edge_id)
-            if edge is None:
-                continue
-            start_id = edge.get("startNodeId")
-            end_id = edge.get("endNodeId")
-            ordered_ids = [start_id, end_id]
-            if tail_node_id == end_id:
-                ordered_ids = [end_id, start_id]
-            elif tail_node_id == start_id:
-                ordered_ids = [start_id, end_id]
-            for node_id in ordered_ids:
-                node_position = nodes.get(node_id)
-                if node_position is None:
-                    continue
-                point = [float(node_position.get("x", 0.0)), float(node_position.get("y", 0.0))]
+        def append_node(sequence_id: int) -> None:
+            node_position = nodes_by_sequence[sequence_id].get("nodePosition", {})
+            point = [float(node_position.get("x", 0.0)), float(node_position.get("y", 0.0))]
+            if not coordinates or coordinates[-1] != point:
+                coordinates.append(point)
+
+        append_node(0)
+        for sequence_id in range(1, max(nodes_by_sequence.keys()), 2):
+            edge = edges_by_sequence.get(sequence_id, {})
+            trajectory = edge.get("trajectory", {})
+            for control_point in trajectory.get("controlPoints", []) if isinstance(trajectory, dict) else []:
+                point = [float(control_point.get("x", 0.0)), float(control_point.get("y", 0.0))]
                 if not coordinates or coordinates[-1] != point:
                     coordinates.append(point)
-            tail_node_id = ordered_ids[-1]
+            if sequence_id + 1 in nodes_by_sequence:
+                append_node(sequence_id + 1)
 
         if len(coordinates) < 2:
             return None
@@ -1845,7 +1924,7 @@ class MissionBackendNode(Node):
             "features": [
                 {
                     "type": "Feature",
-                    "properties": {"name": mission_id, "source": "vda5050_json"},
+                    "properties": {"name": mission_id, "source": "vda5050_order", "coordinate_frame": "map"},
                     "geometry": {"type": "LineString", "coordinates": coordinates},
                 }
             ],
@@ -1860,13 +1939,16 @@ class MissionBackendNode(Node):
         missions: list[dict[str, Any]] = []
         mission_files: list[Path] = []
         for missions_directory in mission_directories:
-            mission_files.extend(missions_directory.rglob("*.json"))
+            for mission_file in missions_directory.rglob("*.json"):
+                if mission_file.name in {"zoneSet.json", "map_georeference.json"}:
+                    continue
+                mission_files.append(mission_file)
         seen_paths: set[Path] = set()
         for mission_file in sorted(mission_files):
             if mission_file in seen_paths:
                 continue
             seen_paths.add(mission_file)
-            mission_id = mission_file.stem
+            mission_id = mission_file.parent.name if mission_file.name == "order.json" else mission_file.stem
             document = self._load_geojson_feature_collection(mission_file)
             route_geojson = None
             route_path = mission_file.parent / f"{mission_id}_path.geojson"
@@ -1905,6 +1987,7 @@ class MissionBackendNode(Node):
 
         candidates: list[Path] = []
         for missions_directory in [*_existing_paths([_resolve_path(self._missions_from_db_directory)]), *self._builtin_mission_directories()]:
+            candidates.append(missions_directory / mission_id / "order.json")
             candidates.append(missions_directory / f"{mission_id}.json")
             candidates.extend(missions_directory.rglob(f"{mission_id}.json"))
 
@@ -1995,8 +2078,15 @@ def main(args: list[str] | None = None) -> int:
         if server_thread is not None:
             server_thread.join(timeout=2.0)
         executor.shutdown()
-        node.destroy_node()
-        rclpy.shutdown()
+        try:
+            executor.remove_node(node)
+        except (RuntimeError, ValueError):
+            pass
+        try:
+            node.destroy_node()
+        except (KeyboardInterrupt, RuntimeError, AttributeError):
+            pass
+        rclpy.try_shutdown()
     return 0
 
 

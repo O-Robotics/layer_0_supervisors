@@ -9,6 +9,8 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <regex>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -25,13 +27,20 @@ namespace
 bool isValidVda5050MissionDocument(const nlohmann::json & document)
 {
   return document.is_object() &&
+         document.contains("version") &&
+         document.at("version").is_string() &&
+         document.at("version").get<std::string>().rfind("3.", 0) == 0 &&
+         document.contains("orderId") &&
+         document.at("orderId").is_string() &&
+         document.contains("orderUpdateId") &&
+         document.at("orderUpdateId").is_number_integer() &&
          document.contains("nodes") &&
          document.at("nodes").is_array() &&
          !document.at("nodes").empty() &&
          document.contains("edges") &&
          document.at("edges").is_array() &&
-         document.contains("missionGeometries") &&
-         document.at("missionGeometries").is_object();
+         !document.contains("missionGeometries") &&
+         !document.contains("missionReference");
 }
 
 nlohmann::json loadJsonDocument(const std::filesystem::path & path)
@@ -98,137 +107,19 @@ double clampToUnitInterval(const double value)
   return std::max(0.0, std::min(1.0, value));
 }
 
-std::pair<std::string, std::string> getEdgeEndpoints(const nlohmann::json & edge)
-{
-  return {
-    edge.at("startNodeId").get<std::string>(),
-    edge.at("endNodeId").get<std::string>()};
-}
-
-std::vector<std::string> buildNodeSequenceFromEdgeIds(
-  const nlohmann::json & edge_ids_json,
-  const std::unordered_map<std::string, nlohmann::json> & edges_by_id,
-  const bool require_closed_loop)
-{
-  if (!edge_ids_json.is_array() || edge_ids_json.empty()) {
-    throw std::runtime_error("Mission geometry edgeIds must be a non-empty array");
-  }
-
-  const std::string first_edge_id = edge_ids_json.at(0).get<std::string>();
-  const auto first_edge_it = edges_by_id.find(first_edge_id);
-  if (first_edge_it == edges_by_id.end()) {
-    throw std::runtime_error("Mission geometry references unknown edgeId: " + first_edge_id);
-  }
-
-  const auto [first_start, first_end] = getEdgeEndpoints(first_edge_it->second);
-  std::vector<std::string> node_sequence{first_start, first_end};
-
-  for (std::size_t index = 1; index < edge_ids_json.size(); ++index) {
-    const std::string edge_id = edge_ids_json.at(index).get<std::string>();
-    const auto edge_it = edges_by_id.find(edge_id);
-    if (edge_it == edges_by_id.end()) {
-      throw std::runtime_error("Mission geometry references unknown edgeId: " + edge_id);
-    }
-
-    const auto [start_node_id, end_node_id] = getEdgeEndpoints(edge_it->second);
-    const std::string & tail = node_sequence.back();
-    if (start_node_id == tail) {
-      node_sequence.push_back(end_node_id);
-      continue;
-    }
-    if (end_node_id == tail) {
-      node_sequence.push_back(start_node_id);
-      continue;
-    }
-
-    throw std::runtime_error("Mission geometry edge chain is disconnected at edgeId: " + edge_id);
-  }
-
-  if (require_closed_loop && node_sequence.front() != node_sequence.back()) {
-    throw std::runtime_error("Mission polygon edges do not form a closed loop");
-  }
-
-  return node_sequence;
-}
-
-std::vector<GeoPoint> buildPolygonFromEdgeIds(
-  const nlohmann::json & edge_ids_json,
-  const std::unordered_map<std::string, GeoPoint> & nodes_by_id,
-  const std::unordered_map<std::string, nlohmann::json> & edges_by_id)
-{
-  const auto node_sequence = buildNodeSequenceFromEdgeIds(edge_ids_json, edges_by_id, true);
-  std::vector<GeoPoint> polygon;
-  polygon.reserve(node_sequence.size());
-  for (const auto & node_id : node_sequence) {
-    polygon.push_back(nodes_by_id.at(node_id));
-  }
-  if (polygon.front().latitude == polygon.back().latitude &&
-    polygon.front().longitude == polygon.back().longitude)
-  {
-    polygon.pop_back();
-  }
-  return polygon;
-}
-
-std::vector<MissionPathWaypoint> buildCoverageWaypoints(
-  const nlohmann::json & edge_ids_json,
-  const std::unordered_map<std::string, GeoPoint> & nodes_by_id,
-  const std::unordered_map<std::string, double> & node_theta_by_id,
-  const std::unordered_map<std::string, nlohmann::json> & edges_by_id)
-{
-  const auto node_sequence = buildNodeSequenceFromEdgeIds(edge_ids_json, edges_by_id, false);
-  std::vector<MissionPathWaypoint> waypoints;
-  waypoints.reserve(node_sequence.size());
-  for (const auto & node_id : node_sequence) {
-    if (!waypoints.empty() && waypoints.back().node_id == node_id) {
-      continue;
-    }
-    waypoints.push_back(
-      MissionPathWaypoint{node_id, nodes_by_id.at(node_id), MapPoint{}, node_theta_by_id.at(node_id), false});
-  }
-  return waypoints;
-}
-
-std::vector<MapPoint> buildLocalPolygonFromEdgeIds(
-  const nlohmann::json & edge_ids_json,
-  const std::unordered_map<std::string, MapPoint> & nodes_by_id,
-  const std::unordered_map<std::string, nlohmann::json> & edges_by_id)
-{
-  const auto node_sequence = buildNodeSequenceFromEdgeIds(edge_ids_json, edges_by_id, true);
-  std::vector<MapPoint> polygon;
-  polygon.reserve(node_sequence.size());
-  for (const auto & node_id : node_sequence) {
-    polygon.push_back(nodes_by_id.at(node_id));
-  }
-  if (!polygon.empty() &&
-    polygon.front().x == polygon.back().x &&
-    polygon.front().y == polygon.back().y)
-  {
-    polygon.pop_back();
-  }
-  return polygon;
-}
-
-std::vector<MissionPathWaypoint> buildLocalCoverageWaypoints(
-  const nlohmann::json & edge_ids_json,
-  const std::unordered_map<std::string, MapPoint> & nodes_by_id,
-  const std::unordered_map<std::string, double> & node_theta_by_id,
-  const std::unordered_map<std::string, nlohmann::json> & edges_by_id)
-{
-  const auto node_sequence = buildNodeSequenceFromEdgeIds(edge_ids_json, edges_by_id, false);
-  std::vector<MissionPathWaypoint> waypoints;
-  waypoints.reserve(node_sequence.size());
-  for (const auto & node_id : node_sequence) {
-    if (!waypoints.empty() && waypoints.back().node_id == node_id) {
-      continue;
-    }
-    waypoints.push_back(
-      MissionPathWaypoint{node_id, GeoPoint{}, nodes_by_id.at(node_id), node_theta_by_id.at(node_id), true});
-  }
-  return waypoints;
-}
-
 }  // namespace
+
+bool isFiniteNumber(const nlohmann::json & value);
+std::string requireString(
+  const nlohmann::json & document,
+  const std::string & key,
+  const std::string & context);
+std::uint32_t requireUint32(
+  const nlohmann::json & document,
+  const std::string & key,
+  const std::string & context);
+void requireActionsArray(const nlohmann::json & document, const std::string & context);
+MapExtent parseBounds(const nlohmann::json & bounds);
 
 void Vda5050MissionParser::loadMission(const Vda5050MissionBuildConfig & config)
 {
@@ -236,9 +127,12 @@ void Vda5050MissionParser::loadMission(const Vda5050MissionBuildConfig & config)
   working_zones_.clear();
   no_go_zones_.clear();
   mission_waypoints_.clear();
+  map_georeferences_.clear();
+  order_map_ids_.clear();
   projection_initialized_ = false;
 
-  std::ifstream input_stream(resolveMissionPath(config.mission_path));
+  const std::filesystem::path order_path = packageOrderPath(resolveMissionPath(config.mission_path));
+  std::ifstream input_stream(order_path);
   if (!input_stream.is_open()) {
     throw std::runtime_error("Failed to open mission file: " + config.mission_path);
   }
@@ -249,7 +143,15 @@ void Vda5050MissionParser::loadMission(const Vda5050MissionBuildConfig & config)
   if (document.contains("features") && document.at("features").is_array()) {
     loadFromLegacyGeoJson(document);
   } else if (document.contains("nodes") && document.contains("edges")) {
-    loadFromVda5050Mission(document);
+    validateVda5050Order(document);
+    loadMapGeoreference(order_path);
+    loadFromVda5050Order(document);
+    const auto zone_set_path = packageZoneSetPath(order_path);
+    if (std::filesystem::exists(zone_set_path)) {
+      const auto zone_set = loadJsonDocument(zone_set_path);
+      validateVda5050ZoneSet(zone_set);
+      loadVda5050ZoneSet(zone_set);
+    }
   } else {
     throw std::runtime_error(
             "Mission file is neither legacy GeoJSON nor VDA5050-style mission JSON");
@@ -262,7 +164,7 @@ void Vda5050MissionParser::loadMission(const Vda5050MissionBuildConfig & config)
 
 MissionIdentity Vda5050MissionParser::inspectMissionIdentity(const std::string & mission_path) const
 {
-  return extractMissionIdentity(loadJsonDocument(resolveMissionPath(mission_path)));
+  return extractMissionIdentity(loadJsonDocument(packageOrderPath(resolveMissionPath(mission_path))));
 }
 
 void Vda5050MissionParser::loadFromLegacyGeoJson(const nlohmann::json & document)
@@ -285,95 +187,307 @@ void Vda5050MissionParser::loadFromLegacyGeoJson(const nlohmann::json & document
   }
 }
 
-void Vda5050MissionParser::loadFromVda5050Mission(const nlohmann::json & document)
+void Vda5050MissionParser::loadFromVda5050Order(const nlohmann::json & document)
 {
-  const std::string coordinate_frame = document.contains("missionReference") &&
-    document.at("missionReference").is_object() &&
-    document.at("missionReference").contains("coordinateFrame") &&
-    document.at("missionReference").at("coordinateFrame").is_string() ?
-    normalizeZoneType(document.at("missionReference").at("coordinateFrame").get<std::string>()) :
-    std::string{};
-  const bool use_local_frame = coordinate_frame == "odom" || coordinate_frame == "local";
-
-  std::unordered_map<std::string, GeoPoint> nodes_by_id;
-  std::unordered_map<std::string, MapPoint> local_nodes_by_id;
-  std::unordered_map<std::string, double> node_theta_by_id;
-  std::unordered_map<std::string, nlohmann::json> edges_by_id;
-
+  std::map<std::uint32_t, nlohmann::json> nodes_by_sequence_id;
+  std::map<std::uint32_t, nlohmann::json> edges_by_sequence_id;
   for (const auto & node : document.at("nodes")) {
-    const auto & position = node.at("nodePosition");
-    const std::string node_id = node.at("nodeId").get<std::string>();
-    if (use_local_frame) {
-      local_nodes_by_id.emplace(
-        node_id,
-        MapPoint{position.at("x").get<double>(), position.at("y").get<double>()});
-    } else {
-      nodes_by_id.emplace(
-        node_id,
-        GeoPoint{position.at("y").get<double>(), position.at("x").get<double>()});
-    }
-    node_theta_by_id.emplace(node_id, position.value("theta", 0.0));
+    nodes_by_sequence_id.emplace(node.at("sequenceId").get<std::uint32_t>(), node);
+    order_map_ids_.insert(node.at("nodePosition").at("mapId").get<std::string>());
   }
-
   for (const auto & edge : document.at("edges")) {
-    edges_by_id.emplace(edge.at("edgeId").get<std::string>(), edge);
+    edges_by_sequence_id.emplace(edge.at("sequenceId").get<std::uint32_t>(), edge);
   }
 
-  const auto & mission_geometries = document.at("missionGeometries");
+  for (const auto & map_id : order_map_ids_) {
+    if (map_georeferences_.find(map_id) == map_georeferences_.end()) {
+      throw std::runtime_error("VDA5050 order references mapId without map_georeference: " + map_id);
+    }
+  }
 
-  if (mission_geometries.contains("workingZones")) {
-    for (const auto & zone : mission_geometries.at("workingZones")) {
-      if (use_local_frame) {
-        PolygonZone local_zone;
-        local_zone.name = zone.value("zoneId", "working_zone");
-        local_zone.zone_type = normalizeZoneType(zone.value("zoneType", config_.working_zone_value));
-        local_zone.vertices = buildLocalPolygonFromEdgeIds(zone.at("edgeIds"), local_nodes_by_id, edges_by_id);
-        if (local_zone.zone_type == normalizeZoneType(config_.no_go_zone_value)) {
-          no_go_zones_.push_back(local_zone);
-        } else {
-          working_zones_.push_back(local_zone);
-        }
-      } else {
-        projectAndStoreZone(
-          buildPolygonFromEdgeIds(zone.at("edgeIds"), nodes_by_id, edges_by_id),
-          zone.value("zoneId", "working_zone"),
-          normalizeZoneType(zone.value("zoneType", config_.working_zone_value)));
+  std::vector<MissionPathWaypoint> route;
+  route.reserve(nodes_by_sequence_id.size());
+  const auto append_node_position = [&route](const nlohmann::json & node) {
+      const auto & position = node.at("nodePosition");
+      route.push_back(
+        MissionPathWaypoint{
+          node.at("nodeId").get<std::string>(),
+          GeoPoint{},
+          MapPoint{position.at("x").get<double>(), position.at("y").get<double>()},
+          position.value("theta", 0.0),
+          true});
+    };
+
+  append_node_position(nodes_by_sequence_id.at(0U));
+  for (std::uint32_t sequence_id = 1U; sequence_id < nodes_by_sequence_id.rbegin()->first;
+    sequence_id += 2U)
+  {
+    const auto & edge = edges_by_sequence_id.at(sequence_id);
+    if (edge.contains("trajectory") && edge.at("trajectory").is_object() &&
+      edge.at("trajectory").contains("controlPoints") &&
+      edge.at("trajectory").at("controlPoints").is_array())
+    {
+      for (const auto & control_point : edge.at("trajectory").at("controlPoints")) {
+        route.push_back(
+          MissionPathWaypoint{
+            edge.at("edgeId").get<std::string>(),
+            GeoPoint{},
+            MapPoint{control_point.at("x").get<double>(), control_point.at("y").get<double>()},
+            0.0,
+            true});
+      }
+    }
+    append_node_position(nodes_by_sequence_id.at(sequence_id + 1U));
+  }
+  loadCoveragePath(route);
+}
+
+void Vda5050MissionParser::loadVda5050ZoneSet(const nlohmann::json & document)
+{
+  const auto & zone_set = document.at("zoneSet");
+  const std::string map_id = zone_set.at("mapId").get<std::string>();
+  if (map_georeferences_.find(map_id) == map_georeferences_.end()) {
+    throw std::runtime_error("zoneSet references mapId without map_georeference: " + map_id);
+  }
+  for (const auto & zone_document : zone_set.at("zones")) {
+    PolygonZone zone;
+    zone.name = zone_document.at("zoneId").get<std::string>();
+    zone.zone_type = zone_document.at("zoneType").get<std::string>();
+    for (const auto & vertex : zone_document.at("vertices")) {
+      zone.vertices.push_back(MapPoint{vertex.at("x").get<double>(), vertex.at("y").get<double>()});
+    }
+    if (zone.zone_type == "BLOCKED") {
+      no_go_zones_.push_back(zone);
+    }
+  }
+}
+
+void Vda5050MissionParser::loadMapGeoreference(const std::filesystem::path & order_path)
+{
+  const auto metadata_path = packageMapGeoreferencePath(order_path);
+  if (!std::filesystem::exists(metadata_path)) {
+    throw std::runtime_error("VDA5050 mission package is missing map_georeference.json");
+  }
+  const auto document = loadJsonDocument(metadata_path);
+  if (!document.is_object()) {
+    throw std::runtime_error("map_georeference.json must be a JSON object");
+  }
+  const auto maps_document = document.contains("maps") ? document.at("maps") : nlohmann::json::array({document});
+  if (!maps_document.is_array() || maps_document.empty()) {
+    throw std::runtime_error("map_georeference.json must define at least one map");
+  }
+
+  for (const auto & map_document : maps_document) {
+    MapGeoreference georeference;
+    georeference.map_id = requireString(map_document, "mapId", "map_georeference map");
+    georeference.map_version = map_document.value("mapVersion", std::string{});
+    georeference.crs = map_document.value("crs", std::string{"EPSG:4326"});
+    georeference.units = map_document.value("units", std::string{"m"});
+    georeference.frame = map_document.value("frame", std::string{"ENU"});
+    if (georeference.units != "m") {
+      throw std::runtime_error("map_georeference units must be \"m\" for mapId " + georeference.map_id);
+    }
+    for (const auto & key : {"originLatitude", "originLongitude"}) {
+      if (!map_document.contains(key) || !isFiniteNumber(map_document.at(key))) {
+        throw std::runtime_error(std::string("map_georeference map is missing finite ") + key);
+      }
+    }
+    georeference.origin_latitude = map_document.at("originLatitude").get<double>();
+    georeference.origin_longitude = map_document.at("originLongitude").get<double>();
+    georeference.origin_altitude = map_document.value("originAltitude", 0.0);
+    georeference.yaw = map_document.value("yaw", 0.0);
+    georeference.bounds = parseBounds(map_document.at("bounds"));
+    if (georeference.bounds.max_x <= georeference.bounds.min_x ||
+      georeference.bounds.max_y <= georeference.bounds.min_y)
+    {
+      throw std::runtime_error("map_georeference bounds are empty for mapId " + georeference.map_id);
+    }
+
+    map_georeferences_.emplace(georeference.map_id, georeference);
+
+    PolygonZone bounds_zone;
+    bounds_zone.name = georeference.map_id + "_bounds";
+    bounds_zone.zone_type = normalizeZoneType(config_.working_zone_value);
+    bounds_zone.vertices = {
+      MapPoint{georeference.bounds.min_x, georeference.bounds.min_y},
+      MapPoint{georeference.bounds.max_x, georeference.bounds.min_y},
+      MapPoint{georeference.bounds.max_x, georeference.bounds.max_y},
+      MapPoint{georeference.bounds.min_x, georeference.bounds.max_y}};
+    working_zones_.push_back(bounds_zone);
+
+    if (!projection_initialized_) {
+      projector_.Reset(
+        georeference.origin_latitude,
+        georeference.origin_longitude,
+        georeference.origin_altitude);
+      projection_initialized_ = true;
+    }
+  }
+}
+
+void Vda5050MissionParser::validateVda5050Order(const nlohmann::json & document) const
+{
+  for (const auto & forbidden_key : {"missionReference", "missionGeometries", "coveragePathEdgeIds",
+      "workingZones", "noGoZones", "mission_type"})
+  {
+    if (document.contains(forbidden_key)) {
+      throw std::runtime_error(std::string("VDA5050 order contains non-compliant field: ") + forbidden_key);
+    }
+  }
+  for (const auto & key : {"headerId", "timestamp", "version", "manufacturer", "serialNumber",
+      "orderId", "orderUpdateId", "nodes", "edges"})
+  {
+    if (!document.contains(key)) {
+      throw std::runtime_error(std::string("VDA5050 order is missing required field: ") + key);
+    }
+  }
+  const std::string version = document.at("version").get<std::string>();
+  if (!isSupportedVda5050Version(version)) {
+    throw std::runtime_error("Unsupported VDA5050 version: " + version);
+  }
+  if (!document.at("nodes").is_array() || document.at("nodes").empty()) {
+    throw std::runtime_error("VDA5050 order nodes must be a non-empty array");
+  }
+  if (!document.at("edges").is_array()) {
+    throw std::runtime_error("VDA5050 order edges must be an array");
+  }
+  const auto & nodes = document.at("nodes");
+  const auto & edges = document.at("edges");
+  if (nodes.size() != edges.size() + 1U) {
+    throw std::runtime_error("VDA5050 order requires edges.size() == nodes.size() - 1");
+  }
+
+  std::map<std::uint32_t, std::string> node_id_by_sequence;
+  std::map<std::uint32_t, nlohmann::json> edge_by_sequence;
+  bool horizon_started = false;
+  for (const auto & node : nodes) {
+    const std::uint32_t sequence_id = requireUint32(node, "sequenceId", "VDA5050 node");
+    requireString(node, "nodeId", "VDA5050 node");
+    requireActionsArray(node, "VDA5050 node");
+    if (!node.contains("released") || !node.at("released").is_boolean()) {
+      throw std::runtime_error("VDA5050 node is missing boolean released");
+    }
+    if ((sequence_id % 2U) != 0U) {
+      throw std::runtime_error("VDA5050 node sequenceId must be even");
+    }
+    if (node_id_by_sequence.find(sequence_id) != node_id_by_sequence.end()) {
+      throw std::runtime_error("Duplicate VDA5050 node sequenceId");
+    }
+    const bool released = node.at("released").get<bool>();
+    if (sequence_id == 0U && !released) {
+      throw std::runtime_error("First VDA5050 node must be released");
+    }
+    if (horizon_started && released) {
+      throw std::runtime_error("Released VDA5050 node appears after horizon started");
+    }
+    horizon_started = horizon_started || !released;
+    if (!node.contains("nodePosition") || !node.at("nodePosition").is_object()) {
+      throw std::runtime_error("VDA5050 node is missing nodePosition object");
+    }
+    const auto & position = node.at("nodePosition");
+    if (!position.contains("x") || !isFiniteNumber(position.at("x")) ||
+      !position.contains("y") || !isFiniteNumber(position.at("y")) ||
+      !position.contains("mapId") || !position.at("mapId").is_string())
+    {
+      throw std::runtime_error("VDA5050 nodePosition requires finite x/y meters and string mapId");
+    }
+    if (position.contains("theta") && !isFiniteNumber(position.at("theta"))) {
+      throw std::runtime_error("VDA5050 nodePosition theta must be finite when present");
+    }
+    node_id_by_sequence.emplace(sequence_id, node.at("nodeId").get<std::string>());
+  }
+  horizon_started = false;
+  for (const auto & edge : edges) {
+    const std::uint32_t sequence_id = requireUint32(edge, "sequenceId", "VDA5050 edge");
+    requireString(edge, "edgeId", "VDA5050 edge");
+    requireString(edge, "startNodeId", "VDA5050 edge");
+    requireString(edge, "endNodeId", "VDA5050 edge");
+    requireActionsArray(edge, "VDA5050 edge");
+    if (!edge.contains("released") || !edge.at("released").is_boolean()) {
+      throw std::runtime_error("VDA5050 edge is missing boolean released");
+    }
+    if ((sequence_id % 2U) != 1U) {
+      throw std::runtime_error("VDA5050 edge sequenceId must be odd");
+    }
+    if (edge_by_sequence.find(sequence_id) != edge_by_sequence.end()) {
+      throw std::runtime_error("Duplicate VDA5050 edge sequenceId");
+    }
+    const bool released = edge.at("released").get<bool>();
+    if (horizon_started && released) {
+      throw std::runtime_error("Released VDA5050 edge appears after horizon started");
+    }
+    horizon_started = horizon_started || !released;
+    edge_by_sequence.emplace(sequence_id, edge);
+  }
+  for (std::uint32_t sequence_id = 0U; sequence_id < nodes.size() * 2U; sequence_id += 2U) {
+    if (node_id_by_sequence.find(sequence_id) == node_id_by_sequence.end()) {
+      throw std::runtime_error("VDA5050 node sequenceIds are not continuous");
+    }
+  }
+  for (std::uint32_t sequence_id = 1U; sequence_id < edges.size() * 2U; sequence_id += 2U) {
+    const auto edge_it = edge_by_sequence.find(sequence_id);
+    if (edge_it == edge_by_sequence.end()) {
+      throw std::runtime_error("VDA5050 edge sequenceIds are not continuous");
+    }
+    const auto & edge = edge_it->second;
+    if (edge.at("startNodeId").get<std::string>() != node_id_by_sequence.at(sequence_id - 1U) ||
+      edge.at("endNodeId").get<std::string>() != node_id_by_sequence.at(sequence_id + 1U))
+    {
+      throw std::runtime_error("VDA5050 edge endpoints do not match adjacent sequence nodes");
+    }
+  }
+}
+
+void Vda5050MissionParser::validateVda5050ZoneSet(const nlohmann::json & document) const
+{
+  if (!document.is_object() || !document.contains("zoneSet") || !document.at("zoneSet").is_object()) {
+    throw std::runtime_error("zoneSet.json must be an official VDA5050 zoneSet message");
+  }
+  const std::string version = requireString(document, "version", "VDA5050 zoneSet");
+  if (!isSupportedVda5050Version(version)) {
+    throw std::runtime_error("Unsupported VDA5050 zoneSet version: " + version);
+  }
+  const auto & zone_set = document.at("zoneSet");
+  requireString(zone_set, "mapId", "VDA5050 zoneSet");
+  requireString(zone_set, "zoneSetId", "VDA5050 zoneSet");
+  if (!zone_set.contains("zones") || !zone_set.at("zones").is_array()) {
+    throw std::runtime_error("VDA5050 zoneSet is missing zones array");
+  }
+  static const std::set<std::string> kSupportedZoneTypes{
+    "BLOCKED", "LINE_GUIDED", "RELEASE", "COORDINATED_REPLANNING", "SPEED_LIMIT",
+    "ACTION", "PRIORITY", "PENALTY", "DIRECTED", "BIDIRECTED"};
+  for (const auto & zone : zone_set.at("zones")) {
+    requireString(zone, "zoneId", "VDA5050 zone");
+    const std::string zone_type = requireString(zone, "zoneType", "VDA5050 zone");
+    if (kSupportedZoneTypes.find(zone_type) == kSupportedZoneTypes.end()) {
+      throw std::runtime_error("Unsupported VDA5050 zoneType: " + zone_type);
+    }
+    if (!zone.contains("vertices") || !zone.at("vertices").is_array() ||
+      zone.at("vertices").size() < 3U)
+    {
+      throw std::runtime_error("VDA5050 zone requires at least three vertices");
+    }
+    for (const auto & vertex : zone.at("vertices")) {
+      if (!vertex.is_object() || !isFiniteNumber(vertex.at("x")) || !isFiniteNumber(vertex.at("y"))) {
+        throw std::runtime_error("VDA5050 zone vertex requires finite x/y meters");
       }
     }
   }
+}
 
-  if (mission_geometries.contains("noGoZones")) {
-    for (const auto & zone : mission_geometries.at("noGoZones")) {
-      if (use_local_frame) {
-        PolygonZone local_zone;
-        local_zone.name = zone.value("zoneId", "no_go_zone");
-        local_zone.zone_type = normalizeZoneType(zone.value("zoneType", config_.no_go_zone_value));
-        local_zone.vertices = buildLocalPolygonFromEdgeIds(zone.at("edgeIds"), local_nodes_by_id, edges_by_id);
-        no_go_zones_.push_back(local_zone);
-      } else {
-        projectAndStoreZone(
-          buildPolygonFromEdgeIds(zone.at("edgeIds"), nodes_by_id, edges_by_id),
-          zone.value("zoneId", "no_go_zone"),
-          normalizeZoneType(zone.value("zoneType", config_.no_go_zone_value)));
-      }
-    }
+bool Vda5050MissionParser::isSupportedVda5050Version(const std::string & version) const
+{
+  static const std::regex version_pattern(R"(^3\.[0-9]+\.[0-9]+$)");
+  if (!std::regex_match(version, version_pattern)) {
+    return false;
   }
-
-  if (mission_geometries.contains("coveragePathEdgeIds")) {
-    if (use_local_frame) {
-      mission_waypoints_ = buildLocalCoverageWaypoints(
-        mission_geometries.at("coveragePathEdgeIds"),
-        local_nodes_by_id,
-        node_theta_by_id,
-        edges_by_id);
-    } else {
-      loadCoveragePath(
-        mission_geometries.at("coveragePathEdgeIds"),
-        nodes_by_id,
-        node_theta_by_id,
-        edges_by_id);
-    }
+  if (config_.supported_vda5050_versions.empty()) {
+    return true;
   }
+  return std::find(
+    config_.supported_vda5050_versions.begin(),
+    config_.supported_vda5050_versions.end(),
+    version) != config_.supported_vda5050_versions.end();
 }
 
 RasterizedMap Vda5050MissionParser::buildSuggestedGlobalCostmap(
@@ -537,24 +651,37 @@ void Vda5050MissionParser::saveMissionWaypointsArtifact(const std::string & path
   fs::create_directories(fs::path(path).parent_path());
 
   nlohmann::json coordinates = nlohmann::json::array();
-  bool use_local_frame = false;
+  nlohmann::json wgs84_coordinates = nlohmann::json::array();
   for (const auto & waypoint : mission_waypoints_) {
-    if (waypoint.use_local_frame) {
-      coordinates.push_back({waypoint.map_point.x, waypoint.map_point.y});
-      use_local_frame = true;
-    } else {
-      coordinates.push_back({waypoint.geo_point.longitude, waypoint.geo_point.latitude});
+    coordinates.push_back({waypoint.map_point.x, waypoint.map_point.y});
+    if (projection_initialized_) {
+      double latitude = 0.0;
+      double longitude = 0.0;
+      double altitude = 0.0;
+      projector_.Reverse(waypoint.map_point.x, waypoint.map_point.y, 0.0, latitude, longitude, altitude);
+      wgs84_coordinates.push_back({longitude, latitude});
     }
+  }
+
+  nlohmann::json map_ids = nlohmann::json::array();
+  for (const auto & map_id : order_map_ids_) {
+    map_ids.push_back(map_id);
+  }
+  nlohmann::json properties = {
+    {"name", "coverage_path"},
+    {"source", "vda5050_order"},
+    {"coordinate_frame", "map"},
+    {"map_ids", map_ids}};
+  if (projection_initialized_) {
+    properties["georeference_type"] = "local_enu_to_wgs84";
+    properties["wgs84_coordinates"] = wgs84_coordinates;
   }
 
   nlohmann::json document = {
     {"type", "FeatureCollection"},
     {"features", {{
       {"type", "Feature"},
-      {"properties", {
-         {"name", "coverage_path"},
-         {"source", "vda5050_mission"},
-         {"coordinate_frame", use_local_frame ? "odom" : "wgs84"}}},
+      {"properties", properties},
       {"geometry", {{"type", "LineString"}, {"coordinates", coordinates}}}
     }}}
   };
@@ -612,26 +739,9 @@ void Vda5050MissionParser::projectAndStoreZone(
 }
 
 void Vda5050MissionParser::loadCoveragePath(
-  const nlohmann::json & coverage_edge_ids,
-  const std::unordered_map<std::string, GeoPoint> & nodes_by_id,
-  const std::unordered_map<std::string, double> & node_theta_by_id,
-  const std::unordered_map<std::string, nlohmann::json> & edges_by_id)
+  const std::vector<MissionPathWaypoint> & coverage_path)
 {
-  mission_waypoints_ = buildCoverageWaypoints(
-    coverage_edge_ids,
-    nodes_by_id,
-    node_theta_by_id,
-    edges_by_id);
-
-  if (projection_initialized_) {
-    for (auto & waypoint : mission_waypoints_) {
-      double x = 0.0;
-      double y = 0.0;
-      double z = 0.0;
-      projector_.Forward(waypoint.geo_point.latitude, waypoint.geo_point.longitude, 0.0, x, y, z);
-      waypoint.map_point = MapPoint{x, y};
-    }
-  }
+  mission_waypoints_ = coverage_path;
 }
 
 bool Vda5050MissionParser::pointInPolygon(const MapPoint & point, const PolygonZone & polygon) const
@@ -889,6 +999,27 @@ std::string Vda5050MissionParser::normalizeZoneType(const std::string & zone_typ
   return normalized;
 }
 
+std::filesystem::path Vda5050MissionParser::packageOrderPath(
+  const std::filesystem::path & mission_path)
+{
+  if (std::filesystem::is_directory(mission_path)) {
+    return mission_path / "order.json";
+  }
+  return mission_path;
+}
+
+std::filesystem::path Vda5050MissionParser::packageZoneSetPath(
+  const std::filesystem::path & order_path)
+{
+  return order_path.parent_path() / "zoneSet.json";
+}
+
+std::filesystem::path Vda5050MissionParser::packageMapGeoreferencePath(
+  const std::filesystem::path & order_path)
+{
+  return order_path.parent_path() / "map_georeference.json";
+}
+
 MissionParserNode::MissionParserNode(const rclcpp::NodeOptions & options)
 : rclcpp::Node("vda5050_parser_node", options)
 {
@@ -908,6 +1039,9 @@ MissionParserNode::MissionParserNode(const rclcpp::NodeOptions & options)
     "mission_projection_origin_longitude", 0.0);
   mission_projection_origin_altitude_ = declare_parameter<double>(
     "mission_projection_origin_altitude", 0.0);
+  supported_vda5050_versions_ = declare_parameter<std::vector<std::string>>(
+    "supported_vda5050_versions",
+    std::vector<std::string>{"3.0.0", "3.0.1", "3.1.0"});
   auto_build_on_start_ = declare_parameter<bool>("auto_build_on_start", true);
   watch_for_updates_ = declare_parameter<bool>("watch_for_updates", true);
   build_discovered_missions_ = declare_parameter<bool>("build_discovered_missions", false);
@@ -1002,9 +1136,9 @@ std::vector<std::filesystem::path> MissionParserNode::discoverMissionPaths()
     return mission_paths;
   }
 
-  auto maybe_add_mission = [this, &mission_paths](const std::filesystem::path & candidate_path) {
+  auto maybe_add_mission = [&mission_paths](const std::filesystem::path & candidate_path) {
       if (!std::filesystem::is_regular_file(candidate_path) ||
-        candidate_path.extension() != mission_file_extension_)
+        candidate_path.filename() != "order.json")
       {
         return;
       }
@@ -1027,11 +1161,7 @@ std::vector<std::filesystem::path> MissionParserNode::discoverMissionPaths()
     if (!entry.is_directory()) {
       continue;
     }
-    for (const auto & nested_entry : std::filesystem::directory_iterator(entry.path())) {
-      if (nested_entry.is_regular_file()) {
-        maybe_add_mission(nested_entry.path());
-      }
-    }
+    maybe_add_mission(entry.path() / "order.json");
   }
 
   std::sort(mission_paths.begin(), mission_paths.end());
@@ -1072,16 +1202,18 @@ std::filesystem::path MissionParserNode::stageMissionFile(const std::filesystem:
   const std::filesystem::path staged_path =
     mission_folder / (identity.order_id + "_vda5050" + mission_file_extension_);
   std::filesystem::create_directories(mission_folder);
+  const std::filesystem::path source_order_path =
+    Vda5050MissionParser::packageOrderPath(mission_path);
 
-  if (mission_path == staged_path) {
+  if (source_order_path == staged_path) {
     return staged_path;
   }
 
-  const auto source_stamp = currentMissionStamp(mission_path);
+  const auto source_stamp = currentMissionStamp(source_order_path);
   bool should_copy = true;
   if (std::filesystem::exists(staged_path) && std::filesystem::is_regular_file(staged_path)) {
     std::error_code size_error;
-    const auto source_size = std::filesystem::file_size(mission_path, size_error);
+    const auto source_size = std::filesystem::file_size(source_order_path, size_error);
     if (!size_error) {
       std::error_code staged_size_error;
       const auto staged_size = std::filesystem::file_size(staged_path, staged_size_error);
@@ -1094,12 +1226,25 @@ std::filesystem::path MissionParserNode::stageMissionFile(const std::filesystem:
 
   if (should_copy) {
     std::filesystem::copy_file(
-      mission_path,
+      source_order_path,
       staged_path,
       std::filesystem::copy_options::overwrite_existing);
     std::error_code stamp_error;
     std::filesystem::last_write_time(staged_path, source_stamp, stamp_error);
   }
+
+  const auto copy_support_file = [&mission_folder](const std::filesystem::path & source_path) {
+      if (!std::filesystem::exists(source_path) || !std::filesystem::is_regular_file(source_path)) {
+        return;
+      }
+      const auto destination_path = mission_folder / source_path.filename();
+      std::filesystem::copy_file(
+        source_path,
+        destination_path,
+        std::filesystem::copy_options::overwrite_existing);
+    };
+  copy_support_file(Vda5050MissionParser::packageZoneSetPath(source_order_path));
+  copy_support_file(Vda5050MissionParser::packageMapGeoreferencePath(source_order_path));
   return staged_path;
 }
 
@@ -1115,6 +1260,7 @@ bool MissionParserNode::buildArtifactsForMission(const std::filesystem::path & m
     config.origin_latitude = mission_projection_origin_latitude_;
     config.origin_longitude = mission_projection_origin_longitude_;
     config.origin_altitude = mission_projection_origin_altitude_;
+    config.supported_vda5050_versions = supported_vda5050_versions_;
     mission_parser_->loadMission(config);
     const RasterizedMap rasterized_map = mission_parser_->buildSuggestedGlobalCostmap(
       mission_build_resolution_,
@@ -1244,6 +1390,73 @@ std::string MissionParserNode::staticCostmapBasenameForMission(
   const std::filesystem::path & mission_path) const
 {
   return missionStemForPath(mission_path) + "_static_costmap";
+}
+
+bool isFiniteNumber(const nlohmann::json & value)
+{
+  return value.is_number() && std::isfinite(value.get<double>());
+}
+
+std::string requireString(
+  const nlohmann::json & document,
+  const std::string & key,
+  const std::string & context)
+{
+  if (!document.contains(key) || !document.at(key).is_string()) {
+    throw std::runtime_error(context + " is missing string " + key);
+  }
+  return document.at(key).get<std::string>();
+}
+
+std::uint32_t requireUint32(
+  const nlohmann::json & document,
+  const std::string & key,
+  const std::string & context)
+{
+  if (!document.contains(key) || !document.at(key).is_number_integer()) {
+    throw std::runtime_error(context + " is missing uint32 " + key);
+  }
+  const auto value = document.at(key).get<std::int64_t>();
+  if (value < 0 || value > std::numeric_limits<std::uint32_t>::max()) {
+    throw std::runtime_error(context + " has out-of-range uint32 " + key);
+  }
+  return static_cast<std::uint32_t>(value);
+}
+
+void requireActionsArray(const nlohmann::json & document, const std::string & context)
+{
+  if (!document.contains("actions") || !document.at("actions").is_array()) {
+    throw std::runtime_error(context + " is missing VDA5050 actions array");
+  }
+}
+
+MapExtent parseBounds(const nlohmann::json & bounds)
+{
+  if (bounds.is_object()) {
+    for (const auto & key : {"min_x", "min_y", "max_x", "max_y"}) {
+      if (!bounds.contains(key) || !isFiniteNumber(bounds.at(key))) {
+        throw std::runtime_error(std::string("map_georeference bounds is missing finite ") + key);
+      }
+    }
+    return MapExtent{
+      bounds.at("min_x").get<double>(),
+      bounds.at("min_y").get<double>(),
+      bounds.at("max_x").get<double>(),
+      bounds.at("max_y").get<double>()};
+  }
+  if (bounds.is_array() && bounds.size() == 4U) {
+    for (const auto & value : bounds) {
+      if (!isFiniteNumber(value)) {
+        throw std::runtime_error("map_georeference bounds array must contain finite numbers");
+      }
+    }
+    return MapExtent{
+      bounds.at(0).get<double>(),
+      bounds.at(1).get<double>(),
+      bounds.at(2).get<double>(),
+      bounds.at(3).get<double>()};
+  }
+  throw std::runtime_error("map_georeference bounds must be an object or [min_x,min_y,max_x,max_y]");
 }
 
 void MissionParserNode::publishStatus(const std::string & state, const std::string & detail) const

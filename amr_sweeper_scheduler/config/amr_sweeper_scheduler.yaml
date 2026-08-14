@@ -2,7 +2,7 @@
   ros__parameters:
     # -- Mission sources and outputs ------------------------------------------
     schedule_ics_path:                  missions/database          # Explicit schedule file path. Leave empty to auto-discover the newest schedule_<timestamp>.ics file in missions_directory.
-    missions_directory:                 missions/database          # Folder containing schedule_<timestamp>.ics and synced VDA5050 mission files/subfolders.
+    missions_directory:                 missions/database          # Folder containing schedule_<timestamp>.ics and VDA5050 package folders with order.json.
     default_schedule_filename:          ""                            # Legacy fallback schedule filename if auto-discovery finds no schedule_<timestamp>.ics files.
     mission_file_extension:             .json                         # File suffix used when cataloging VDA5050 mission files.
     robot_id:                           ""                            # Optional robot identifier kept for metadata only. Leave empty to avoid robot-specific schedule binding.

@@ -10,6 +10,7 @@ find_package(ament_cmake REQUIRED)
 install(PROGRAMS
   scripts/backend_node.py
   scripts/frontend_http_node.py
+  scripts/mqtt_bridge_node.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

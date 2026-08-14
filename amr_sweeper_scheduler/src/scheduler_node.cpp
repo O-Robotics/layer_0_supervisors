@@ -1342,11 +1342,16 @@ void SchedulerNode::refresh_mission_catalog()
   for (const auto & entry : std::filesystem::directory_iterator(directory)) {
     if (entry.is_regular_file() && entry.path().extension() == mission_file_extension_) {
       const std::filesystem::path canonical_path =
-        directory / entry.path().stem() / (entry.path().stem().string() + mission_file_extension_);
+        directory / entry.path().stem() / "order.json";
       mission_catalog_[entry.path().stem().string()] = canonical_path.string();
       continue;
     }
     if (!entry.is_directory()) {
+      continue;
+    }
+    const std::filesystem::path order_path = entry.path() / "order.json";
+    if (std::filesystem::is_regular_file(order_path)) {
+      mission_catalog_[entry.path().filename().string()] = order_path.string();
       continue;
     }
     for (const auto & nested_entry : std::filesystem::directory_iterator(entry.path())) {

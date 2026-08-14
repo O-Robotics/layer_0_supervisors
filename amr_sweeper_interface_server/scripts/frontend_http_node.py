@@ -2149,12 +2149,12 @@ class MissionFrontendRenderer:
     </section>
     <section class="card" style="margin-top: 18px;">
       <h2>Upload VDA5050 Mission</h2>
-      <div class="muted">Paste a VDA5050 mission JSON document. You can optionally provide a mission id; otherwise `orderId` is used.</div>
+      <div class="muted">Paste a VDA5050 package JSON object with `order`, optional `zoneSet`, and `map_georeference`. You can optionally provide a mission id; otherwise `order.orderId` is used.</div>
       <div style="display: grid; gap: 12px; margin-top: 14px;">
         <input id="upload-file" type="file" accept=".json,application/json" style="padding: 12px; border-radius: 12px; border: 1px solid var(--line); background: rgba(18, 20, 21, 0.82); color: var(--ink);">
         <input id="upload-mission-id" type="text" placeholder="Optional mission id" style="padding: 12px; border-radius: 12px; border: 1px solid var(--line); background: rgba(18, 20, 21, 0.82); color: var(--ink);">
         <label class="muted"><input id="upload-overwrite" type="checkbox"> Overwrite existing mission with same id</label>
-        <textarea id="upload-json" rows="14" placeholder='{{"orderId":"field_block_12","nodes":[...],"edges":[...]}}' style="width: 100%; padding: 12px; border-radius: 12px; border: 1px solid var(--line); background: rgba(18, 20, 21, 0.82); color: var(--ink); font-family: monospace;"></textarea>
+        <textarea id="upload-json" rows="14" placeholder='{{"order":{{"orderId":"field_block_12","version":"3.0.0","nodes":[...],"edges":[...]}},"map_georeference":{{"mapId":"field_block_12_map","originLatitude":55.0,"originLongitude":10.0,"bounds":{{"min_x":0,"min_y":0,"max_x":10,"max_y":10}}}}}}' style="width: 100%; padding: 12px; border-radius: 12px; border: 1px solid var(--line); background: rgba(18, 20, 21, 0.82); color: var(--ink); font-family: monospace;"></textarea>
         <div>
           <button id="upload-button">Upload Mission</button>
         </div>

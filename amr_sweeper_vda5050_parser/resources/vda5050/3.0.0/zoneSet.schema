@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "VDA5050 zoneSet Message",
+  "description": "Local vendored schema anchor for VDA5050 v3.0.0 zoneSet messages. Runtime validation also applies semantic checks in vda5050_parser_node.cpp.",
+  "type": "object",
+  "required": ["headerId", "timestamp", "version", "manufacturer", "serialNumber", "zoneSet"],
+  "properties": {
+    "version": {"const": "3.0.0"},
+    "zoneSet": {"type": "object", "required": ["mapId", "zoneSetId", "zones"]}
+  }
+}

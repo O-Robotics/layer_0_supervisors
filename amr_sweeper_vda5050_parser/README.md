@@ -1,6 +1,6 @@
 # amr_sweeper_vda5050_parser
 
-Builds mission artifacts from VDA5050 mission files in `/missions/database`.
+Builds mission artifacts from VDA5050 mission package folders in `/missions/database`.
 
 This package is intended to run asynchronously in `IDLING`, but the default behavior
 is lazy: source missions are discovered without staging artifacts, and artifacts are
@@ -8,10 +8,14 @@ built when a mission is selected or when the mission executor requests a rebuild
 
 ## What It Does
 
-- Watches `/missions/database` for VDA5050 mission `.json` files
+- Watches `/missions/database/<mission_id>/order.json` VDA5050 package folders
+- Requires `map_georeference.json` beside every `order.json`
+- Optionally applies `zoneSet.json` beside the order; `BLOCKED` zones become no-go costmap areas
 - Stages the selected mission into its own subfolder under the configured `missions_log_directory`
 - Builds selected per-mission artifacts:
   - `<missions_log_directory>/<order_id>/<order_id>_vda5050.json`
+  - `<missions_log_directory>/<order_id>/map_georeference.json`
+  - `<missions_log_directory>/<order_id>/zoneSet.json` when present
   - `<missions_log_directory>/<order_id>/<order_id>_static_costmap.pgm`
   - `<missions_log_directory>/<order_id>/<order_id>_static_costmap.yaml`
   - `<missions_log_directory>/<order_id>/<order_id>_path_planned.geojson`
@@ -42,8 +46,8 @@ YAML style guide for package config:
 ## Key Parameters
 
 - `mission_path`: optional active mission file used for an on-demand rebuild; leave empty for auto-discovery
-- `missions_directory`: folder containing incoming VDA5050 mission files and per-mission subfolders
-- `mission_file_extension`: mission file suffix to scan for
+- `missions_directory`: folder containing VDA5050 mission package subfolders
+- `supported_vda5050_versions`: accepted VDA5050 major-version-3 message versions
 - `auto_build_on_start`: build the active mission immediately on startup
 - `watch_for_updates`: keep checking the selected mission for updates
 - `build_discovered_missions`: opt in to eagerly building every discovered mission; default is `false`

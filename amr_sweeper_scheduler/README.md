@@ -74,10 +74,11 @@ The scheduler is intended to run as a lightweight ROS 2 node launched by FSM sta
 - Runtime log enrichment may add `X-ACTUAL-START-UTC`, `X-ACTUAL-END-UTC`, `X-ACTUAL-DURATION-SECONDS`, and `X-RUNTIME-STATUS`.
 - Safety-stop events are appended as dedicated `SAFETY` `VEVENT`s so the same schedule file can act as both future plan and runtime log.
 - Mission files are expected under `missions/database`, and execution history is written under `missions/logs`.
-- A synced mission is typically staged as `missions/database/<mission_id>/<mission_id>.json`.
+- A synced VDA5050 mission is staged as `missions/database/<mission_id>/order.json` with
+  required `map_georeference.json` and optional `zoneSet.json` beside it.
 - Each execution creates a timestamped folder under `missions/logs/<mission_id>/`.
 - If exactly one mission JSON exists, the scheduler can use it as a fallback during initial testing.
-- The recommended convention is for `X-MISSION-ID` to match the mission folder and mission filename stem.
+- The recommended convention is for `X-MISSION-ID` to match the mission package folder name.
 - Built-in manual missions such as `3x3Sweep`, `SpotSweep`, `RecordMap`, and `Teleop` come from `amr_sweeper_navigation/missions`.
 - Status examples include `SCHED_ICS_NOT_FOUND path=/...`, `SCHED_ICS_LOAD_FAILED reason=...`, and `SCHED_ICS_LOADED events=4`.
 - `SCHED_ICS_LOAD_FAILED reason=ICS contains no VEVENTs` is emitted as a warning.

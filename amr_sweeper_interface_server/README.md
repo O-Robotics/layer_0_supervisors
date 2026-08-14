@@ -5,6 +5,7 @@ Provides the AMR Sweeper operator interface stack as a standalone layer 0 packag
 Structure:
 - `scripts/backend_node.py` is the local-only backend entry point. It owns ROS topics/services, mission files, schedule files, and the raw JSONL API over a Unix domain socket.
 - `scripts/frontend_http_node.py` is the network-facing web frontend. It serves the local operator pages and adapts `/api/v1` HTTP requests to backend JSONL requests.
+- `scripts/mqtt_bridge_node.py` is a TODO sibling process for a future VDA5050 MQTT bridge. It must route through backend IPC, like the frontend, and must not write mission files or call ROS services directly.
 
 Responsibilities:
 - expose a local dashboard over TCP through the frontend node
@@ -12,7 +13,7 @@ Responsibilities:
 - show FSM state, GNSS latitude/longitude, battery state, and the active mission run folder
 - execute built-in manual missions and saved autonomous missions through `amr_sweeper_mission_executor`
 - stop the active mission through `amr_sweeper_mission_executor`
-- upload a VDA5050 mission JSON payload into `/missions/database` so it becomes executable
+- upload/import a VDA5050 mission package into `/missions/database/<mission_id>` so it becomes executable
 - provide a dedicated `/record-map` workflow page for starting `RecordMap`, previewing the latest GNSS overlay on satellite imagery, and saving named autonomous missions from the latest recorded map
 - let operators select a mission on the Missions page, preview its geometry before start, and choose per-mission launch preferences such as `Record rosbag`
 

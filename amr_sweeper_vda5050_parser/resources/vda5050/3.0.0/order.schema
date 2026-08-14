@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "VDA5050 Order Message",
+  "description": "Local vendored schema anchor for VDA5050 v3.0.0 order messages. Runtime validation also applies semantic checks in vda5050_parser_node.cpp.",
+  "type": "object",
+  "required": ["headerId", "timestamp", "version", "manufacturer", "serialNumber", "orderId", "orderUpdateId", "nodes", "edges"],
+  "properties": {
+    "version": {"const": "3.0.0"},
+    "nodes": {"type": "array", "minItems": 1},
+    "edges": {"type": "array"}
+  }
+}
