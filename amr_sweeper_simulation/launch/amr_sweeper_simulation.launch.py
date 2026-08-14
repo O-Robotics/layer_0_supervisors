@@ -128,6 +128,19 @@ def _load_mission_polygon(mission_path: str) -> tuple[list[tuple[float, float]],
     with open(mission_path, "r", encoding="utf-8") as mission_file:
         mission = json.load(mission_file)
 
+    if "nodes" in mission and "edges" in mission and "missionGeometries" not in mission:
+        metadata_path = os.path.join(os.path.dirname(mission_path), "map_georeference.json")
+        with open(metadata_path, "r", encoding="utf-8") as metadata_file:
+            metadata = json.load(metadata_file)
+        bounds = metadata["bounds"]
+        polygon = [
+            (float(bounds["min_x"]), float(bounds["min_y"])),
+            (float(bounds["max_x"]), float(bounds["min_y"])),
+            (float(bounds["max_x"]), float(bounds["max_y"])),
+            (float(bounds["min_x"]), float(bounds["max_y"])),
+        ]
+        return polygon, "local"
+
     reference = mission.get("missionReference", {})
     coordinate_frame = str(reference.get("coordinateFrame", "")).strip().lower()
     frame = "local" if coordinate_frame in {"local", "odom"} else "wgs84"
@@ -177,8 +190,8 @@ def _resolve_mission_file_path(simulation_config: dict) -> str:
         configured_path = os.path.join(
             "missions",
             "database",
-            "simulations",
-            f"{simulation_config['mission_id']}.json",
+            simulation_config["mission_id"],
+            "order.json",
         )
     if os.path.isabs(configured_path):
         return configured_path

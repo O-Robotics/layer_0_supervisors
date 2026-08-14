@@ -1,0 +1,17 @@
+{
+  "mapId": "large_city_map",
+  "mapVersion": "1",
+  "crs": "EPSG:4326",
+  "units": "m",
+  "frame": "ENU",
+  "originLatitude": 56.164520029,
+  "originLongitude": 10.1453534275,
+  "originAltitude": 0.0,
+  "yaw": 0.0,
+  "bounds": {
+    "min_x": -37.8141,
+    "min_y": -99.3755,
+    "max_x": 114.7004,
+    "max_y": 99.3755
+  }
+}

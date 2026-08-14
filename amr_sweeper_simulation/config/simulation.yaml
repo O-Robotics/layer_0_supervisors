@@ -24,7 +24,7 @@
       world_name: empty1
       world_file: empty1.sdf
       mission_id: empty1
-      schedule_ics_path: missions/database/simulations/empty1.ics
+      schedule_ics_path: missions/database/empty1/empty1.ics
       random_spawn: false
       spawn_pose:
         x: -5.0
@@ -37,7 +37,7 @@
       world_name: test_city
       world_file: test_city.sdf
       mission_id: test_city
-      schedule_ics_path: missions/database/simulations/test_city.ics
+      schedule_ics_path: missions/database/test_city/test_city.ics
       random_spawn: false
       spawn_pose:
         x: 10.0
@@ -50,7 +50,7 @@
       world_name: medium_city
       world_file: medium_city.sdf
       mission_id: medium_city
-      schedule_ics_path: missions/database/simulations/medium_city.ics
+      schedule_ics_path: missions/database/medium_city/medium_city.ics
       random_spawn: false
       spawn_pose:
         x: -49.8
@@ -63,7 +63,7 @@
       world_name: small_city
       world_file: small_city.sdf
       mission_id: small_city
-      schedule_ics_path: missions/database/simulations/small_city.ics
+      schedule_ics_path: missions/database/small_city/small_city.ics
       random_spawn: false
       spawn_pose:
         x: 26.66
@@ -76,7 +76,7 @@
       world_name: large_city
       world_file: large_city.sdf
       mission_id: large_city
-      schedule_ics_path: missions/database/simulations/large_city.ics
+      schedule_ics_path: missions/database/large_city/large_city.ics
       random_spawn: false
       spawn_pose:
         x: 22.46

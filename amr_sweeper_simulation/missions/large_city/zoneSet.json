@@ -1,0 +1,80 @@
+{
+  "headerId": 1,
+  "timestamp": "2026-07-14T12:00:00Z",
+  "version": "3.0.0",
+  "manufacturer": "O-Robotics",
+  "serialNumber": "amr_sweeper",
+  "zoneSet": {
+    "mapId": "large_city_map",
+    "zoneSetId": "large_city_zones",
+    "zoneSetDescriptor": "Simulation blocked zones for large_city.",
+    "zones": [
+      {
+        "zoneId": "blocked_zone_0",
+        "zoneType": "BLOCKED",
+        "vertices": [
+          {
+            "x": 11.0,
+            "y": -26.0
+          },
+          {
+            "x": 29.0,
+            "y": -26.0
+          },
+          {
+            "x": 29.0,
+            "y": -4.0
+          },
+          {
+            "x": 11.0,
+            "y": -4.0
+          }
+        ]
+      },
+      {
+        "zoneId": "blocked_zone_1",
+        "zoneType": "BLOCKED",
+        "vertices": [
+          {
+            "x": 60.0,
+            "y": 23.0
+          },
+          {
+            "x": 84.0,
+            "y": 23.0
+          },
+          {
+            "x": 84.0,
+            "y": 41.0
+          },
+          {
+            "x": 60.0,
+            "y": 41.0
+          }
+        ]
+      },
+      {
+        "zoneId": "blocked_zone_2",
+        "zoneType": "BLOCKED",
+        "vertices": [
+          {
+            "x": -13.0,
+            "y": 41.0
+          },
+          {
+            "x": 3.0,
+            "y": 41.0
+          },
+          {
+            "x": 3.0,
+            "y": 55.0
+          },
+          {
+            "x": -13.0,
+            "y": 55.0
+          }
+        ]
+      }
+    ]
+  }
+}

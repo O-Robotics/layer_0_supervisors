@@ -229,7 +229,7 @@ def _resolve_simulation_launch_settings(context, *args, **kwargs):
         actions.append(
             SetLaunchConfiguration(
                 "schedule_ics_path",
-                f"missions/database/simulations/{simulation_profile}.ics",
+                f"missions/database/{simulation_profile}/{simulation_profile}.ics",
             )
         )
 
