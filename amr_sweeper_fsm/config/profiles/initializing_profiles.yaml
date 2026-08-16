@@ -334,7 +334,7 @@ profiles:
       id: 002
       transitions:
         auto_transition_on: false
-        auto_transition_profile: 
+        auto_transition_profile:
         fault_transition_on: true
         fault_transition_profile: 400
 

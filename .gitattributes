@@ -1,0 +1,51 @@
+# Linux ROS workspace: keep source, launch, config, and docs in LF.
+* text=auto
+
+*.py text eol=lf
+*.sh text eol=lf
+*.bash text eol=lf
+*.launch.py text eol=lf
+*.cmake text eol=lf
+CMakeLists.txt text eol=lf
+Makefile text eol=lf
+
+*.cpp text eol=lf
+*.hpp text eol=lf
+*.h text eol=lf
+*.c text eol=lf
+*.cc text eol=lf
+*.hh text eol=lf
+
+*.yaml text eol=lf
+*.yml text eol=lf
+*.xml text eol=lf
+*.xacro text eol=lf
+*.urdf text eol=lf
+*.sdf text eol=lf
+*.rviz text eol=lf
+*.msg text eol=lf
+*.srv text eol=lf
+*.action text eol=lf
+*.schema text eol=lf
+*.json text eol=lf
+*.ics text eol=lf
+*.geojson text eol=lf
+
+*.md text eol=lf
+*.rst text eol=lf
+*.txt text eol=lf
+*.cff text eol=lf
+*.url text eol=lf
+*.material text eol=lf
+*.mtl text eol=lf
+*.obj text eol=lf
+*.dae text eol=lf
+*.svg text eol=lf
+*.patch text eol=lf
+
+*.pdf binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.docx binary
+*.pyc binary

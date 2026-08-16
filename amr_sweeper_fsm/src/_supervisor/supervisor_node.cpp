@@ -637,7 +637,7 @@ void SupervisorNode::drive()
   FSMState cur_state = current_state_;
   FSMState target_state = op_target_;
   OpPhase phase = OpPhase::IDLE;
- 
+
   {
     std::lock_guard<std::mutex> lk(mtx_);
     if (op_phase_ == OpPhase::IDLE || op_inflight_) {
