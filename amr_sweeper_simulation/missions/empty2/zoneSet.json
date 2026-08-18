@@ -1,0 +1,13 @@
+{
+  "headerId": 1,
+  "timestamp": "2026-07-14T12:00:00Z",
+  "version": "3.0.0",
+  "manufacturer": "O-Robotics",
+  "serialNumber": "amr_sweeper",
+  "zoneSet": {
+    "mapId": "empty2_map",
+    "zoneSetId": "empty2_zones",
+    "zoneSetDescriptor": "Simulation blocked zones for empty2.",
+    "zones": []
+  }
+}

@@ -1,0 +1,806 @@
+{
+  "headerId": 1,
+  "timestamp": "2026-07-14T12:00:00Z",
+  "version": "3.0.0",
+  "manufacturer": "O-Robotics",
+  "serialNumber": "amr_sweeper",
+  "orderId": "empty2",
+  "orderUpdateId": 0,
+  "orderDescription": "Simulation sweeping mission for empty2.",
+  "nodes": [
+    {
+      "nodeId": "cp_node_0",
+      "sequenceId": 0,
+      "released": true,
+      "actions": [],
+      "nodePosition": {
+        "x": -5.0,
+        "y": -4.75,
+        "theta": 0.0,
+        "mapId": "empty2_map"
+      }
+    },
+    {
+      "nodeId": "cp_node_1",
+      "sequenceId": 2,
+      "released": true,
+      "actions": [],
+      "nodePosition": {
+        "x": 5.0,
+        "y": -4.75,
+        "theta": 1.570796,
+        "mapId": "empty2_map"
+      }
+    },
+    {
+      "nodeId": "cp_node_2",
+      "sequenceId": 4,
+      "released": true,
+      "actions": [],
+      "nodePosition": {
+        "x": 5.0,
+        "y": -4.25,
+        "theta": 3.141593,
+        "mapId": "empty2_map"
+      }
+    },
+    {
+      "nodeId": "cp_node_3",
+      "sequenceId": 6,
+      "released": true,
+      "actions": [],
+      "nodePosition": {
+        "x": -5.0,
+        "y": -4.25,
+        "theta": 1.570796,
+        "mapId": "empty2_map"
+      }
+    },
+    {
+      "nodeId": "cp_node_4",
+      "sequenceId": 8,
+      "released": true,
+      "actions": [],
+      "nodePosition": {
+        "x": -5.0,
+        "y": -3.75,
+        "theta": 0.0,
+        "mapId": "empty2_map"
+      }
+    },
+    {
+      "nodeId": "cp_node_5",
+      "sequenceId": 10,
+      "released": true,
+      "actions": [],
+      "nodePosition": {
+        "x": 5.0,
+        "y": -3.75,
+        "theta": 1.570796,
+        "mapId": "empty2_map"
+      }
+    },
+    {
+      "nodeId": "cp_node_6",
+      "sequenceId": 12,
+      "released": true,
+      "actions": [],
+      "nodePosition": {
+        "x": 5.0,
+        "y": -3.25,
+        "theta": 3.141593,
+        "mapId": "empty2_map"
+      }
+    },
+    {
+      "nodeId": "cp_node_7",
+      "sequenceId": 14,
+      "released": true,
+      "actions": [],
+      "nodePosition": {
+        "x": -5.0,
+        "y": -3.25,
+        "theta": 1.570796,
+        "mapId": "empty2_map"
+      }
+    },
+    {
+      "nodeId": "cp_node_8",
+      "sequenceId": 16,
+      "released": true,
+      "actions": [],
+      "nodePosition": {
+        "x": -5.0,
+        "y": -2.75,
+        "theta": 0.0,
+        "mapId": "empty2_map"
+      }
+    },
+    {
+      "nodeId": "cp_node_9",
+      "sequenceId": 18,
+      "released": true,
+      "actions": [],
+      "nodePosition": {
+        "x": 5.0,
+        "y": -2.75,
+        "theta": 1.570796,
+        "mapId": "empty2_map"
+      }
+    },
+    {
+      "nodeId": "cp_node_10",
+      "sequenceId": 20,
+      "released": true,
+      "actions": [],
+      "nodePosition": {
+        "x": 5.0,
+        "y": -2.25,
+        "theta": 3.141593,
+        "mapId": "empty2_map"
+      }
+    },
+    {
+      "nodeId": "cp_node_11",
+      "sequenceId": 22,
+      "released": true,
+      "actions": [],
+      "nodePosition": {
+        "x": -5.0,
+        "y": -2.25,
+        "theta": 1.570796,
+        "mapId": "empty2_map"
+      }
+    },
+    {
+      "nodeId": "cp_node_12",
+      "sequenceId": 24,
+      "released": true,
+      "actions": [],
+      "nodePosition": {
+        "x": -5.0,
+        "y": -1.75,
+        "theta": 0.0,
+        "mapId": "empty2_map"
+      }
+    },
+    {
+      "nodeId": "cp_node_13",
+      "sequenceId": 26,
+      "released": true,
+      "actions": [],
+      "nodePosition": {
+        "x": 5.0,
+        "y": -1.75,
+        "theta": 1.570796,
+        "mapId": "empty2_map"
+      }
+    },
+    {
+      "nodeId": "cp_node_14",
+      "sequenceId": 28,
+      "released": true,
+      "actions": [],
+      "nodePosition": {
+        "x": 5.0,
+        "y": -1.25,
+        "theta": 3.141593,
+        "mapId": "empty2_map"
+      }
+    },
+    {
+      "nodeId": "cp_node_15",
+      "sequenceId": 30,
+      "released": true,
+      "actions": [],
+      "nodePosition": {
+        "x": -5.0,
+        "y": -1.25,
+        "theta": 1.570796,
+        "mapId": "empty2_map"
+      }
+    },
+    {
+      "nodeId": "cp_node_16",
+      "sequenceId": 32,
+      "released": true,
+      "actions": [],
+      "nodePosition": {
+        "x": -5.0,
+        "y": -0.75,
+        "theta": 0.0,
+        "mapId": "empty2_map"
+      }
+    },
+    {
+      "nodeId": "cp_node_17",
+      "sequenceId": 34,
+      "released": true,
+      "actions": [],
+      "nodePosition": {
+        "x": 5.0,
+        "y": -0.75,
+        "theta": 1.570796,
+        "mapId": "empty2_map"
+      }
+    },
+    {
+      "nodeId": "cp_node_18",
+      "sequenceId": 36,
+      "released": true,
+      "actions": [],
+      "nodePosition": {
+        "x": 5.0,
+        "y": -0.25,
+        "theta": 3.141593,
+        "mapId": "empty2_map"
+      }
+    },
+    {
+      "nodeId": "cp_node_19",
+      "sequenceId": 38,
+      "released": true,
+      "actions": [],
+      "nodePosition": {
+        "x": -5.0,
+        "y": -0.25,
+        "theta": 1.570796,
+        "mapId": "empty2_map"
+      }
+    },
+    {
+      "nodeId": "cp_node_20",
+      "sequenceId": 40,
+      "released": true,
+      "actions": [],
+      "nodePosition": {
+        "x": -5.0,
+        "y": 0.25,
+        "theta": 0.0,
+        "mapId": "empty2_map"
+      }
+    },
+    {
+      "nodeId": "cp_node_21",
+      "sequenceId": 42,
+      "released": true,
+      "actions": [],
+      "nodePosition": {
+        "x": 5.0,
+        "y": 0.25,
+        "theta": 1.570796,
+        "mapId": "empty2_map"
+      }
+    },
+    {
+      "nodeId": "cp_node_22",
+      "sequenceId": 44,
+      "released": true,
+      "actions": [],
+      "nodePosition": {
+        "x": 5.0,
+        "y": 0.75,
+        "theta": 3.141593,
+        "mapId": "empty2_map"
+      }
+    },
+    {
+      "nodeId": "cp_node_23",
+      "sequenceId": 46,
+      "released": true,
+      "actions": [],
+      "nodePosition": {
+        "x": -5.0,
+        "y": 0.75,
+        "theta": 1.570796,
+        "mapId": "empty2_map"
+      }
+    },
+    {
+      "nodeId": "cp_node_24",
+      "sequenceId": 48,
+      "released": true,
+      "actions": [],
+      "nodePosition": {
+        "x": -5.0,
+        "y": 1.25,
+        "theta": 0.0,
+        "mapId": "empty2_map"
+      }
+    },
+    {
+      "nodeId": "cp_node_25",
+      "sequenceId": 50,
+      "released": true,
+      "actions": [],
+      "nodePosition": {
+        "x": 5.0,
+        "y": 1.25,
+        "theta": 1.570796,
+        "mapId": "empty2_map"
+      }
+    },
+    {
+      "nodeId": "cp_node_26",
+      "sequenceId": 52,
+      "released": true,
+      "actions": [],
+      "nodePosition": {
+        "x": 5.0,
+        "y": 1.75,
+        "theta": 3.141593,
+        "mapId": "empty2_map"
+      }
+    },
+    {
+      "nodeId": "cp_node_27",
+      "sequenceId": 54,
+      "released": true,
+      "actions": [],
+      "nodePosition": {
+        "x": -5.0,
+        "y": 1.75,
+        "theta": 1.570796,
+        "mapId": "empty2_map"
+      }
+    },
+    {
+      "nodeId": "cp_node_28",
+      "sequenceId": 56,
+      "released": true,
+      "actions": [],
+      "nodePosition": {
+        "x": -5.0,
+        "y": 2.25,
+        "theta": 0.0,
+        "mapId": "empty2_map"
+      }
+    },
+    {
+      "nodeId": "cp_node_29",
+      "sequenceId": 58,
+      "released": true,
+      "actions": [],
+      "nodePosition": {
+        "x": 5.0,
+        "y": 2.25,
+        "theta": 1.570796,
+        "mapId": "empty2_map"
+      }
+    },
+    {
+      "nodeId": "cp_node_30",
+      "sequenceId": 60,
+      "released": true,
+      "actions": [],
+      "nodePosition": {
+        "x": 5.0,
+        "y": 2.75,
+        "theta": 3.141593,
+        "mapId": "empty2_map"
+      }
+    },
+    {
+      "nodeId": "cp_node_31",
+      "sequenceId": 62,
+      "released": true,
+      "actions": [],
+      "nodePosition": {
+        "x": -5.0,
+        "y": 2.75,
+        "theta": 1.570796,
+        "mapId": "empty2_map"
+      }
+    },
+    {
+      "nodeId": "cp_node_32",
+      "sequenceId": 64,
+      "released": true,
+      "actions": [],
+      "nodePosition": {
+        "x": -5.0,
+        "y": 3.25,
+        "theta": 0.0,
+        "mapId": "empty2_map"
+      }
+    },
+    {
+      "nodeId": "cp_node_33",
+      "sequenceId": 66,
+      "released": true,
+      "actions": [],
+      "nodePosition": {
+        "x": 5.0,
+        "y": 3.25,
+        "theta": 1.570796,
+        "mapId": "empty2_map"
+      }
+    },
+    {
+      "nodeId": "cp_node_34",
+      "sequenceId": 68,
+      "released": true,
+      "actions": [],
+      "nodePosition": {
+        "x": 5.0,
+        "y": 3.75,
+        "theta": 3.141593,
+        "mapId": "empty2_map"
+      }
+    },
+    {
+      "nodeId": "cp_node_35",
+      "sequenceId": 70,
+      "released": true,
+      "actions": [],
+      "nodePosition": {
+        "x": -5.0,
+        "y": 3.75,
+        "theta": 1.570796,
+        "mapId": "empty2_map"
+      }
+    },
+    {
+      "nodeId": "cp_node_36",
+      "sequenceId": 72,
+      "released": true,
+      "actions": [],
+      "nodePosition": {
+        "x": -5.0,
+        "y": 4.25,
+        "theta": 0.0,
+        "mapId": "empty2_map"
+      }
+    },
+    {
+      "nodeId": "cp_node_37",
+      "sequenceId": 74,
+      "released": true,
+      "actions": [],
+      "nodePosition": {
+        "x": 5.0,
+        "y": 4.25,
+        "theta": 1.570796,
+        "mapId": "empty2_map"
+      }
+    },
+    {
+      "nodeId": "cp_node_38",
+      "sequenceId": 76,
+      "released": true,
+      "actions": [],
+      "nodePosition": {
+        "x": 5.0,
+        "y": 4.75,
+        "theta": 3.141593,
+        "mapId": "empty2_map"
+      }
+    },
+    {
+      "nodeId": "cp_node_39",
+      "sequenceId": 78,
+      "released": true,
+      "actions": [],
+      "nodePosition": {
+        "x": -5.0,
+        "y": 4.75,
+        "theta": 3.141593,
+        "mapId": "empty2_map"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "edgeId": "cp_edge_0",
+      "sequenceId": 1,
+      "released": true,
+      "startNodeId": "cp_node_0",
+      "endNodeId": "cp_node_1",
+      "actions": []
+    },
+    {
+      "edgeId": "cp_edge_1",
+      "sequenceId": 3,
+      "released": true,
+      "startNodeId": "cp_node_1",
+      "endNodeId": "cp_node_2",
+      "actions": []
+    },
+    {
+      "edgeId": "cp_edge_2",
+      "sequenceId": 5,
+      "released": true,
+      "startNodeId": "cp_node_2",
+      "endNodeId": "cp_node_3",
+      "actions": []
+    },
+    {
+      "edgeId": "cp_edge_3",
+      "sequenceId": 7,
+      "released": true,
+      "startNodeId": "cp_node_3",
+      "endNodeId": "cp_node_4",
+      "actions": []
+    },
+    {
+      "edgeId": "cp_edge_4",
+      "sequenceId": 9,
+      "released": true,
+      "startNodeId": "cp_node_4",
+      "endNodeId": "cp_node_5",
+      "actions": []
+    },
+    {
+      "edgeId": "cp_edge_5",
+      "sequenceId": 11,
+      "released": true,
+      "startNodeId": "cp_node_5",
+      "endNodeId": "cp_node_6",
+      "actions": []
+    },
+    {
+      "edgeId": "cp_edge_6",
+      "sequenceId": 13,
+      "released": true,
+      "startNodeId": "cp_node_6",
+      "endNodeId": "cp_node_7",
+      "actions": []
+    },
+    {
+      "edgeId": "cp_edge_7",
+      "sequenceId": 15,
+      "released": true,
+      "startNodeId": "cp_node_7",
+      "endNodeId": "cp_node_8",
+      "actions": []
+    },
+    {
+      "edgeId": "cp_edge_8",
+      "sequenceId": 17,
+      "released": true,
+      "startNodeId": "cp_node_8",
+      "endNodeId": "cp_node_9",
+      "actions": []
+    },
+    {
+      "edgeId": "cp_edge_9",
+      "sequenceId": 19,
+      "released": true,
+      "startNodeId": "cp_node_9",
+      "endNodeId": "cp_node_10",
+      "actions": []
+    },
+    {
+      "edgeId": "cp_edge_10",
+      "sequenceId": 21,
+      "released": true,
+      "startNodeId": "cp_node_10",
+      "endNodeId": "cp_node_11",
+      "actions": []
+    },
+    {
+      "edgeId": "cp_edge_11",
+      "sequenceId": 23,
+      "released": true,
+      "startNodeId": "cp_node_11",
+      "endNodeId": "cp_node_12",
+      "actions": []
+    },
+    {
+      "edgeId": "cp_edge_12",
+      "sequenceId": 25,
+      "released": true,
+      "startNodeId": "cp_node_12",
+      "endNodeId": "cp_node_13",
+      "actions": []
+    },
+    {
+      "edgeId": "cp_edge_13",
+      "sequenceId": 27,
+      "released": true,
+      "startNodeId": "cp_node_13",
+      "endNodeId": "cp_node_14",
+      "actions": []
+    },
+    {
+      "edgeId": "cp_edge_14",
+      "sequenceId": 29,
+      "released": true,
+      "startNodeId": "cp_node_14",
+      "endNodeId": "cp_node_15",
+      "actions": []
+    },
+    {
+      "edgeId": "cp_edge_15",
+      "sequenceId": 31,
+      "released": true,
+      "startNodeId": "cp_node_15",
+      "endNodeId": "cp_node_16",
+      "actions": []
+    },
+    {
+      "edgeId": "cp_edge_16",
+      "sequenceId": 33,
+      "released": true,
+      "startNodeId": "cp_node_16",
+      "endNodeId": "cp_node_17",
+      "actions": []
+    },
+    {
+      "edgeId": "cp_edge_17",
+      "sequenceId": 35,
+      "released": true,
+      "startNodeId": "cp_node_17",
+      "endNodeId": "cp_node_18",
+      "actions": []
+    },
+    {
+      "edgeId": "cp_edge_18",
+      "sequenceId": 37,
+      "released": true,
+      "startNodeId": "cp_node_18",
+      "endNodeId": "cp_node_19",
+      "actions": []
+    },
+    {
+      "edgeId": "cp_edge_19",
+      "sequenceId": 39,
+      "released": true,
+      "startNodeId": "cp_node_19",
+      "endNodeId": "cp_node_20",
+      "actions": []
+    },
+    {
+      "edgeId": "cp_edge_20",
+      "sequenceId": 41,
+      "released": true,
+      "startNodeId": "cp_node_20",
+      "endNodeId": "cp_node_21",
+      "actions": []
+    },
+    {
+      "edgeId": "cp_edge_21",
+      "sequenceId": 43,
+      "released": true,
+      "startNodeId": "cp_node_21",
+      "endNodeId": "cp_node_22",
+      "actions": []
+    },
+    {
+      "edgeId": "cp_edge_22",
+      "sequenceId": 45,
+      "released": true,
+      "startNodeId": "cp_node_22",
+      "endNodeId": "cp_node_23",
+      "actions": []
+    },
+    {
+      "edgeId": "cp_edge_23",
+      "sequenceId": 47,
+      "released": true,
+      "startNodeId": "cp_node_23",
+      "endNodeId": "cp_node_24",
+      "actions": []
+    },
+    {
+      "edgeId": "cp_edge_24",
+      "sequenceId": 49,
+      "released": true,
+      "startNodeId": "cp_node_24",
+      "endNodeId": "cp_node_25",
+      "actions": []
+    },
+    {
+      "edgeId": "cp_edge_25",
+      "sequenceId": 51,
+      "released": true,
+      "startNodeId": "cp_node_25",
+      "endNodeId": "cp_node_26",
+      "actions": []
+    },
+    {
+      "edgeId": "cp_edge_26",
+      "sequenceId": 53,
+      "released": true,
+      "startNodeId": "cp_node_26",
+      "endNodeId": "cp_node_27",
+      "actions": []
+    },
+    {
+      "edgeId": "cp_edge_27",
+      "sequenceId": 55,
+      "released": true,
+      "startNodeId": "cp_node_27",
+      "endNodeId": "cp_node_28",
+      "actions": []
+    },
+    {
+      "edgeId": "cp_edge_28",
+      "sequenceId": 57,
+      "released": true,
+      "startNodeId": "cp_node_28",
+      "endNodeId": "cp_node_29",
+      "actions": []
+    },
+    {
+      "edgeId": "cp_edge_29",
+      "sequenceId": 59,
+      "released": true,
+      "startNodeId": "cp_node_29",
+      "endNodeId": "cp_node_30",
+      "actions": []
+    },
+    {
+      "edgeId": "cp_edge_30",
+      "sequenceId": 61,
+      "released": true,
+      "startNodeId": "cp_node_30",
+      "endNodeId": "cp_node_31",
+      "actions": []
+    },
+    {
+      "edgeId": "cp_edge_31",
+      "sequenceId": 63,
+      "released": true,
+      "startNodeId": "cp_node_31",
+      "endNodeId": "cp_node_32",
+      "actions": []
+    },
+    {
+      "edgeId": "cp_edge_32",
+      "sequenceId": 65,
+      "released": true,
+      "startNodeId": "cp_node_32",
+      "endNodeId": "cp_node_33",
+      "actions": []
+    },
+    {
+      "edgeId": "cp_edge_33",
+      "sequenceId": 67,
+      "released": true,
+      "startNodeId": "cp_node_33",
+      "endNodeId": "cp_node_34",
+      "actions": []
+    },
+    {
+      "edgeId": "cp_edge_34",
+      "sequenceId": 69,
+      "released": true,
+      "startNodeId": "cp_node_34",
+      "endNodeId": "cp_node_35",
+      "actions": []
+    },
+    {
+      "edgeId": "cp_edge_35",
+      "sequenceId": 71,
+      "released": true,
+      "startNodeId": "cp_node_35",
+      "endNodeId": "cp_node_36",
+      "actions": []
+    },
+    {
+      "edgeId": "cp_edge_36",
+      "sequenceId": 73,
+      "released": true,
+      "startNodeId": "cp_node_36",
+      "endNodeId": "cp_node_37",
+      "actions": []
+    },
+    {
+      "edgeId": "cp_edge_37",
+      "sequenceId": 75,
+      "released": true,
+      "startNodeId": "cp_node_37",
+      "endNodeId": "cp_node_38",
+      "actions": []
+    },
+    {
+      "edgeId": "cp_edge_38",
+      "sequenceId": 77,
+      "released": true,
+      "startNodeId": "cp_node_38",
+      "endNodeId": "cp_node_39",
+      "actions": []
+    }
+  ]
+}
