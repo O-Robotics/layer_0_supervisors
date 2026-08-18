@@ -28,6 +28,7 @@ topics:
   - /amr_sweeper/gnss/fix
   - /amr_sweeper/gnss/ntrip_client/rtcm
   - /amr_sweeper/simulation/pose/info
+  - /amr_sweeper/simulation/robot_pose
   - /amr_sweeper/depth_camera/scan
   - /amr_sweeper/depth_camera/depth/camera_info
   - /amr_sweeper/depth_camera/motion/sample

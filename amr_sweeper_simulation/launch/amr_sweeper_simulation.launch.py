@@ -7,6 +7,7 @@ import re
 import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
+from collections import deque
 
 import yaml
 from ament_index_python.packages import get_package_share_directory
@@ -184,6 +185,44 @@ def _invert_affine_xy_to_wgs84(point: tuple[float, float], georeference: dict) -
     return x, y
 
 
+def _affine_xy_to_wgs84(point: tuple[float, float], georeference: dict) -> tuple[float, float]:
+    x, y = point
+    lon_coefficients = georeference["longitude_coefficients"]
+    lat_coefficients = georeference["latitude_coefficients"]
+    a, b, c = [float(value) for value in lon_coefficients]
+    d, e, f = [float(value) for value in lat_coefficients]
+    longitude = (a * x) + (b * y) + c
+    latitude = (d * x) + (e * y) + f
+    return longitude, latitude
+
+
+def _metadata_georeference(metadata: dict) -> dict | None:
+    lon_coefficients = metadata.get("georeference_longitude_coefficients")
+    lat_coefficients = metadata.get("georeference_latitude_coefficients")
+    if not lon_coefficients or not lat_coefficients:
+        return None
+    if len(lon_coefficients) != 3 or len(lat_coefficients) != 3:
+        return None
+    return {
+        "longitude_coefficients": lon_coefficients,
+        "latitude_coefficients": lat_coefficients,
+    }
+
+
+def _static_costmap_point_to_simulation_xy(
+    artifact_point: tuple[float, float],
+    metadata: dict,
+    simulation_config: dict,
+) -> tuple[float, float]:
+    artifact_georeference = _metadata_georeference(metadata)
+    simulation_georeference = simulation_config.get("mission_georeference", {})
+    if not artifact_georeference or not simulation_georeference:
+        return artifact_point
+
+    wgs84_point = _affine_xy_to_wgs84(artifact_point, artifact_georeference)
+    return _invert_affine_xy_to_wgs84(wgs84_point, simulation_georeference)
+
+
 def _resolve_mission_file_path(simulation_config: dict) -> str:
     configured_path = simulation_config.get("random_spawn_mission_path", "")
     if not configured_path:
@@ -198,10 +237,333 @@ def _resolve_mission_file_path(simulation_config: dict) -> str:
     return os.path.join(os.getcwd(), configured_path)
 
 
+def _resolve_static_costmap_path(simulation_config: dict) -> str:
+    configured_path = simulation_config.get("random_spawn_static_costmap_path", "")
+    if not configured_path:
+        mission_id = simulation_config.get("mission_id", "")
+        if not mission_id:
+            return ""
+        configured_path = os.path.join(
+            "missions",
+            "simulations",
+            mission_id,
+            f"{mission_id}_static_costmap.yaml",
+        )
+    if os.path.isabs(configured_path):
+        return configured_path
+    return os.path.join(os.getcwd(), configured_path)
+
+
+def _resolve_route_file_path(simulation_config: dict) -> str:
+    configured_path = simulation_config.get("random_spawn_route_path", "")
+    if not configured_path:
+        mission_id = simulation_config.get("mission_id", "")
+        if not mission_id:
+            return ""
+        configured_path = os.path.join(
+            "missions",
+            "simulations",
+            mission_id,
+            f"{mission_id}_path_planned.geojson",
+        )
+    if os.path.isabs(configured_path):
+        return configured_path
+    return os.path.join(os.getcwd(), configured_path)
+
+
+def _read_pgm_image(path: str) -> tuple[int, int, int, bytes]:
+    with open(path, "rb") as pgm_file:
+        tokens: list[bytes] = []
+        while len(tokens) < 4:
+            token = b""
+            while True:
+                character = pgm_file.read(1)
+                if not character:
+                    raise ValueError(f"Unexpected end of PGM header in {path}")
+                if character == b"#":
+                    pgm_file.readline()
+                    continue
+                if character.isspace():
+                    if token:
+                        break
+                    continue
+                token += character
+            tokens.append(token)
+        magic, width, height, max_value = tokens
+        if magic != b"P5":
+            raise ValueError(
+                f"Unsupported static costmap image format in {path}: "
+                f"{magic.decode(errors='replace')}"
+            )
+        width_int = int(width)
+        height_int = int(height)
+        max_value_int = int(max_value)
+        data = pgm_file.read(width_int * height_int)
+    if len(data) != width_int * height_int:
+        raise ValueError(f"Static costmap image {path} has incomplete pixel data")
+    return width_int, height_int, max_value_int, data
+
+
+def _costmap_pixel_is_free(pixel: int, max_value: int, metadata: dict) -> bool:
+    negate = int(metadata.get("negate", 0))
+    free_thresh = float(metadata.get("free_thresh", 0.196))
+    normalized = float(pixel) / max(1, max_value)
+    occupancy = normalized if negate else 1.0 - normalized
+    return occupancy <= free_thresh
+
+
+def _cell_index(column: int, row: int, width: int) -> int:
+    return row * width + column
+
+
+def _cell_has_free_clearance(
+    free_bitmap: list[bool],
+    column: int,
+    row: int,
+    width: int,
+    height: int,
+    clearance_cells: int,
+) -> bool:
+    for neighbor_row in range(row - clearance_cells, row + clearance_cells + 1):
+        if neighbor_row < 0 or neighbor_row >= height:
+            return False
+        for neighbor_column in range(column - clearance_cells, column + clearance_cells + 1):
+            if neighbor_column < 0 or neighbor_column >= width:
+                return False
+            if not free_bitmap[_cell_index(neighbor_column, neighbor_row, width)]:
+                return False
+    return True
+
+
+def _costmap_artifact_xy_to_pixel(
+    point: tuple[float, float],
+    metadata: dict,
+    width: int,
+    height: int,
+) -> tuple[int, int] | None:
+    resolution = float(metadata["resolution"])
+    origin = metadata["origin"]
+    origin_x = float(origin[0])
+    origin_y = float(origin[1])
+    x, y = point
+    column = int(math.floor((x - origin_x) / resolution))
+    row = int(math.floor(height - ((y - origin_y) / resolution)))
+    if column < 0 or column >= width or row < 0 or row >= height:
+        return None
+    return column, row
+
+
+def _costmap_pixel_to_artifact_xy(
+    column: int,
+    row: int,
+    metadata: dict,
+    height: int,
+) -> tuple[float, float]:
+    resolution = float(metadata["resolution"])
+    origin = metadata["origin"]
+    origin_x = float(origin[0])
+    origin_y = float(origin[1])
+    artifact_x = origin_x + (column + 0.5) * resolution
+    artifact_y = origin_y + (height - row - 0.5) * resolution
+    return artifact_x, artifact_y
+
+
+def _collect_geojson_points(coordinates) -> list[tuple[float, float]]:
+    if (
+        isinstance(coordinates, list)
+        and len(coordinates) >= 2
+        and isinstance(coordinates[0], (int, float))
+        and isinstance(coordinates[1], (int, float))
+    ):
+        return [(float(coordinates[0]), float(coordinates[1]))]
+
+    points: list[tuple[float, float]] = []
+    if isinstance(coordinates, list):
+        for child in coordinates:
+            points.extend(_collect_geojson_points(child))
+    return points
+
+
+def _load_route_points(route_path: str) -> list[tuple[float, float]]:
+    if not route_path or not os.path.exists(route_path):
+        return []
+    with open(route_path, "r", encoding="utf-8") as route_file:
+        route = json.load(route_file)
+
+    points: list[tuple[float, float]] = []
+    for feature in route.get("features", []):
+        geometry = feature.get("geometry", {})
+        points.extend(_collect_geojson_points(geometry.get("coordinates", [])))
+    return points
+
+
+def _nearest_free_cell(
+    seed_cell: tuple[int, int],
+    free_bitmap: list[bool],
+    width: int,
+    height: int,
+    search_cells: int,
+) -> tuple[int, int] | None:
+    seed_column, seed_row = seed_cell
+    best_cell: tuple[int, int] | None = None
+    best_distance_sq: int | None = None
+    for row in range(seed_row - search_cells, seed_row + search_cells + 1):
+        if row < 0 or row >= height:
+            continue
+        for column in range(seed_column - search_cells, seed_column + search_cells + 1):
+            if column < 0 or column >= width:
+                continue
+            if not free_bitmap[_cell_index(column, row, width)]:
+                continue
+            distance_sq = (column - seed_column) ** 2 + (row - seed_row) ** 2
+            if best_distance_sq is None or distance_sq < best_distance_sq:
+                best_cell = (column, row)
+                best_distance_sq = distance_sq
+    return best_cell
+
+
+def _route_connected_free_cells(
+    simulation_config: dict,
+    metadata: dict,
+    width: int,
+    height: int,
+    free_bitmap: list[bool],
+) -> set[int]:
+    route_path = _resolve_route_file_path(simulation_config)
+    route_points = _load_route_points(route_path)
+    if not route_points:
+        return set()
+
+    georeference = _metadata_georeference(metadata)
+    resolution = float(metadata["resolution"])
+    search_m = float(simulation_config.get("random_spawn_route_seed_search_m", 1.0))
+    search_cells = max(1, int(math.ceil(search_m / resolution)))
+    seed_indices: set[int] = set()
+
+    for route_point in route_points:
+        artifact_point = (
+            _invert_affine_xy_to_wgs84(route_point, georeference)
+            if georeference
+            else route_point
+        )
+        seed_cell = _costmap_artifact_xy_to_pixel(artifact_point, metadata, width, height)
+        if seed_cell is None:
+            continue
+        column, row = seed_cell
+        if not free_bitmap[_cell_index(column, row, width)]:
+            nearest_cell = _nearest_free_cell(seed_cell, free_bitmap, width, height, search_cells)
+            if nearest_cell is None:
+                continue
+            column, row = nearest_cell
+        seed_indices.add(_cell_index(column, row, width))
+
+    if not seed_indices:
+        return set()
+
+    connected: set[int] = set(seed_indices)
+    queue: deque[int] = deque(seed_indices)
+    while queue:
+        current = queue.popleft()
+        current_row, current_column = divmod(current, width)
+        for row_delta in (-1, 0, 1):
+            for column_delta in (-1, 0, 1):
+                if row_delta == 0 and column_delta == 0:
+                    continue
+                neighbor_row = current_row + row_delta
+                neighbor_column = current_column + column_delta
+                if neighbor_row < 0 or neighbor_row >= height:
+                    continue
+                if neighbor_column < 0 or neighbor_column >= width:
+                    continue
+                neighbor = _cell_index(neighbor_column, neighbor_row, width)
+                if neighbor in connected or not free_bitmap[neighbor]:
+                    continue
+                connected.add(neighbor)
+                queue.append(neighbor)
+    return connected
+
+
+def _sample_static_costmap_spawn_pose(simulation_config: dict) -> dict | None:
+    costmap_path = _resolve_static_costmap_path(simulation_config)
+    if not costmap_path or not os.path.exists(costmap_path):
+        return None
+
+    with open(costmap_path, "r", encoding="utf-8") as costmap_file:
+        metadata = yaml.safe_load(costmap_file)
+    image_path = str(metadata.get("image", "")).strip()
+    if not image_path:
+        return None
+    if not os.path.isabs(image_path):
+        image_path = os.path.join(os.path.dirname(costmap_path), image_path)
+
+    width, height, max_value, pixels = _read_pgm_image(image_path)
+    resolution = float(metadata["resolution"])
+    origin = metadata["origin"]
+    origin_x = float(origin[0])
+    origin_y = float(origin[1])
+    margin_m = float(simulation_config.get("random_spawn_margin_m", 0.5))
+    margin_cells = max(0, int(math.ceil(margin_m / resolution)))
+
+    free_bitmap = [False] * (width * height)
+    for row in range(height):
+        for column in range(width):
+            pixel = pixels[row * width + column]
+            if _costmap_pixel_is_free(pixel, max_value, metadata):
+                free_bitmap[_cell_index(column, row, width)] = True
+
+    route_component = _route_connected_free_cells(
+        simulation_config,
+        metadata,
+        width,
+        height,
+        free_bitmap,
+    )
+
+    free_cells: list[tuple[int, int]] = []
+    for row in range(margin_cells, height - margin_cells):
+        for column in range(margin_cells, width - margin_cells):
+            cell = _cell_index(column, row, width)
+            if not free_bitmap[cell]:
+                continue
+            if route_component and cell not in route_component:
+                continue
+            if not _cell_has_free_clearance(
+                free_bitmap,
+                column,
+                row,
+                width,
+                height,
+                margin_cells,
+            ):
+                continue
+            free_cells.append((column, row))
+
+    if not free_cells:
+        return None
+
+    spawn_pose = copy.deepcopy(simulation_config["spawn_pose"])
+    column, row = random.choice(free_cells)
+    artifact_x, artifact_y = _costmap_pixel_to_artifact_xy(column, row, metadata, height)
+    spawn_x, spawn_y = _static_costmap_point_to_simulation_xy(
+        (artifact_x, artifact_y),
+        metadata,
+        simulation_config,
+    )
+    spawn_pose["x"] = spawn_x
+    spawn_pose["y"] = spawn_y
+    spawn_pose["yaw"] = random.uniform(-math.pi, math.pi)
+    spawn_pose["random_spawn_source"] = costmap_path
+    return spawn_pose
+
+
 def _resolve_spawn_pose(simulation_config: dict) -> dict:
     spawn_pose = copy.deepcopy(simulation_config["spawn_pose"])
     if not _as_bool(simulation_config.get("random_spawn", False)):
         return spawn_pose
+
+    static_costmap_pose = _sample_static_costmap_spawn_pose(simulation_config)
+    if static_costmap_pose is not None:
+        return static_costmap_pose
 
     mission_path = _resolve_mission_file_path(simulation_config)
     polygon, frame = _load_mission_polygon(mission_path)
@@ -694,6 +1056,9 @@ def _launch_setup(context, *args, **kwargs):
     )
     simulation_profile = LaunchConfiguration("simulation_profile").perform(context).strip()
     selected_profile, simulation_config = _resolve_simulation_profile(config, simulation_profile)
+    simulation_config["random_spawn"] = _as_bool(
+        LaunchConfiguration("use_random_spawning").perform(context)
+    )
     world_name = simulation_config["world_name"]
     entity_name = simulation_config["entity_name"]
     base_world = _resolve_world_path(simulation_pkg, simulation_config["world_file"])
@@ -763,6 +1128,18 @@ def _launch_setup(context, *args, **kwargs):
         arguments=['--ros-args', '--log-level', 'info'],
     )
 
+    monotonic_clock = Node(
+        package="amr_sweeper_simulation",
+        executable="monotonic_clock.py",
+        name="monotonic_clock",
+        output="screen",
+        parameters=[{
+            "input_topic": "/amr_sweeper/simulation/raw_clock",
+            "output_topic": "/clock",
+            "use_sim_time": False,
+        }],
+    )
+
     world_pose_relay = Node(
         package="amr_sweeper_simulation",
         executable="world_pose_to_sim_pose.py",
@@ -787,11 +1164,14 @@ def _launch_setup(context, *args, **kwargs):
         LogInfo(
             msg=(
                 "[amr_sweeper_simulation] Launching simulation profile "
-                f"'{selected_profile}' in world '{world_name}'"
+                f"'{selected_profile}' in world '{world_name}' "
+                f"with initial spawn x={spawn_pose['x']:.3f} y={spawn_pose['y']:.3f} "
+                f"yaw={spawn_pose['yaw']:.3f}"
             )
         ),
         spawn_robot,
         bridge,
+        monotonic_clock,
         world_pose_relay,
     ]
 
@@ -865,6 +1245,7 @@ def generate_launch_description():
         DeclareLaunchArgument("enable_gnss", default_value="true"),
         DeclareLaunchArgument("enable_imu", default_value="true"),
         DeclareLaunchArgument("enable_depth_camera", default_value="true"),
+        DeclareLaunchArgument("use_random_spawning", default_value="false"),
         DeclareLaunchArgument("override_timestamps_with_wall_time", default_value="false"),
         OpaqueFunction(function=_launch_setup),
     ])

@@ -179,9 +179,13 @@ profiles:
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "node=bt_navigator;level>=ERROR;match=Goal failed;action=WARN_ONLY"
+            - "node=bt_navigator;level>=ERROR;match=Robot pose is not available;action=WARN_ONLY"
             - "node=bt_navigator_navigate_through_poses_rclcpp_node;level>=ERROR;match=Failed to get result for follow_path in node halt!;action=WARN_ONLY"
+            - "node=bt_navigator_navigate_through_poses_rclcpp_node;level>=ERROR;match=Failed to get result for compute_path_through_poses in node halt!;action=WARN_ONLY"
             - "node=planner_server;level>=ERROR;match=Failed to create a plan from potential;action=WARN_ONLY"
             - "node=controller_server;level>=ERROR;match=Resulting plan has 0 poses in it.;action=WARN_ONLY"
+            - "node=controller_server;level>=ERROR;match=Controller patience exceeded;action=WARN_ONLY"
+            - "node=controller_server;level>=ERROR;match=Unable to transform robot pose into global plan's frame;action=WARN_ONLY"
             - "level>=ERROR;action=FAULT"
           errors:
             on_readiness_fail: "FAULT"
@@ -212,6 +216,7 @@ profiles:
               - "navigation_startup_delay_sec:=10.0"
               - "mission_execution_directory:={mission_execution_directory}"
               - "auto_start_mission:=true"
+              - "mission_start_mode:={mission_start_mode}"
               - "use_test:={use_test}"
               - "test_output_directory:={test_output_directory}"
             ready:
@@ -252,7 +257,9 @@ profiles:
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "node=bt_navigator;level>=ERROR;match=Goal failed;action=WARN_ONLY"
+            - "node=bt_navigator;level>=ERROR;match=Robot pose is not available;action=WARN_ONLY"
             - "node=bt_navigator_navigate_through_poses_rclcpp_node;level>=ERROR;match=Failed to get result for follow_path in node halt!;action=WARN_ONLY"
+            - "node=bt_navigator_navigate_through_poses_rclcpp_node;level>=ERROR;match=Failed to get result for compute_path_through_poses in node halt!;action=WARN_ONLY"
             - "node=planner_server;level>=ERROR;match=Failed to create a plan from potential;action=WARN_ONLY"
             - "node=controller_server;level>=ERROR;match=Resulting plan has 0 poses in it.;action=WARN_ONLY"
             - "level>=ERROR;action=FAULT"
@@ -430,7 +437,9 @@ profiles:
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "node=bt_navigator;level>=ERROR;match=Goal failed;action=WARN_ONLY"
+            - "node=bt_navigator;level>=ERROR;match=Robot pose is not available;action=WARN_ONLY"
             - "node=bt_navigator_navigate_through_poses_rclcpp_node;level>=ERROR;match=Failed to get result for follow_path in node halt!;action=WARN_ONLY"
+            - "node=bt_navigator_navigate_through_poses_rclcpp_node;level>=ERROR;match=Failed to get result for compute_path_through_poses in node halt!;action=WARN_ONLY"
             - "node=planner_server;level>=ERROR;match=Failed to create a plan from potential;action=WARN_ONLY"
             - "node=controller_server;level>=ERROR;match=Resulting plan has 0 poses in it.;action=WARN_ONLY"
             - "level>=ERROR;action=FAULT"
@@ -461,6 +470,7 @@ profiles:
               - "navigation_startup_delay_sec:=60.0"
               - "mission_execution_directory:={mission_execution_directory}"
               - "auto_start_mission:=true"
+              - "mission_start_mode:={mission_start_mode}"
               - "use_test:={use_test}"
               - "test_output_directory:={test_output_directory}"
             ready:
@@ -510,7 +520,9 @@ profiles:
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "node=bt_navigator;level>=ERROR;match=Goal failed;action=WARN_ONLY"
+            - "node=bt_navigator;level>=ERROR;match=Robot pose is not available;action=WARN_ONLY"
             - "node=bt_navigator_navigate_through_poses_rclcpp_node;level>=ERROR;match=Failed to get result for follow_path in node halt!;action=WARN_ONLY"
+            - "node=bt_navigator_navigate_through_poses_rclcpp_node;level>=ERROR;match=Failed to get result for compute_path_through_poses in node halt!;action=WARN_ONLY"
             - "node=planner_server;level>=ERROR;match=Failed to create a plan from potential;action=WARN_ONLY"
             - "node=controller_server;level>=ERROR;match=Resulting plan has 0 poses in it.;action=WARN_ONLY"
             - "level>=ERROR;action=FAULT"
@@ -717,7 +729,9 @@ profiles:
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "node=bt_navigator;level>=ERROR;match=Goal failed;action=WARN_ONLY"
+            - "node=bt_navigator;level>=ERROR;match=Robot pose is not available;action=WARN_ONLY"
             - "node=bt_navigator_navigate_through_poses_rclcpp_node;level>=ERROR;match=Failed to get result for follow_path in node halt!;action=WARN_ONLY"
+            - "node=bt_navigator_navigate_through_poses_rclcpp_node;level>=ERROR;match=Failed to get result for compute_path_through_poses in node halt!;action=WARN_ONLY"
             - "node=planner_server;level>=ERROR;match=Failed to create a plan from potential;action=WARN_ONLY"
             - "node=controller_server;level>=ERROR;match=Resulting plan has 0 poses in it.;action=WARN_ONLY"
             - "level>=ERROR;action=FAULT"
@@ -749,6 +763,7 @@ profiles:
               - "mission_id:=3x3Sweep"
               - "mission_type:=builtin_local_pattern"
               - "auto_start_mission:=true"
+              - "mission_start_mode:={mission_start_mode}"
               - "use_test:={use_test}"
               - "test_output_directory:={test_output_directory}"
             ready:
@@ -798,7 +813,9 @@ profiles:
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "node=bt_navigator;level>=ERROR;match=Goal failed;action=WARN_ONLY"
+            - "node=bt_navigator;level>=ERROR;match=Robot pose is not available;action=WARN_ONLY"
             - "node=bt_navigator_navigate_through_poses_rclcpp_node;level>=ERROR;match=Failed to get result for follow_path in node halt!;action=WARN_ONLY"
+            - "node=bt_navigator_navigate_through_poses_rclcpp_node;level>=ERROR;match=Failed to get result for compute_path_through_poses in node halt!;action=WARN_ONLY"
             - "node=planner_server;level>=ERROR;match=Failed to create a plan from potential;action=WARN_ONLY"
             - "node=controller_server;level>=ERROR;match=Resulting plan has 0 poses in it.;action=WARN_ONLY"
             - "level>=ERROR;action=FAULT"
@@ -1005,7 +1022,9 @@ profiles:
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "node=bt_navigator;level>=ERROR;match=Goal failed;action=WARN_ONLY"
+            - "node=bt_navigator;level>=ERROR;match=Robot pose is not available;action=WARN_ONLY"
             - "node=bt_navigator_navigate_through_poses_rclcpp_node;level>=ERROR;match=Failed to get result for follow_path in node halt!;action=WARN_ONLY"
+            - "node=bt_navigator_navigate_through_poses_rclcpp_node;level>=ERROR;match=Failed to get result for compute_path_through_poses in node halt!;action=WARN_ONLY"
             - "node=planner_server;level>=ERROR;match=Failed to create a plan from potential;action=WARN_ONLY"
             - "node=controller_server;level>=ERROR;match=Resulting plan has 0 poses in it.;action=WARN_ONLY"
             - "level>=ERROR;action=FAULT"
@@ -1037,6 +1056,7 @@ profiles:
               - "mission_id:=SpotSweep"
               - "mission_type:=builtin_local_pattern"
               - "auto_start_mission:=true"
+              - "mission_start_mode:={mission_start_mode}"
               - "use_test:={use_test}"
               - "test_output_directory:={test_output_directory}"
             ready:
@@ -1086,7 +1106,9 @@ profiles:
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "node=bt_navigator;level>=ERROR;match=Goal failed;action=WARN_ONLY"
+            - "node=bt_navigator;level>=ERROR;match=Robot pose is not available;action=WARN_ONLY"
             - "node=bt_navigator_navigate_through_poses_rclcpp_node;level>=ERROR;match=Failed to get result for follow_path in node halt!;action=WARN_ONLY"
+            - "node=bt_navigator_navigate_through_poses_rclcpp_node;level>=ERROR;match=Failed to get result for compute_path_through_poses in node halt!;action=WARN_ONLY"
             - "node=planner_server;level>=ERROR;match=Failed to create a plan from potential;action=WARN_ONLY"
             - "node=controller_server;level>=ERROR;match=Resulting plan has 0 poses in it.;action=WARN_ONLY"
             - "level>=ERROR;action=FAULT"
@@ -1294,7 +1316,9 @@ profiles:
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "node=bt_navigator;level>=ERROR;match=Goal failed;action=WARN_ONLY"
+            - "node=bt_navigator;level>=ERROR;match=Robot pose is not available;action=WARN_ONLY"
             - "node=bt_navigator_navigate_through_poses_rclcpp_node;level>=ERROR;match=Failed to get result for follow_path in node halt!;action=WARN_ONLY"
+            - "node=bt_navigator_navigate_through_poses_rclcpp_node;level>=ERROR;match=Failed to get result for compute_path_through_poses in node halt!;action=WARN_ONLY"
             - "node=planner_server;level>=ERROR;match=Failed to create a plan from potential;action=WARN_ONLY"
             - "node=controller_server;level>=ERROR;match=Resulting plan has 0 poses in it.;action=WARN_ONLY"
             - "level>=ERROR;action=FAULT"
@@ -2242,7 +2266,9 @@ profiles:
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "node=bt_navigator;level>=ERROR;match=Goal failed;action=WARN_ONLY"
+            - "node=bt_navigator;level>=ERROR;match=Robot pose is not available;action=WARN_ONLY"
             - "node=bt_navigator_navigate_through_poses_rclcpp_node;level>=ERROR;match=Failed to get result for follow_path in node halt!;action=WARN_ONLY"
+            - "node=bt_navigator_navigate_through_poses_rclcpp_node;level>=ERROR;match=Failed to get result for compute_path_through_poses in node halt!;action=WARN_ONLY"
             - "node=planner_server;level>=ERROR;match=Failed to create a plan from potential;action=WARN_ONLY"
             - "node=controller_server;level>=ERROR;match=Resulting plan has 0 poses in it.;action=WARN_ONLY"
             - "level>=ERROR;action=FAULT"
@@ -2272,6 +2298,7 @@ profiles:
               - "use_amr_sweeper_navigation:=false"
               - "mission_execution_directory:={mission_execution_directory}"
               - "auto_start_mission:=true"
+              - "mission_start_mode:={mission_start_mode}"
               - "use_test:={use_test}"
               - "test_output_directory:={test_output_directory}"
             ready:
@@ -2297,7 +2324,9 @@ profiles:
           rosout_triggers:
             - "level>=FATAL;action=FAULT"
             - "node=bt_navigator;level>=ERROR;match=Goal failed;action=WARN_ONLY"
+            - "node=bt_navigator;level>=ERROR;match=Robot pose is not available;action=WARN_ONLY"
             - "node=bt_navigator_navigate_through_poses_rclcpp_node;level>=ERROR;match=Failed to get result for follow_path in node halt!;action=WARN_ONLY"
+            - "node=bt_navigator_navigate_through_poses_rclcpp_node;level>=ERROR;match=Failed to get result for compute_path_through_poses in node halt!;action=WARN_ONLY"
             - "node=planner_server;level>=ERROR;match=Failed to create a plan from potential;action=WARN_ONLY"
             - "node=controller_server;level>=ERROR;match=Resulting plan has 0 poses in it.;action=WARN_ONLY"
             - "level>=ERROR;action=FAULT"

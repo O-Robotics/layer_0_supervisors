@@ -39,6 +39,7 @@ struct ScheduleEvent
   ScheduleType type{ScheduleType::WORK};
   std::optional<std::string> mission_id;
   bool record_rosbag{false};
+  std::optional<std::string> runtime_status;
   std::string dtstart_tzid;
   std::string dtstart_local;
   std::optional<std::string> duration;
@@ -59,6 +60,7 @@ struct TimeWindow
   ScheduleType type{ScheduleType::WORK};
   std::optional<std::string> mission_id;
   bool record_rosbag{false};
+  std::optional<std::string> runtime_status;
   std::optional<std::string> mission_path;
   std::string tzid;
   std::string start_local;
@@ -126,6 +128,8 @@ private:
   void publish_windows(const std::vector<TimeWindow> & windows);
   void maybe_promote_mission(const std::vector<TimeWindow> & windows);
   [[nodiscard]] std::chrono::system_clock::time_point current_schedule_time() const;
+  [[nodiscard]] bool actual_schedule_has_terminal_run_for_window(const TimeWindow & window) const;
+  [[nodiscard]] std::string resolved_actual_schedule_log_path() const;
   [[nodiscard]] bool mission_json_or_folder_exists(const std::string & mission_id) const;
   void request_mission_execution(const TimeWindow & window);
   [[nodiscard]] std::string resolved_schedule_path() const;
@@ -160,11 +164,14 @@ private:
   std::string mission_file_extension_;
   std::string robot_id_;
   std::string robot_config_env_path_;
+  std::string actual_schedule_log_path_;
   std::string mission_executor_execute_service_;
   std::string mission_executor_prepare_service_;
   int horizon_hours_{72};
   double tick_seconds_{1.0};
   bool trigger_running_on_work_window_{true};
+  bool force_record_rosbag_{false};
+  bool use_sim_time_for_schedule_clock_{false};
   double schedule_poll_interval_sec_{60.0};
   int retry_attempts_before_error_{3};
   int fatal_after_consecutive_errors_{10};

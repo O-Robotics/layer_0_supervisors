@@ -14,6 +14,8 @@
     horizon_hours:                      72                  # Recurrence expansion horizon measured forward from now.
     tick_seconds:                       2.0                 # Scheduler publish and decision tick in seconds.
     trigger_running_on_work_window:     true                # Request RUNNING automatically when a valid WORK window is active.
+    force_record_rosbag:                false               # Force scheduled mission requests to record a mission rosbag even when the ICS event does not request one.
+    use_sim_time_for_schedule_clock:    false               # Use civil wall time for calendar windows by default; set true only for replay tests that intentionally advance schedules with /clock.
 
     # -- Schedule supervision -------------------------------------------------
     schedule_poll_interval_sec:         60.0                # Filesystem poll period used to detect schedule changes.

@@ -33,6 +33,19 @@ constexpr char kDefaultRobotConfigEnvPath[] = "/opt/robot_config/robot_config.gl
 
 std::string format_local_timestamp(const std::tm & tm);
 
+bool environment_flag_enabled(const char * name)
+{
+  const char * value = std::getenv(name);
+  if (value == nullptr) {
+    return false;
+  }
+  std::string normalized{value};
+  std::transform(normalized.begin(), normalized.end(), normalized.begin(), [](unsigned char character) {
+    return static_cast<char>(std::tolower(character));
+  });
+  return normalized == "1" || normalized == "true" || normalized == "yes" || normalized == "on";
+}
+
 bool has_timestamp_suffix(const std::string & candidate, const std::string & prefix)
 {
   if (candidate.size() <= prefix.size() + 1U || candidate.rfind(prefix + "_", 0) != 0U) {
@@ -268,6 +281,27 @@ std::string trim(const std::string & value)
   return value.substr(start, end - start + 1);
 }
 
+std::string uppercase_ascii(std::string value)
+{
+  std::transform(
+    value.begin(),
+    value.end(),
+    value.begin(),
+    [](const unsigned char character) {
+      return static_cast<char>(std::toupper(character));
+    });
+  return value;
+}
+
+bool is_terminal_runtime_status(const std::optional<std::string> & status)
+{
+  if (!status.has_value()) {
+    return false;
+  }
+  const std::string normalized = uppercase_ascii(trim(*status));
+  return normalized == "COMPLETED" || normalized == "ABORTED" || normalized == "FAILED";
+}
+
 bool starts_with(const std::string & value, const std::string & prefix)
 {
   return value.rfind(prefix, 0) == 0;
@@ -496,6 +530,7 @@ TimeWindow build_window(
   window.type = event.type;
   window.mission_id = event.mission_id;
   window.record_rosbag = event.record_rosbag;
+  window.runtime_status = event.runtime_status;
   window.tzid = event.dtstart_tzid;
   window.start_local = format_local_timestamp(time_point_to_tm_in_timezone(start_time, event.dtstart_tzid));
   window.end_local = format_local_timestamp(time_point_to_tm_in_timezone(end_time, event.dtstart_tzid));
@@ -762,6 +797,10 @@ ScheduleModel IcalParserMinimal::parse_file(const std::string & ics_path, const 
       current.record_rosbag = value == "TRUE" || value == "true" || value == "1";
       continue;
     }
+    if (starts_with(line, "X-RUNTIME-STATUS:")) {
+      current.runtime_status = line.substr(std::string("X-RUNTIME-STATUS:").size());
+      continue;
+    }
   }
 
   if (in_vevent) {
@@ -993,6 +1032,7 @@ SchedulerNode::SchedulerNode(const rclcpp::NodeOptions & options)
   robot_config_env_path_ = declare_parameter<std::string>(
     "robot_config_env_path",
     kDefaultRobotConfigEnvPath);
+  actual_schedule_log_path_ = declare_parameter<std::string>("actual_schedule_log_path", "");
   if (robot_id_.empty()) {
     try {
       const auto derived_robot_id = derived_robot_id_from_env_file(robot_config_env_path_);
@@ -1018,6 +1058,11 @@ SchedulerNode::SchedulerNode(const rclcpp::NodeOptions & options)
   trigger_running_on_work_window_ = declare_parameter<bool>(
     "trigger_running_on_work_window",
     true);
+  force_record_rosbag_ = declare_parameter<bool>("force_record_rosbag", false);
+  force_record_rosbag_ =
+    force_record_rosbag_ || environment_flag_enabled("AMR_SWEEPER_FORCE_RECORD_ROSBAG");
+  use_sim_time_for_schedule_clock_ =
+    declare_parameter<bool>("use_sim_time_for_schedule_clock", false);
   schedule_poll_interval_sec_ = declare_parameter<double>("schedule_poll_interval_sec", 60.0);
   retry_attempts_before_error_ = declare_parameter<int>("retry_attempts_before_error", 3);
   fatal_after_consecutive_errors_ = declare_parameter<int>("fatal_after_consecutive_errors", 10);
@@ -1434,6 +1479,9 @@ void SchedulerNode::publish_windows(const std::vector<TimeWindow> & windows)
            << "\"start\":\"" << window.start_local << "\","
            << "\"end\":\"" << window.end_local << "\","
            << "\"record_rosbag\":" << (window.record_rosbag ? "true" : "false");
+    if (window.runtime_status) {
+      stream << ",\"runtime_status\":\"" << *window.runtime_status << "\"";
+    }
     if (window.mission_id) {
       stream << ",\"mission_id\":\"" << *window.mission_id << "\"";
       if (window.mission_path) {
@@ -1473,6 +1521,24 @@ void SchedulerNode::maybe_promote_mission(const std::vector<TimeWindow> & window
       continue;
     }
 
+    if (is_terminal_runtime_status(window.runtime_status)) {
+      trigger_info(
+        "SCHED_ACTIVE_WINDOW_ALREADY_TERMINAL",
+        "mission_id=" + window.mission_id.value_or(std::string("unknown")) +
+        "; uid=" + window.uid +
+        "; runtime_status=" + window.runtime_status.value_or(std::string("unknown")));
+      return;
+    }
+
+    if (actual_schedule_has_terminal_run_for_window(window)) {
+      trigger_info(
+        "SCHED_ACTIVE_WINDOW_ALREADY_TERMINAL",
+        "mission_id=" + window.mission_id.value_or(std::string("unknown")) +
+        "; uid=" + window.uid +
+        "; source=actual_schedule");
+      return;
+    }
+
     if (!window.mission_path) {
       trigger_warn(
         "SCHED_ACTIVE_WINDOW_BLOCKED",
@@ -1503,7 +1569,7 @@ void SchedulerNode::maybe_promote_mission(const std::vector<TimeWindow> & window
 
 std::chrono::system_clock::time_point SchedulerNode::current_schedule_time() const
 {
-  if (!use_sim_time_) {
+  if (!use_sim_time_ || !use_sim_time_for_schedule_clock_) {
     return std::chrono::system_clock::now();
   }
 
@@ -1516,6 +1582,75 @@ std::chrono::system_clock::time_point SchedulerNode::current_schedule_time() con
   const auto ros_elapsed =
     std::chrono::nanoseconds((this->now() - schedule_time_anchor_ros_).nanoseconds());
   return schedule_time_anchor_wall_ + ros_elapsed;
+}
+
+bool SchedulerNode::actual_schedule_has_terminal_run_for_window(const TimeWindow & window) const
+{
+  if (!window.mission_id.has_value() || window.mission_id->empty()) {
+    return false;
+  }
+
+  const std::string actual_schedule_path = resolved_actual_schedule_log_path();
+  if (actual_schedule_path.empty()) {
+    return false;
+  }
+  std::error_code filesystem_error;
+  if (!std::filesystem::is_regular_file(actual_schedule_path, filesystem_error)) {
+    return false;
+  }
+
+  ScheduleModel actual_schedule;
+  try {
+    ParserConfig config;
+    config.strict_validation = false;
+    config.require_x_robot_id = false;
+    config.require_x_schedule_type = false;
+    config.require_x_mission_id_for_work = false;
+    actual_schedule = parser_->parse_file(actual_schedule_path, config);
+  } catch (const std::exception & exception) {
+    RCLCPP_WARN_THROTTLE(
+      get_logger(),
+      *get_clock(),
+      30000,
+      "Could not inspect actual schedule log %s for completed active windows: %s",
+      actual_schedule_path.c_str(),
+      exception.what());
+    return false;
+  }
+
+  const auto window_start = to_time_point(window.start_local, window.tzid);
+  const auto window_end = to_time_point(window.end_local, window.tzid);
+  for (const auto & event : actual_schedule.events) {
+    if (!event.mission_id.has_value() || *event.mission_id != *window.mission_id) {
+      continue;
+    }
+    if (!is_terminal_runtime_status(event.runtime_status)) {
+      continue;
+    }
+
+    try {
+      const std::string event_tzid = event.dtstart_tzid.empty() ? window.tzid : event.dtstart_tzid;
+      const auto event_start = to_time_point(event.dtstart_local, event_tzid);
+      if (event_start >= window_start && event_start <= window_end) {
+        return true;
+      }
+    } catch (const std::exception &) {
+      continue;
+    }
+  }
+
+  return false;
+}
+
+std::string SchedulerNode::resolved_actual_schedule_log_path() const
+{
+  if (!actual_schedule_log_path_.empty()) {
+    return resolve_path(actual_schedule_log_path_).string();
+  }
+  if (use_sim_time_) {
+    return resolve_path("missions/simulations/simulation_schedule.ics").string();
+  }
+  return resolve_path("missions/logs/actual_schedule.ics").string();
 }
 
 bool SchedulerNode::mission_json_or_folder_exists(const std::string & mission_id) const
@@ -1554,13 +1689,13 @@ void SchedulerNode::request_mission_execution(const TimeWindow & window)
   request->requester = "scheduler_node";
   request->priority = 210;
   request->force = false;
-  request->record_rosbag = window.record_rosbag;
+  request->record_rosbag = force_record_rosbag_ || window.record_rosbag;
   request->reason =
     "Scheduled mission window active; mission_id=" +
     window.mission_id.value_or(std::string("unknown")) +
     "; start=" + window.start_local +
     "; end=" + window.end_local +
-    "; record_rosbag=" + std::string(window.record_rosbag ? "true" : "false");
+    "; record_rosbag=" + std::string(request->record_rosbag ? "true" : "false");
   mission_executor_execute_client_->async_send_request(
     request,
     [this, window](

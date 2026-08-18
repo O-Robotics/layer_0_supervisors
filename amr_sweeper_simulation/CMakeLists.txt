@@ -21,6 +21,7 @@ install(PROGRAMS
 install(PROGRAMS
   scripts/set_gazebo_simulation_speed.py
   scripts/wait_for_fsm_fault_shutdown.py
+  scripts/monotonic_clock.py
   scripts/world_pose_to_sim_pose.py
   scripts/ros_gz_bridge_wrapper.py
   DESTINATION lib/${PROJECT_NAME}
@@ -32,4 +33,3 @@ if(BUILD_TESTING)
 endif()
 
 ament_package()
-

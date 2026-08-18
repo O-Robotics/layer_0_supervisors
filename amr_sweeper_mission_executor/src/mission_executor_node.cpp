@@ -68,6 +68,7 @@ constexpr char kImuDataRawTopic[] = "/amr_sweeper/imu/data_raw";
 constexpr char kImuDataAccGyroTopic[] = "/amr_sweeper/imu/data_acc_gyro";
 constexpr char kImuDataHeadingTopic[] = "/amr_sweeper/imu/data_heading";
 constexpr char kImuAzimuthTopic[] = "/amr_sweeper/imu/azimuth";
+constexpr char kRosbagMaxCacheSizeBytes[] = "536870912";
 constexpr double kRecordMapCostmapResolutionMeters = 0.1;
 constexpr double kRecordMapCostmapPaddingMeters = 2.0;
 constexpr double kRecordMapEdgeBandMeters = 1.0;
@@ -4183,87 +4184,88 @@ void MissionExecutorNode::recordMissionExecutionEnd(
   if (schedule_path_string.empty()) {
     schedule_path_string = context_document.value("schedule_log_path", std::string{});
   }
-  if (schedule_path_string.empty()) {
-    return;
-  }
+  if (!schedule_path_string.empty()) {
+    const std::filesystem::path schedule_path(schedule_path_string);
+    if (std::filesystem::exists(schedule_path)) {
+      std::ifstream input_stream(schedule_path);
+      if (input_stream.is_open()) {
+        std::ostringstream buffer;
+        buffer << input_stream.rdbuf();
+        std::string schedule_text = buffer.str();
 
-  const std::filesystem::path schedule_path(schedule_path_string);
-  if (!std::filesystem::exists(schedule_path)) {
-    return;
-  }
-
-  std::ifstream input_stream(schedule_path);
-  if (!input_stream.is_open()) {
-    return;
-  }
-  std::ostringstream buffer;
-  buffer << input_stream.rdbuf();
-  std::string schedule_text = buffer.str();
-
-  const std::string event_uid = context_document.value("schedule_event_uid", std::string{});
-  const std::string mission_id = context_document.value("mission_id", std::string{});
-  const std::string mission_window_start = context_document.value("mission_window_start", std::string{});
-  const auto event_anchor = !event_uid.empty() ? schedule_text.find("UID:" + event_uid) : std::string::npos;
-  std::size_t event_begin = std::string::npos;
-  std::size_t event_end = std::string::npos;
-  if (event_anchor != std::string::npos) {
-    event_begin = schedule_text.rfind("BEGIN:VEVENT", event_anchor);
-    event_end = schedule_text.find("END:VEVENT", event_anchor);
-  } else if (!mission_id.empty()) {
-    const auto mission_anchor = schedule_text.find("X-MISSION-ID:" + mission_id);
-    if (mission_anchor != std::string::npos) {
-      event_begin = schedule_text.rfind("BEGIN:VEVENT", mission_anchor);
-      event_end = schedule_text.find("END:VEVENT", mission_anchor);
-      if (event_begin != std::string::npos && !mission_window_start.empty()) {
-        auto local_start_anchor = schedule_text.find(mission_window_start, event_begin);
-        std::size_t utc_start_anchor = std::string::npos;
-        try {
-          const std::string mission_window_start_utc = localTimestampToUtcTimestamp(mission_window_start);
-          utc_start_anchor = schedule_text.find(mission_window_start_utc, event_begin);
-        } catch (const std::exception &) {
-          utc_start_anchor = std::string::npos;
+        const std::string event_uid = context_document.value("schedule_event_uid", std::string{});
+        const std::string mission_id = context_document.value("mission_id", std::string{});
+        const std::string mission_window_start =
+          context_document.value("mission_window_start", std::string{});
+        const auto event_anchor = !event_uid.empty() ?
+          schedule_text.find("UID:" + event_uid) : std::string::npos;
+        std::size_t event_begin = std::string::npos;
+        std::size_t event_end = std::string::npos;
+        if (event_anchor != std::string::npos) {
+          event_begin = schedule_text.rfind("BEGIN:VEVENT", event_anchor);
+          event_end = schedule_text.find("END:VEVENT", event_anchor);
+        } else if (!mission_id.empty()) {
+          const auto mission_anchor = schedule_text.find("X-MISSION-ID:" + mission_id);
+          if (mission_anchor != std::string::npos) {
+            event_begin = schedule_text.rfind("BEGIN:VEVENT", mission_anchor);
+            event_end = schedule_text.find("END:VEVENT", mission_anchor);
+            if (event_begin != std::string::npos && !mission_window_start.empty()) {
+              auto local_start_anchor = schedule_text.find(mission_window_start, event_begin);
+              std::size_t utc_start_anchor = std::string::npos;
+              try {
+                const std::string mission_window_start_utc =
+                  localTimestampToUtcTimestamp(mission_window_start);
+                utc_start_anchor = schedule_text.find(mission_window_start_utc, event_begin);
+              } catch (const std::exception &) {
+                utc_start_anchor = std::string::npos;
+              }
+              const bool matching_start =
+                (local_start_anchor != std::string::npos && local_start_anchor < event_end) ||
+                (utc_start_anchor != std::string::npos && utc_start_anchor < event_end);
+              if (!matching_start) {
+                event_begin = std::string::npos;
+                event_end = std::string::npos;
+              }
+            }
+          }
         }
-        const bool matching_start =
-          (local_start_anchor != std::string::npos && local_start_anchor < event_end) ||
-          (utc_start_anchor != std::string::npos && utc_start_anchor < event_end);
-        if (!matching_start) {
-          event_begin = std::string::npos;
-          event_end = std::string::npos;
+
+        if (event_begin != std::string::npos && event_end != std::string::npos) {
+          auto insert_or_replace_line = [&schedule_text, event_begin, &event_end](
+              const std::string & prefix, const std::string & line) {
+              const auto position = schedule_text.find(prefix, event_begin);
+              if (position != std::string::npos && position < event_end) {
+                const auto line_end = schedule_text.find('\n', position);
+                const std::size_t replace_end =
+                  line_end == std::string::npos ? event_end : line_end + 1;
+                const std::size_t replace_length = replace_end - position;
+                schedule_text.replace(position, replace_length, line);
+                event_end = event_end + line.size() - replace_length;
+              } else {
+                schedule_text.insert(event_end, line);
+                event_end += line.size();
+              }
+            };
+
+          insert_or_replace_line("X-ACTUAL-END-UTC:", "X-ACTUAL-END-UTC:" + actual_end_utc + "\n");
+          insert_or_replace_line(
+            "X-ACTUAL-DURATION-SECONDS:",
+            "X-ACTUAL-DURATION-SECONDS:" +
+              std::to_string(static_cast<long long>(actual_duration_seconds)) + "\n");
+          insert_or_replace_line(
+            "X-ACTUAL-PATH-LENGTH-METERS:",
+            "X-ACTUAL-PATH-LENGTH-METERS:" + std::to_string(actual_path_length_meters) + "\n");
+          insert_or_replace_line("X-RUNTIME-STATUS:", "X-RUNTIME-STATUS:" + runtime_status + "\n");
+          insert_or_replace_line("X-END-REASON:", "X-END-REASON:" + request.reason + "\n");
+
+          std::ofstream output_stream(schedule_path, std::ios::trunc);
+          if (output_stream.is_open()) {
+            output_stream << schedule_text;
+          }
         }
       }
     }
   }
-
-  if (event_begin == std::string::npos || event_end == std::string::npos) {
-    return;
-  }
-
-  const auto insert_or_replace_line = [&schedule_text, event_begin, event_end](
-      const std::string & prefix, const std::string & line) {
-      const auto position = schedule_text.find(prefix, event_begin);
-      if (position != std::string::npos && position < event_end) {
-        const auto line_end = schedule_text.find('\n', position);
-        schedule_text.replace(position, (line_end == std::string::npos ? event_end : line_end + 1) - position, line);
-      } else {
-        schedule_text.insert(event_end, line);
-      }
-    };
-
-  insert_or_replace_line("X-ACTUAL-END-UTC:", "X-ACTUAL-END-UTC:" + actual_end_utc + "\n");
-  insert_or_replace_line(
-    "X-ACTUAL-DURATION-SECONDS:",
-    "X-ACTUAL-DURATION-SECONDS:" + std::to_string(static_cast<long long>(actual_duration_seconds)) + "\n");
-  insert_or_replace_line(
-    "X-ACTUAL-PATH-LENGTH-METERS:",
-    "X-ACTUAL-PATH-LENGTH-METERS:" + std::to_string(actual_path_length_meters) + "\n");
-  insert_or_replace_line("X-RUNTIME-STATUS:", "X-RUNTIME-STATUS:" + runtime_status + "\n");
-  insert_or_replace_line("X-END-REASON:", "X-END-REASON:" + request.reason + "\n");
-
-  std::ofstream output_stream(schedule_path, std::ios::trunc);
-  if (!output_stream.is_open()) {
-    return;
-  }
-  output_stream << schedule_text;
 
   std::string actual_schedule_path_string =
     context_document.value("actual_schedule_log_path", std::string{});
@@ -4284,22 +4286,27 @@ void MissionExecutorNode::recordMissionExecutionEnd(
           actual_schedule_text.find("UID:" + actual_event_uid) : std::string::npos;
         if (actual_anchor != std::string::npos) {
           const auto actual_begin = actual_schedule_text.rfind("BEGIN:VEVENT", actual_anchor);
-          const auto actual_end = actual_schedule_text.find("END:VEVENT", actual_anchor);
+          auto actual_end = actual_schedule_text.find("END:VEVENT", actual_anchor);
           if (actual_begin != std::string::npos && actual_end != std::string::npos) {
             const auto insert_or_replace_actual_line =
-              [&actual_schedule_text, actual_begin, actual_end](
+              [&actual_schedule_text, actual_begin, &actual_end](
                 const std::string & prefix,
                 const std::string & line)
               {
                 const auto position = actual_schedule_text.find(prefix, actual_begin);
                 if (position != std::string::npos && position < actual_end) {
                   const auto line_end = actual_schedule_text.find('\n', position);
+                  const std::size_t replace_end = line_end == std::string::npos ?
+                    actual_end : line_end + 1;
+                  const std::size_t replace_length = replace_end - position;
                   actual_schedule_text.replace(
                     position,
-                    (line_end == std::string::npos ? actual_end : line_end + 1) - position,
+                    replace_length,
                     line);
+                  actual_end = actual_end + line.size() - replace_length;
                 } else {
                   actual_schedule_text.insert(actual_end, line);
+                  actual_end += line.size();
                 }
               };
             insert_or_replace_actual_line(
@@ -4820,7 +4827,10 @@ bool MissionExecutorNode::startMissionRosbagRecording(
       const_cast<char *>("--qos-profile-overrides-path"),
       const_cast<char *>(rosbag_runtime_qos_overrides_string.c_str()),
       const_cast<char *>("--storage-preset-profile"),
-      const_cast<char *>("zstd_fast"),
+      const_cast<char *>("fastwrite"),
+      const_cast<char *>("--max-cache-size"),
+      const_cast<char *>(kRosbagMaxCacheSizeBytes),
+      const_cast<char *>("--disable-keyboard-controls"),
     };
     arguments.push_back(const_cast<char *>("-o"));
     arguments.push_back(const_cast<char *>(rosbag_output_string.c_str()));

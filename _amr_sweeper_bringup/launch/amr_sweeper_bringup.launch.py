@@ -28,6 +28,9 @@ from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, Pyth
 from launch_ros.substitutions import FindPackageShare
 
 
+ROSBAG_MAX_CACHE_SIZE_BYTES = "536870912"
+
+
 def _launch_file(package_name: str, launch_file_name: str):
     return PathJoinSubstitution([
         FindPackageShare(package_name),
@@ -263,6 +266,9 @@ def _resolve_runtime_rosbag_settings(context, *args, **kwargs):
             SetLaunchConfiguration("record_mission_rosbag", "true"),
         ])
 
+    if _as_bool(LaunchConfiguration("record_mission_rosbag").perform(context)):
+        actions.append(SetEnvironmentVariable("AMR_SWEEPER_FORCE_RECORD_ROSBAG", "true"))
+
     actions.append(SetLaunchConfiguration("rosbag_directory", effective_missions_log_directory))
     return actions
 
@@ -316,7 +322,10 @@ def _start_bringup_rosbag(context, *args, **kwargs):
                 "--qos-profile-overrides-path",
                 rosbag_qos_overrides_path,
                 "--storage-preset-profile",
-                "zstd_fast",
+                "fastwrite",
+                "--max-cache-size",
+                ROSBAG_MAX_CACHE_SIZE_BYTES,
+                "--disable-keyboard-controls",
                 "-o",
                 rosbag_output_directory,
             ],
@@ -418,6 +427,7 @@ def generate_launch_description():
         "use_amr_sweeper_mapping",
         "use_amr_sweeper_navigation",
         "auto_start_mission",
+        "mission_start_mode",
         "missions_log_directory",
         "schedule_ics_path",
         "robot_id",
@@ -429,6 +439,7 @@ def generate_launch_description():
     use_profile = LaunchConfiguration("use_profile")
     use_simulation = LaunchConfiguration("use_simulation")
     simulation_profile = LaunchConfiguration("simulation_profile")
+    use_random_spawning = LaunchConfiguration("use_random_spawning")
     launch_rviz = LaunchConfiguration("launch_rviz")
     launch_gz_gui = LaunchConfiguration("launch_gz_gui")
     rviz_config = LaunchConfiguration("rviz_config")
@@ -498,7 +509,10 @@ def generate_launch_description():
     ])
 
     extra_fsm_override_declarations = [
-        DeclareLaunchArgument(name, default_value="")
+        DeclareLaunchArgument(
+            name,
+            default_value="start_over" if name == "mission_start_mode" else "",
+        )
         for name in fsm_override_arg_names
     ]
 
@@ -525,6 +539,7 @@ def generate_launch_description():
         DeclareLaunchArgument("namespace", default_value="amr_sweeper"),
         DeclareLaunchArgument("use_simulation", default_value="false"),
         DeclareLaunchArgument("use_sim_time", default_value="false"),
+        DeclareLaunchArgument("use_random_spawning", default_value="false"),
         DeclareLaunchArgument("launch_rviz", default_value="auto"),
         DeclareLaunchArgument("launch_gz_gui", default_value="auto"),
         DeclareLaunchArgument("rviz_config", default_value=""),
@@ -611,6 +626,7 @@ def generate_launch_description():
                 "launch_gz_gui": launch_gz_gui,
                 "rviz_config": rviz_config,
                 "simulation_profile": simulation_profile,
+                "use_random_spawning": use_random_spawning,
             }.items(),
             condition=IfCondition(use_simulation),
         ),
@@ -656,6 +672,7 @@ def generate_launch_description():
                 "mission_executor_execute_service": mission_executor_execute_service,
                 "mission_executor_prepare_service": mission_executor_prepare_service,
                 "trigger_running_on_work_window": trigger_running_on_work_window,
+                "force_record_rosbag": record_mission_rosbag,
             }.items(),
             condition=IfCondition(launch_scheduler),
         ),

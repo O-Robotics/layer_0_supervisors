@@ -17,6 +17,8 @@ def generate_launch_description():
     mission_executor_execute_service = LaunchConfiguration("mission_executor_execute_service")
     mission_executor_prepare_service = LaunchConfiguration("mission_executor_prepare_service")
     trigger_running_on_work_window = LaunchConfiguration("trigger_running_on_work_window")
+    force_record_rosbag = LaunchConfiguration("force_record_rosbag")
+    use_sim_time_for_schedule_clock = LaunchConfiguration("use_sim_time_for_schedule_clock")
     config_file = PathJoinSubstitution(
         [FindPackageShare("amr_sweeper_scheduler"), "config", "amr_sweeper_scheduler.yaml"]
     )
@@ -32,6 +34,8 @@ def generate_launch_description():
         DeclareLaunchArgument("mission_executor_execute_service", default_value="execute_mission"),
         DeclareLaunchArgument("mission_executor_prepare_service", default_value="prepare_manual_mission"),
         DeclareLaunchArgument("trigger_running_on_work_window", default_value="true"),
+        DeclareLaunchArgument("force_record_rosbag", default_value="false"),
+        DeclareLaunchArgument("use_sim_time_for_schedule_clock", default_value="false"),
         Node(
             package="amr_sweeper_scheduler",
             executable="scheduler_node",
@@ -50,6 +54,8 @@ def generate_launch_description():
                     "mission_executor_execute_service": mission_executor_execute_service,
                     "mission_executor_prepare_service": mission_executor_prepare_service,
                     "trigger_running_on_work_window": trigger_running_on_work_window,
+                    "force_record_rosbag": force_record_rosbag,
+                    "use_sim_time_for_schedule_clock": use_sim_time_for_schedule_clock,
                 },
             ],
         )
