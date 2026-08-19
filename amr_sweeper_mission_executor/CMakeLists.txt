@@ -9,6 +9,7 @@ set(CMAKE_CXX_STANDARD 17)
 
 find_package(ament_cmake REQUIRED)
 find_package(ament_index_cpp REQUIRED)
+find_package(PkgConfig REQUIRED)
 find_package(amr_sweeper_fsm REQUIRED)
 find_package(amr_sweeper_safety_msgs REQUIRED)
 find_package(amr_sweeper_vda5050_parser REQUIRED)
@@ -19,6 +20,8 @@ find_package(rcl_interfaces REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
+
+pkg_check_modules(LIBZIP REQUIRED libzip)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/CreateRecordedMission.srv"
@@ -40,7 +43,9 @@ add_executable(mission_executor_node
 target_include_directories(mission_executor_node PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
+  ${LIBZIP_INCLUDE_DIRS}
 )
+target_link_directories(mission_executor_node PUBLIC ${LIBZIP_LIBRARY_DIRS})
 ament_target_dependencies(mission_executor_node
   ament_index_cpp
   amr_sweeper_fsm
@@ -55,6 +60,7 @@ ament_target_dependencies(mission_executor_node
 )
 target_link_libraries(mission_executor_node
   ${cpp_typesupport_target}
+  ${LIBZIP_LIBRARIES}
 )
 
 add_dependencies(mission_executor_node ${PROJECT_NAME})

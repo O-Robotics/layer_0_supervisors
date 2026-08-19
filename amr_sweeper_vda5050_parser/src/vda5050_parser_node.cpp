@@ -18,6 +18,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include "mission_package_reader.hpp"
+
 namespace amr_sweeper_vda5050_parser
 {
 
@@ -53,6 +55,26 @@ nlohmann::json loadJsonDocument(const std::filesystem::path & path)
   nlohmann::json document;
   input_stream >> document;
   return document;
+}
+
+void writeJsonDocumentAtomic(
+  const std::filesystem::path & path,
+  const nlohmann::json & document)
+{
+  std::filesystem::create_directories(path.parent_path());
+  const std::filesystem::path temp_path = path.string() + ".tmp";
+  {
+    std::ofstream output_stream(temp_path, std::ios::trunc);
+    if (!output_stream.is_open()) {
+      throw std::runtime_error("Failed to write JSON file: " + temp_path.string());
+    }
+    output_stream << std::setw(2) << document << '\n';
+    output_stream.flush();
+    if (!output_stream.good()) {
+      throw std::runtime_error("Failed to flush JSON file: " + temp_path.string());
+    }
+  }
+  std::filesystem::rename(temp_path, path);
 }
 
 std::string sanitize_token(const std::string & value)
@@ -164,7 +186,11 @@ void Vda5050MissionParser::loadMission(const Vda5050MissionBuildConfig & config)
 
 MissionIdentity Vda5050MissionParser::inspectMissionIdentity(const std::string & mission_path) const
 {
-  return extractMissionIdentity(loadJsonDocument(packageOrderPath(resolveMissionPath(mission_path))));
+  const std::filesystem::path resolved_path(resolveMissionPath(mission_path));
+  if (std::filesystem::is_directory(resolved_path) || isZipMissionPackage(resolved_path)) {
+    return extractMissionIdentity(readVda5050MissionPackage(resolved_path).order);
+  }
+  return extractMissionIdentity(loadJsonDocument(packageOrderPath(resolved_path)));
 }
 
 void Vda5050MissionParser::loadFromLegacyGeoJson(const nlohmann::json & document)
@@ -1137,13 +1163,13 @@ std::vector<std::filesystem::path> MissionParserNode::discoverMissionPaths()
   }
 
   auto maybe_add_mission = [&mission_paths](const std::filesystem::path & candidate_path) {
-      if (!std::filesystem::is_regular_file(candidate_path) ||
-        candidate_path.filename() != "order.json")
-      {
+      if (!std::filesystem::is_regular_file(candidate_path)) {
         return;
       }
       try {
-        const auto document = loadJsonDocument(candidate_path);
+        const auto document = isZipMissionPackage(candidate_path) ?
+          readVda5050MissionPackage(candidate_path).order :
+          loadJsonDocument(candidate_path);
         if (!isValidVda5050MissionDocument(document)) {
           return;
         }
@@ -1155,7 +1181,9 @@ std::vector<std::filesystem::path> MissionParserNode::discoverMissionPaths()
 
   for (const auto & entry : std::filesystem::directory_iterator(missions_directory)) {
     if (entry.is_regular_file()) {
-      maybe_add_mission(entry.path());
+      if (entry.path().filename() == "order.json" || isZipMissionPackage(entry.path())) {
+        maybe_add_mission(entry.path());
+      }
       continue;
     }
     if (!entry.is_directory()) {
@@ -1181,6 +1209,11 @@ std::optional<std::filesystem::path> MissionParserNode::selectActiveMissionPath(
     if (std::filesystem::exists(fallback_source)) {
       return stageMissionFile(fallback_source);
     }
+    const std::filesystem::path fallback_zip_source =
+      resolvePath(missions_directory_) / (configured_path.stem().string() + ".zip");
+    if (std::filesystem::exists(fallback_zip_source)) {
+      return stageMissionFile(fallback_zip_source);
+    }
     for (const auto & discovered_path : discoverMissionPaths()) {
       if (missionStemForPath(discovered_path) == configured_path.stem().string()) {
         return discovered_path;
@@ -1202,6 +1235,24 @@ std::filesystem::path MissionParserNode::stageMissionFile(const std::filesystem:
   const std::filesystem::path staged_path =
     mission_folder / (identity.order_id + "_vda5050" + mission_file_extension_);
   std::filesystem::create_directories(mission_folder);
+  if (isZipMissionPackage(mission_path)) {
+    const auto documents = readVda5050MissionPackage(mission_path);
+    writeJsonDocumentAtomic(staged_path, documents.order);
+    writeJsonDocumentAtomic(mission_folder / "map_georeference.json", documents.map_georeference);
+    if (documents.zone_set.has_value()) {
+      writeJsonDocumentAtomic(mission_folder / "zoneSet.json", *documents.zone_set);
+    } else {
+      std::filesystem::remove(mission_folder / "zoneSet.json");
+    }
+    const auto source_stamp = currentMissionStamp(mission_path);
+    std::error_code stamp_error;
+    std::filesystem::last_write_time(staged_path, source_stamp, stamp_error);
+    std::filesystem::last_write_time(mission_folder / "map_georeference.json", source_stamp, stamp_error);
+    if (documents.zone_set.has_value()) {
+      std::filesystem::last_write_time(mission_folder / "zoneSet.json", source_stamp, stamp_error);
+    }
+    return staged_path;
+  }
   const std::filesystem::path source_order_path =
     Vda5050MissionParser::packageOrderPath(mission_path);
 

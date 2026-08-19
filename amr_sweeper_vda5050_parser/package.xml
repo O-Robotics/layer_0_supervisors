@@ -14,7 +14,9 @@
   <depend>std_msgs</depend>
   <depend>std_srvs</depend>
   <build_depend>libgeographiclib-dev</build_depend>
+  <build_depend>libzip-dev</build_depend>
   <exec_depend>libgeographiclib-dev</exec_depend>
+  <exec_depend>libzip-dev</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

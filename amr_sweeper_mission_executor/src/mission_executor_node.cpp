@@ -28,8 +28,13 @@
 
 #include <nlohmann/json.hpp>
 
+#include <mission_package_reader.hpp>
+
 namespace amr_sweeper_mission_executor
 {
+
+using amr_sweeper_vda5050_parser::isZipMissionPackage;
+using amr_sweeper_vda5050_parser::readVda5050MissionPackage;
 
 namespace
 {
@@ -246,24 +251,6 @@ nlohmann::json loadJsonDocument(const std::filesystem::path & path)
   throw std::runtime_error("Failed to parse JSON document: " + path.string());
 }
 
-std::filesystem::path vdaOrderPath(const std::filesystem::path & mission_path)
-{
-  if (std::filesystem::is_directory(mission_path)) {
-    return mission_path / "order.json";
-  }
-  return mission_path;
-}
-
-std::filesystem::path vdaZoneSetPath(const std::filesystem::path & order_path)
-{
-  return order_path.parent_path() / "zoneSet.json";
-}
-
-std::filesystem::path vdaMapGeoreferencePath(const std::filesystem::path & order_path)
-{
-  return order_path.parent_path() / "map_georeference.json";
-}
-
 bool isSupportedVda5050Version(const std::string & version)
 {
   return version == "3.0.0" || version == "3.0.1" || version == "3.1.0";
@@ -358,14 +345,10 @@ void validateVda5050OrderDocument(const nlohmann::json & document)
 
 void validateVda5050Package(const std::filesystem::path & mission_path)
 {
-  const auto order_path = vdaOrderPath(mission_path);
-  const auto order_document = loadJsonDocument(order_path);
+  const auto package_documents = readVda5050MissionPackage(mission_path);
+  const auto & order_document = package_documents.order;
   validateVda5050OrderDocument(order_document);
-  const auto map_georeference_path = vdaMapGeoreferencePath(order_path);
-  if (!std::filesystem::exists(map_georeference_path)) {
-    throw std::runtime_error("VDA5050 package is missing map_georeference.json");
-  }
-  const auto map_georeference = loadJsonDocument(map_georeference_path);
+  const auto & map_georeference = package_documents.map_georeference;
   const auto maps = map_georeference.contains("maps") ?
     map_georeference.at("maps") : nlohmann::json::array({map_georeference});
   if (!maps.is_array() || maps.empty()) {
@@ -386,9 +369,8 @@ void validateVda5050Package(const std::filesystem::path & mission_path)
   for (const auto & node : order_document.at("nodes")) {
     required_map_ids.insert(node.at("nodePosition").at("mapId").get<std::string>());
   }
-  const auto zone_set_path = vdaZoneSetPath(order_path);
-  if (std::filesystem::exists(zone_set_path)) {
-    const auto zone_set_document = loadJsonDocument(zone_set_path);
+  if (package_documents.zone_set.has_value()) {
+    const auto & zone_set_document = *package_documents.zone_set;
     if (!zone_set_document.is_object() || !zone_set_document.contains("zoneSet") ||
       !zone_set_document.at("zoneSet").is_object() ||
       !zone_set_document.at("zoneSet").contains("mapId") ||
@@ -2789,6 +2771,10 @@ std::vector<ManualMissionInfo> MissionExecutorNode::discoverManualMissions() con
         for (const auto & entry : std::filesystem::directory_iterator(directory)) {
           if (entry.is_directory()) {
             maybe_add(entry.path() / "order.json");
+            continue;
+          }
+          if (entry.is_regular_file() && isZipMissionPackage(entry.path())) {
+            maybe_add(entry.path());
           }
         }
         return;
@@ -3152,8 +3138,34 @@ ManualMissionInfo MissionExecutorNode::resolveExecutableMissionSource(const Manu
     return mission;
   }
 
-  const auto staged_directory = newestScheduledArtifactDirectory(mission.mission_id);
-  if (!staged_directory) {
+  std::vector<std::string> lookup_ids{mission.mission_id};
+  try {
+    nlohmann::json source_document;
+    if (isZipMissionPackage(mission_path)) {
+      source_document = readVda5050MissionPackage(mission_path).order;
+    } else if (std::filesystem::is_regular_file(mission_path)) {
+      source_document = loadJsonDocument(mission_path);
+    }
+    if (source_document.contains("orderId") && source_document.at("orderId").is_string()) {
+      const std::string order_id = source_document.at("orderId").get<std::string>();
+      if (!order_id.empty() &&
+        std::find(lookup_ids.begin(), lookup_ids.end(), order_id) == lookup_ids.end())
+      {
+        lookup_ids.push_back(order_id);
+      }
+    }
+  } catch (const std::exception &) {
+    // Keep the existing mission_id fallback for malformed or partially synced sources.
+  }
+
+  std::optional<std::filesystem::path> staged_directory;
+  for (const auto & lookup_id : lookup_ids) {
+    staged_directory = newestScheduledArtifactDirectory(lookup_id);
+    if (staged_directory.has_value()) {
+      break;
+    }
+  }
+  if (!staged_directory.has_value()) {
     return mission;
   }
 
@@ -3177,16 +3189,21 @@ std::filesystem::path MissionExecutorNode::missionHistoryDirectory(const ManualM
 std::optional<ManualMissionInfo> MissionExecutorNode::classifyMissionFile(
   const std::filesystem::path & mission_path) const
 {
-  if (!std::filesystem::is_regular_file(mission_path) || mission_path.extension() != mission_file_extension_) {
+  const bool is_zip_package = isZipMissionPackage(mission_path);
+  if (!std::filesystem::is_regular_file(mission_path) ||
+    (!is_zip_package && mission_path.extension() != mission_file_extension_))
+  {
     return std::nullopt;
   }
 
-  const nlohmann::json document = loadJsonDocument(mission_path);
+  const nlohmann::json document = is_zip_package ?
+    readVda5050MissionPackage(mission_path).order :
+    loadJsonDocument(mission_path);
   ManualMissionInfo mission;
   mission.mission_id = missionStemForPath(mission_path);
   mission.mission_path = mission_path.string();
-  if (mission_path.filename() == "order.json") {
-    validateVda5050Package(mission_path.parent_path());
+  if (mission_path.filename() == "order.json" || is_zip_package) {
+    validateVda5050Package(is_zip_package ? mission_path : mission_path.parent_path());
     mission.mission_type = kScheduledMissionType;
   } else {
     mission.mission_type =

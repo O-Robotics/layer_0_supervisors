@@ -14,6 +14,7 @@ find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 
 pkg_check_modules(GEOGRAPHICLIB REQUIRED geographiclib)
+pkg_check_modules(LIBZIP REQUIRED libzip)
 
 add_executable(vda5050_parser_node
   src/vda5050_parser_node.cpp
@@ -22,9 +23,16 @@ target_include_directories(vda5050_parser_node PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
   ${GEOGRAPHICLIB_INCLUDE_DIRS}
+  ${LIBZIP_INCLUDE_DIRS}
 )
-target_link_directories(vda5050_parser_node PUBLIC ${GEOGRAPHICLIB_LIBRARY_DIRS})
-target_link_libraries(vda5050_parser_node ${GEOGRAPHICLIB_LIBRARIES})
+target_link_directories(vda5050_parser_node PUBLIC
+  ${GEOGRAPHICLIB_LIBRARY_DIRS}
+  ${LIBZIP_LIBRARY_DIRS}
+)
+target_link_libraries(vda5050_parser_node
+  ${GEOGRAPHICLIB_LIBRARIES}
+  ${LIBZIP_LIBRARIES}
+)
 ament_target_dependencies(vda5050_parser_node
   rclcpp
   std_msgs
@@ -45,6 +53,18 @@ install(DIRECTORY launch config resources
 )
 
 if(BUILD_TESTING)
+  include(CTest)
+  add_executable(test_mission_package_reader
+    test/test_mission_package_reader.cpp
+  )
+  target_include_directories(test_mission_package_reader PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${LIBZIP_INCLUDE_DIRS}
+  )
+  target_link_directories(test_mission_package_reader PRIVATE ${LIBZIP_LIBRARY_DIRS})
+  target_link_libraries(test_mission_package_reader ${LIBZIP_LIBRARIES})
+  add_test(NAME test_mission_package_reader COMMAND test_mission_package_reader)
+
   find_package(ament_lint_auto REQUIRED)
   ament_lint_auto_find_test_dependencies()
 endif()
