@@ -3,6 +3,7 @@
 import copy
 import os
 import re
+import shutil
 import tempfile
 from datetime import datetime, timezone
 
@@ -49,6 +50,12 @@ def _resolve_workspace_path(configured_path: str) -> str:
     return configured_path
 
 
+def _resolve_output_path(configured_path: str) -> str:
+    if os.path.isabs(configured_path):
+        return configured_path
+    return os.path.join(os.getcwd(), configured_path)
+
+
 def _as_bool(value: str) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
@@ -91,6 +98,36 @@ def _load_simulation_profile_config(profile_name: str) -> dict:
         if key not in {"default_profile", "profiles"}
     }
     return _deep_merge_dict(defaults, profiles[profile_name])
+
+
+def _seed_missing_simulation_mission_files(
+    source_directory: str,
+    destination_directory: str,
+) -> list[str]:
+    if not os.path.isdir(source_directory):
+        raise FileNotFoundError(f"Simulation mission source does not exist: {source_directory}")
+
+    copied_files: list[str] = []
+    for root, _, filenames in os.walk(source_directory):
+        relative_root = os.path.relpath(root, source_directory)
+        destination_root = (
+            destination_directory
+            if relative_root == "."
+            else os.path.join(destination_directory, relative_root)
+        )
+        os.makedirs(destination_root, exist_ok=True)
+
+        for filename in filenames:
+            source_path = os.path.join(root, filename)
+            if not os.path.isfile(source_path):
+                continue
+            destination_path = os.path.join(destination_root, filename)
+            if os.path.exists(destination_path):
+                continue
+            shutil.copy2(source_path, destination_path)
+            copied_files.append(destination_path)
+
+    return copied_files
 
 
 def _normalize_namespace(namespace: str) -> str:
@@ -206,6 +243,39 @@ def _resolve_simulation_launch_settings(context, *args, **kwargs):
 
     actions.append(SetLaunchConfiguration("simulation_profile", simulation_profile))
     simulation_config = _load_simulation_profile_config(simulation_profile)
+    simulation_mission_source = os.path.join(
+        get_package_share_directory("amr_sweeper_simulation"),
+        "missions",
+        simulation_profile,
+    )
+    missions_from_db_directory = _resolve_output_path(
+        LaunchConfiguration("missions_from_db_directory").perform(context).strip()
+    )
+    simulation_mission_destination = os.path.join(missions_from_db_directory, simulation_profile)
+    copied_mission_files = _seed_missing_simulation_mission_files(
+        simulation_mission_source,
+        simulation_mission_destination,
+    )
+    if copied_mission_files:
+        actions.append(
+            LogInfo(
+                msg=(
+                    "[amr_sweeper_bringup] Seeded "
+                    f"{len(copied_mission_files)} simulation mission file(s) for "
+                    f"'{simulation_profile}' into {simulation_mission_destination}"
+                )
+            )
+        )
+    else:
+        actions.append(
+            LogInfo(
+                msg=(
+                    "[amr_sweeper_bringup] Simulation mission "
+                    f"'{simulation_profile}' already exists in {simulation_mission_destination}"
+                )
+            )
+        )
+
     georeference = simulation_config.get("georeference", {})
     if georeference:
         actions.extend([
