@@ -1439,8 +1439,15 @@ class MissionBackendNode(Node):
         duration = end - start
         rrule = self._parse_rrule(event.get("RRULE", ""))
         occurrences: list[dict[str, Any]] = []
+        until = (
+            self._parse_ics_datetime(rrule["UNTIL"], target_timezone)
+            if rrule.get("UNTIL")
+            else None
+        )
 
         def append_occurrence(occurrence_start: datetime) -> None:
+            if until is not None and occurrence_start > until:
+                return
             occurrence_end = occurrence_start + duration
             if occurrence_end <= range_start or occurrence_start >= range_end:
                 return
@@ -1473,7 +1480,7 @@ class MissionBackendNode(Node):
             current = start
             while current + duration <= range_start:
                 current += timedelta(days=1)
-            while current < range_end:
+            while current < range_end and (until is None or current <= until):
                 append_occurrence(current)
                 current += timedelta(days=1)
             return occurrences
@@ -1484,7 +1491,7 @@ class MissionBackendNode(Node):
             current = start
             while current + duration <= range_start:
                 current += step
-            while current < range_end:
+            while current < range_end and (until is None or current <= until):
                 append_occurrence(current)
                 current += step
             return occurrences
@@ -1513,13 +1520,13 @@ class MissionBackendNode(Node):
                         bysetpos,
                     )
                     if occurrence_day is not None:
-                        append_occurrence(
-                            occurrence_day.replace(
-                                hour=start.hour,
-                                minute=start.minute,
-                                second=start.second,
-                            )
+                        occurrence_start = occurrence_day.replace(
+                            hour=start.hour,
+                            minute=start.minute,
+                            second=start.second,
                         )
+                        if until is None or occurrence_start <= until:
+                            append_occurrence(occurrence_start)
                     if current_month.month == 12:
                         current_month = datetime(current_month.year + 1, 1, 1)
                     else:
@@ -1569,6 +1576,14 @@ class MissionBackendNode(Node):
             "start_local": start.strftime("%Y-%m-%dT%H:%M"),
             "end_local": end.strftime("%Y-%m-%dT%H:%M"),
             "recurrence_type": recurrence_type,
+            "recurrence_interval_minutes": (
+                max(1, int(rrule.get("INTERVAL", "1"))) if recurrence_type == "minutely" else 1
+            ),
+            "recurrence_until_local": (
+                self._parse_ics_datetime(rrule["UNTIL"], target_timezone).strftime("%Y-%m-%dT%H:%M")
+                if rrule.get("UNTIL")
+                else ""
+            ),
             "recurrence_label": recurrence_label,
         }
 
@@ -1700,6 +1715,14 @@ class MissionBackendNode(Node):
         recurrence_type = str(event.get("recurrence_type", "none"))
         if recurrence_type == "daily":
             lines.append("RRULE:FREQ=DAILY")
+        elif recurrence_type == "minutely":
+            interval_minutes = max(1, int(event.get("recurrence_interval_minutes", 1)))
+            rrule = f"RRULE:FREQ=MINUTELY;INTERVAL={interval_minutes}"
+            recurrence_until_local = str(event.get("recurrence_until_local", "")).strip()
+            if recurrence_until_local:
+                until = self._parse_local_schedule_datetime(recurrence_until_local, target_timezone)
+                rrule += f";UNTIL={until.astimezone(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+            lines.append(rrule)
         elif recurrence_type == "monthly_nth_weekday":
             lines.append(
                 f"RRULE:FREQ=MONTHLY;BYDAY={self._weekday_code(start)};BYSETPOS={self._monthly_setpos_for_date(start)}"
@@ -1710,6 +1733,7 @@ class MissionBackendNode(Node):
             lines.append(f"X-SCHEDULE-TYPE:{_escape_ics_text(event['schedule_type'])}")
         if event.get("mission_id"):
             lines.append(f"X-MISSION-ID:{_escape_ics_text(event['mission_id'])}")
+        lines.append(f"X-RECORD-ROSBAG:{'TRUE' if event.get('record_rosbag') else 'FALSE'}")
         lines.append("END:VEVENT")
         return lines
 
@@ -1732,6 +1756,9 @@ class MissionBackendNode(Node):
             "start_local": str(payload.get("start_local", "")).strip(),
             "end_local": str(payload.get("end_local", "")).strip(),
             "recurrence_type": str(payload.get("recurrence_type", "none")).strip() or "none",
+            "recurrence_interval_minutes": 1,
+            "recurrence_until_local": str(payload.get("recurrence_until_local", "")).strip(),
+            "record_rosbag": _coerce_bool_value(payload.get("record_rosbag", False)) or False,
         }
         if not entry["start_local"] or not entry["end_local"]:
             raise RuntimeError("start_local and end_local are required")
@@ -1741,6 +1768,30 @@ class MissionBackendNode(Node):
         end = self._parse_local_schedule_datetime(entry["end_local"], target_timezone)
         if end <= start:
             raise RuntimeError("end_local must be after start_local")
+        if entry["recurrence_type"] == "minutely":
+            try:
+                entry["recurrence_interval_minutes"] = max(
+                    1,
+                    int(payload.get("recurrence_interval_minutes", 1)),
+                )
+            except (TypeError, ValueError) as exc:
+                raise RuntimeError("recurrence_interval_minutes must be a positive integer") from exc
+            duration_minutes = payload.get("continuous_duration_minutes")
+            if duration_minutes not in (None, "") and not entry["recurrence_until_local"]:
+                try:
+                    continuous_duration = max(1, int(duration_minutes))
+                except (TypeError, ValueError) as exc:
+                    raise RuntimeError("continuous_duration_minutes must be a positive integer") from exc
+                entry["recurrence_until_local"] = (start + timedelta(minutes=continuous_duration)).strftime(
+                    "%Y-%m-%dT%H:%M"
+                )
+            if entry["recurrence_until_local"]:
+                recurrence_until = self._parse_local_schedule_datetime(
+                    entry["recurrence_until_local"],
+                    target_timezone,
+                )
+                if recurrence_until < start:
+                    raise RuntimeError("recurrence_until_local must be at or after start_local")
 
         updated = False
         for index, event in enumerate(events):

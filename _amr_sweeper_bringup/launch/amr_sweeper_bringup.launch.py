@@ -5,7 +5,8 @@ import os
 import re
 import shutil
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import yaml
 from ament_index_python.packages import get_package_share_directory
@@ -100,6 +101,26 @@ def _load_simulation_profile_config(profile_name: str) -> dict:
     return _deep_merge_dict(defaults, profiles[profile_name])
 
 
+def _simulation_profile_exists(profile_name: str) -> bool:
+    simulation_pkg = get_package_share_directory("amr_sweeper_simulation")
+    config_path = os.path.join(simulation_pkg, "config", "simulation.yaml")
+    with open(config_path, encoding="utf-8") as stream:
+        config = yaml.safe_load(stream)
+    return profile_name in config.get("simulation", {}).get("profiles", {})
+
+
+def _default_mission_source_directory(mission_id: str) -> str:
+    navigation_pkg = get_package_share_directory("amr_sweeper_navigation")
+    return os.path.join(navigation_pkg, "missions", "default_missions", mission_id)
+
+
+def _default_mission_exists(mission_id: str) -> bool:
+    mission_directory = _default_mission_source_directory(mission_id)
+    return os.path.isdir(mission_directory) and os.path.isfile(
+        os.path.join(mission_directory, f"{mission_id}.json")
+    )
+
+
 def _seed_missing_simulation_mission_files(
     source_directory: str,
     destination_directory: str,
@@ -128,6 +149,62 @@ def _seed_missing_simulation_mission_files(
             copied_files.append(destination_path)
 
     return copied_files
+
+
+def _write_active_default_mission_schedule(schedule_path: str, mission_id: str, robot_id: str) -> None:
+    os.makedirs(os.path.dirname(schedule_path), exist_ok=True)
+    timezone_name = "Europe/Copenhagen"
+    local_timezone = ZoneInfo(timezone_name)
+    now_utc = datetime.now(timezone.utc)
+    start_local = (now_utc.astimezone(local_timezone) - timedelta(seconds=30)).replace(microsecond=0)
+    stamp = now_utc.strftime("%Y%m%dT%H%M%SZ")
+    start = start_local.strftime("%Y%m%dT%H%M%S")
+    safe_mission_id = re.sub(r"[^A-Za-z0-9_-]+", "-", mission_id).strip("-") or "default-mission"
+    uid = f"simulation-{safe_mission_id}-{stamp.lower()}@amr_sweeper_bringup"
+    schedule = f"""BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//O-Robotics//AMR Sweeper Default Mission Simulation//EN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:AMR Sweeper Simulation - {mission_id}
+X-WR-TIMEZONE:{timezone_name}
+
+BEGIN:VTIMEZONE
+TZID:{timezone_name}
+X-LIC-LOCATION:{timezone_name}
+BEGIN:DAYLIGHT
+TZOFFSETFROM:+0100
+TZOFFSETTO:+0200
+TZNAME:CEST
+DTSTART:19700329T020000
+RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=SU;BYSETPOS=-1
+END:DAYLIGHT
+BEGIN:STANDARD
+TZOFFSETFROM:+0200
+TZOFFSETTO:+0100
+TZNAME:CET
+DTSTART:19701025T030000
+RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=SU;BYSETPOS=-1
+END:STANDARD
+END:VTIMEZONE
+
+BEGIN:VEVENT
+UID:{uid}
+DTSTAMP:{stamp}
+SUMMARY:AMR Sweeper default mission simulation {mission_id}
+DESCRIPTION:Active default mission simulation window for {mission_id}.
+DTSTART;TZID={timezone_name}:{start}
+DURATION:PT30M
+X-ROBOT-ID:{robot_id}
+X-SCHEDULE-TYPE:WORK
+X-MISSION-ID:{mission_id}
+X-RECORD-ROSBAG:FALSE
+END:VEVENT
+
+END:VCALENDAR
+"""
+    with open(schedule_path, "w", encoding="utf-8") as stream:
+        stream.write(schedule)
 
 
 def _normalize_namespace(namespace: str) -> str:
@@ -241,17 +318,26 @@ def _resolve_simulation_launch_settings(context, *args, **kwargs):
     else:
         simulation_profile = raw_profile
 
+    default_mission_id = ""
+    if not _simulation_profile_exists(simulation_profile) and _default_mission_exists(simulation_profile):
+        default_mission_id = simulation_profile
+        simulation_profile = "empty1"
+
     actions.append(SetLaunchConfiguration("simulation_profile", simulation_profile))
     simulation_config = _load_simulation_profile_config(simulation_profile)
-    simulation_mission_source = os.path.join(
-        get_package_share_directory("amr_sweeper_simulation"),
-        "missions",
-        simulation_profile,
-    )
     missions_from_db_directory = _resolve_output_path(
         LaunchConfiguration("missions_from_db_directory").perform(context).strip()
     )
-    simulation_mission_destination = os.path.join(missions_from_db_directory, simulation_profile)
+    mission_id = default_mission_id or simulation_profile
+    if default_mission_id:
+        simulation_mission_source = _default_mission_source_directory(default_mission_id)
+    else:
+        simulation_mission_source = os.path.join(
+            get_package_share_directory("amr_sweeper_simulation"),
+            "missions",
+            simulation_profile,
+        )
+    simulation_mission_destination = os.path.join(missions_from_db_directory, mission_id)
     copied_mission_files = _seed_missing_simulation_mission_files(
         simulation_mission_source,
         simulation_mission_destination,
@@ -262,7 +348,7 @@ def _resolve_simulation_launch_settings(context, *args, **kwargs):
                 msg=(
                     "[amr_sweeper_bringup] Seeded "
                     f"{len(copied_mission_files)} simulation mission file(s) for "
-                    f"'{simulation_profile}' into {simulation_mission_destination}"
+                    f"'{mission_id}' into {simulation_mission_destination}"
                 )
             )
         )
@@ -271,7 +357,7 @@ def _resolve_simulation_launch_settings(context, *args, **kwargs):
             LogInfo(
                 msg=(
                     "[amr_sweeper_bringup] Simulation mission "
-                    f"'{simulation_profile}' already exists in {simulation_mission_destination}"
+                    f"'{mission_id}' already exists in {simulation_mission_destination}"
                 )
             )
         )
@@ -299,18 +385,47 @@ def _resolve_simulation_launch_settings(context, *args, **kwargs):
 
     schedule_ics_path = LaunchConfiguration("schedule_ics_path").perform(context).strip()
     if not schedule_ics_path:
-        actions.append(
-            SetLaunchConfiguration(
-                "schedule_ics_path",
-                f"missions/database/{simulation_profile}/{simulation_profile}.ics",
+        if default_mission_id:
+            generated_schedule_path = os.path.join(
+                missions_from_db_directory,
+                default_mission_id,
+                f"{default_mission_id}.ics",
             )
-        )
+            _write_active_default_mission_schedule(
+                generated_schedule_path,
+                default_mission_id,
+                LaunchConfiguration("robot_id").perform(context).strip(),
+            )
+            actions.extend([
+                SetLaunchConfiguration("schedule_ics_path", generated_schedule_path),
+                SetLaunchConfiguration("launch_scheduler", "true"),
+                SetLaunchConfiguration("launch_vda5050_parser", "true"),
+                LogInfo(
+                    msg=(
+                        "[amr_sweeper_bringup] Generated active default mission "
+                        f"schedule for '{default_mission_id}' at {generated_schedule_path}"
+                    )
+                ),
+            ])
+        else:
+            actions.append(
+                SetLaunchConfiguration(
+                    "schedule_ics_path",
+                    f"missions/database/{simulation_profile}/{simulation_profile}.ics",
+                )
+            )
+    elif default_mission_id:
+        actions.extend([
+            SetLaunchConfiguration("launch_scheduler", "true"),
+            SetLaunchConfiguration("launch_vda5050_parser", "true"),
+        ])
 
     actions.append(
         LogInfo(
             msg=(
                 "[amr_sweeper_bringup] Simulation enabled with profile "
                 f"'{simulation_profile}'"
+                + (f" for default mission '{default_mission_id}'" if default_mission_id else "")
             )
         )
     )

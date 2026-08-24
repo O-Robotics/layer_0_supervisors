@@ -1060,9 +1060,22 @@ class MissionFrontendRenderer:
             Recurrence
             <select id="entry-recurrence-type">
               <option value="none">One-off</option>
+              <option value="minutely">Continuously every N minutes</option>
               <option value="daily">Daily</option>
               <option value="monthly_nth_weekday">Monthly on this weekday occurrence</option>
             </select>
+          </label>
+          <label>
+            Repeat Interval Minutes
+            <input id="entry-recurrence-interval-minutes" type="number" min="1" step="1" value="10">
+          </label>
+          <label>
+            Continuous Duration Minutes
+            <input id="entry-continuous-duration-minutes" type="number" min="1" step="1" value="180">
+          </label>
+          <label class="span-2">
+            <input id="entry-record-rosbag" type="checkbox">
+            Record rosbag
           </label>
           <label class="span-2">
             Description
@@ -1165,6 +1178,9 @@ class MissionFrontendRenderer:
       document.getElementById('entry-robot-id').value = '';
       document.getElementById('entry-description').value = '';
       document.getElementById('entry-recurrence-type').value = 'none';
+      document.getElementById('entry-recurrence-interval-minutes').value = '10';
+      document.getElementById('entry-continuous-duration-minutes').value = '180';
+      document.getElementById('entry-record-rosbag').checked = false;
       const baseDate = activeScheduleData?.week_start ? parseLocalDate(activeScheduleData.week_start) : new Date();
       const start = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate(), 8, 0, 0, 0);
       const end = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate(), 10, 0, 0, 0);
@@ -1181,6 +1197,16 @@ class MissionFrontendRenderer:
       document.getElementById('entry-start-local').value = entry.start_local || '';
       document.getElementById('entry-end-local').value = entry.end_local || '';
       document.getElementById('entry-recurrence-type').value = entry.recurrence_type || 'none';
+      document.getElementById('entry-recurrence-interval-minutes').value = entry.recurrence_interval_minutes || 10;
+      if (entry.recurrence_until_local && entry.start_local) {{
+        const start = parseLocalDateTime(entry.start_local);
+        const until = parseLocalDateTime(entry.recurrence_until_local);
+        const durationMinutes = Math.max(1, Math.round((until - start) / 60000));
+        document.getElementById('entry-continuous-duration-minutes').value = String(durationMinutes);
+      }} else {{
+        document.getElementById('entry-continuous-duration-minutes').value = '180';
+      }}
+      document.getElementById('entry-record-rosbag').checked = Boolean(entry.record_rosbag);
       document.getElementById('entry-description').value = entry.description || '';
     }}
 
@@ -1362,6 +1388,9 @@ class MissionFrontendRenderer:
         start_local: document.getElementById('entry-start-local').value,
         end_local: document.getElementById('entry-end-local').value,
         recurrence_type: document.getElementById('entry-recurrence-type').value,
+        recurrence_interval_minutes: document.getElementById('entry-recurrence-interval-minutes').value,
+        continuous_duration_minutes: document.getElementById('entry-continuous-duration-minutes').value,
+        record_rosbag: document.getElementById('entry-record-rosbag').checked,
         description: document.getElementById('entry-description').value,
       }};
       const result = await postJson('/api/v1/schedule/entry', payload);
