@@ -356,6 +356,7 @@ class MissionFrontendRenderer:
         <a class="nav-link" href="/">Dashboard</a>
         <a class="nav-link" href="/calendar">Calendar</a>
         <a class="nav-link" href="/map">Missions</a>
+        <a class="nav-link" href="/teleop">Teleop</a>
         <a class="nav-link" href="/record-map">Record Map</a>
         <a class="nav-link" href="/developer">Developer</a>
       </div>
@@ -1003,6 +1004,7 @@ class MissionFrontendRenderer:
         <a class="nav-link" href="/">Dashboard</a>
         <a class="nav-link" href="/calendar">Calendar</a>
         <a class="nav-link" href="/map">Missions</a>
+        <a class="nav-link" href="/teleop">Teleop</a>
         <a class="nav-link" href="/record-map">Record Map</a>
         <a class="nav-link" href="/developer">Developer</a>
       </div>
@@ -1630,6 +1632,7 @@ class MissionFrontendRenderer:
         <a class="nav-link" href="/">Dashboard</a>
         <a class="nav-link" href="/calendar">Calendar</a>
         <a class="nav-link" href="/map">Missions</a>
+        <a class="nav-link" href="/teleop">Teleop</a>
         <a class="nav-link" href="/record-map">Record Map</a>
         <a class="nav-link" href="/developer">Developer</a>
       </div>
@@ -1918,6 +1921,424 @@ class MissionFrontendRenderer:
 </html>
 """
 
+    def render_teleop_html(self) -> str:
+        title = escape(self._site_title)
+        return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{title} - Teleop</title>
+  <style>
+    :root {{
+      --bg: #1b1e20;
+      --bg-alt: #2b2f31;
+      --card: rgba(54, 58, 60, 0.94);
+      --panel: rgba(88, 92, 94, 0.48);
+      --ink: #f5f1df;
+      --muted: #c4bb98;
+      --accent: #fdca0f;
+      --accent-strong: #ffe06b;
+      --danger: #ff7b5c;
+      --line: rgba(253, 202, 15, 0.22);
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Avenir Next", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(253, 202, 15, 0.18), transparent 26%),
+        linear-gradient(180deg, var(--bg) 0%, var(--bg-alt) 100%);
+      touch-action: manipulation;
+    }}
+    main {{
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 24px;
+    }}
+    .card {{
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 18px;
+      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.22);
+      backdrop-filter: blur(4px);
+    }}
+    h1, h2 {{
+      margin: 0 0 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+      font-family: "Avenir Next Condensed", "Franklin Gothic Medium", "Arial Narrow", sans-serif;
+    }}
+    h1 {{ color: var(--accent); }}
+    .nav {{
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+    }}
+    .nav-link {{
+      display: inline-block;
+      text-decoration: none;
+      color: var(--ink);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 8px 14px;
+      background: rgba(52, 53, 53, 0.72);
+      font-size: 0.92rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }}
+    .teleop-layout {{
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) 180px minmax(220px, 1fr);
+      gap: 22px;
+      align-items: center;
+      margin-top: 18px;
+    }}
+    .stick-panel {{
+      display: grid;
+      justify-items: center;
+      gap: 12px;
+    }}
+    .stick-shell {{
+      width: min(32vw, 310px);
+      min-width: 220px;
+      aspect-ratio: 1;
+      border-radius: 50%;
+      border: 3px solid rgba(253, 202, 15, 0.55);
+      background: rgba(18, 20, 21, 0.44);
+      position: relative;
+      touch-action: none;
+      user-select: none;
+    }}
+    .stick-knob {{
+      width: 31%;
+      aspect-ratio: 1;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 12px 24px rgba(0, 0, 0, 0.32);
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }}
+    .center-controls {{
+      display: grid;
+      gap: 14px;
+      justify-items: stretch;
+      align-content: center;
+    }}
+    button {{
+      border: 0;
+      border-radius: 999px;
+      padding: 13px 18px;
+      font-size: 0.95rem;
+      cursor: pointer;
+      color: #08100a;
+      background: var(--accent);
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      min-height: 48px;
+    }}
+    button:hover {{ background: var(--accent-strong); }}
+    button.stop {{ background: var(--danger); color: #fff8f6; }}
+    button:disabled {{
+      cursor: not-allowed;
+      background: #5c5b55;
+      color: #d7ddd8;
+    }}
+    .gear {{
+      display: inline-block;
+      font-size: 1.15rem;
+      animation: spin 0.95s linear infinite, pulse-fade 1.2s ease-in-out infinite;
+    }}
+    .toggle-button.enabled {{
+      background: #f8fafc;
+      color: #111827;
+      box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.32);
+    }}
+    .status-row {{
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+      color: var(--muted);
+    }}
+    .status-value {{
+      color: var(--ink);
+      font-weight: 700;
+    }}
+    .banner {{
+      margin-top: 14px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      display: none;
+    }}
+    .banner.show {{ display: block; }}
+    .banner.ok {{ background: rgba(15, 118, 110, 0.12); color: var(--accent-strong); }}
+    .banner.error {{ background: rgba(185, 28, 28, 0.12); color: var(--danger); }}
+    .muted {{ color: var(--muted); }}
+    @keyframes spin {{
+      from {{ transform: rotate(0deg); }}
+      to {{ transform: rotate(360deg); }}
+    }}
+    @keyframes pulse-fade {{
+      0%, 100% {{ opacity: 0.45; }}
+      50% {{ opacity: 1; }}
+    }}
+    @media (max-width: 820px) {{
+      .teleop-layout {{ grid-template-columns: 1fr; }}
+      .center-controls {{ grid-row: 1; }}
+      .stick-shell {{ width: min(78vw, 310px); }}
+    }}
+  </style>
+</head>
+<body>
+  <main>
+    <section class="card">
+      <h1>Teleop</h1>
+      <div id="banner" class="banner"></div>
+      <div class="nav">
+        <a class="nav-link" href="/">Dashboard</a>
+        <a class="nav-link" href="/calendar">Calendar</a>
+        <a class="nav-link" href="/map">Missions</a>
+        <a class="nav-link" href="/teleop">Teleop</a>
+        <a class="nav-link" href="/record-map">Record Map</a>
+        <a class="nav-link" href="/developer">Developer</a>
+      </div>
+      <div class="status-row">
+        <div>FSM: <span id="fsm-state" class="status-value">--</span></div>
+        <div>Profile: <span id="fsm-profile" class="status-value">--</span></div>
+        <div>Mission: <span id="active-mission" class="status-value">--</span></div>
+      </div>
+    </section>
+
+    <section class="card teleop-layout">
+      <section class="stick-panel">
+        <h2>Drive</h2>
+        <div id="left-stick" class="stick-shell" aria-label="Drive joystick">
+          <div id="left-knob" class="stick-knob"></div>
+        </div>
+      </section>
+      <section class="center-controls">
+        <button id="teleop-toggle-button" type="button">Start</button>
+        <button id="lights-button" class="toggle-button" type="button">Lights</button>
+        <div id="stream-status" class="muted">Command stream idle</div>
+      </section>
+      <section class="stick-panel">
+        <h2>Tools</h2>
+        <div id="right-stick" class="stick-shell" aria-label="Tool joystick">
+          <div id="right-knob" class="stick-knob"></div>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script>
+    const banner = document.getElementById('banner');
+    const teleopToggleButton = document.getElementById('teleop-toggle-button');
+    const lightsButton = document.getElementById('lights-button');
+    const streamStatus = document.getElementById('stream-status');
+    let teleopReady = false;
+    let transitionBusy = false;
+    let lightsEnabled = false;
+    let commandInFlight = false;
+    const sticks = {{
+      left: {{ x: 0, y: 0, shell: document.getElementById('left-stick'), knob: document.getElementById('left-knob'), pointerId: null }},
+      right: {{ x: 0, y: 0, shell: document.getElementById('right-stick'), knob: document.getElementById('right-knob'), pointerId: null }},
+    }};
+
+    function setBanner(kind, message) {{
+      banner.className = `banner show ${{kind}}`;
+      banner.textContent = message;
+      setTimeout(() => {{
+        banner.className = 'banner';
+        banner.textContent = '';
+      }}, 5000);
+    }}
+    function formatProfileValue(profile) {{
+      const numericProfile = Number(profile);
+      return Number.isFinite(numericProfile) ? String(Math.trunc(numericProfile)).padStart(3, '0') : '--';
+    }}
+    function clamp(value, min, max) {{ return Math.max(min, Math.min(max, value)); }}
+    function normalizeToCircle(x, y) {{
+      const length = Math.hypot(x, y);
+      return length <= 1 ? [x, y] : [x / length, y / length];
+    }}
+    function updateKnob(stick) {{
+      const shellRect = stick.shell.getBoundingClientRect();
+      const travel = (shellRect.width * 0.5) - (shellRect.width * 0.155);
+      stick.knob.style.transform = `translate(calc(-50% + ${{stick.x * travel}}px), calc(-50% + ${{-stick.y * travel}}px))`;
+    }}
+    function handlePointer(stick, event) {{
+      const rect = stick.shell.getBoundingClientRect();
+      const radius = rect.width * 0.5;
+      const rawX = (event.clientX - (rect.left + radius)) / radius;
+      const rawY = -((event.clientY - (rect.top + radius)) / radius);
+      const [x, y] = normalizeToCircle(rawX, rawY);
+      stick.x = clamp(x, -1, 1);
+      stick.y = clamp(y, -1, 1);
+      updateKnob(stick);
+    }}
+    function resetStick(stick) {{
+      stick.x = 0;
+      stick.y = 0;
+      stick.pointerId = null;
+      updateKnob(stick);
+      sendZeroCommand();
+    }}
+    for (const stick of Object.values(sticks)) {{
+      stick.shell.addEventListener('pointerdown', (event) => {{
+        stick.pointerId = event.pointerId;
+        stick.shell.setPointerCapture(event.pointerId);
+        handlePointer(stick, event);
+      }});
+      stick.shell.addEventListener('pointermove', (event) => {{
+        if (stick.pointerId === event.pointerId) {{
+          handlePointer(stick, event);
+        }}
+      }});
+      stick.shell.addEventListener('pointerup', () => resetStick(stick));
+      stick.shell.addEventListener('pointercancel', () => resetStick(stick));
+      updateKnob(stick);
+    }}
+
+    async function postJson(path, body, keepalive = false) {{
+      const response = await fetch(path, {{
+        method: 'POST',
+        headers: {{ 'Content-Type': 'application/json' }},
+        body: JSON.stringify(body || {{}}),
+        keepalive,
+      }});
+      return response.json();
+    }}
+    function commandPayload() {{
+      return {{ left_x: sticks.left.x, left_y: sticks.left.y, right_x: sticks.right.x, right_y: sticks.right.y }};
+    }}
+    async function sendZeroCommand(keepalive = false) {{
+      try {{
+        await postJson('/api/v1/teleop/command', {{ left_x: 0, left_y: 0, right_x: 0, right_y: 0 }}, keepalive);
+      }} catch (_error) {{}}
+    }}
+    async function streamCommand() {{
+      if (!teleopReady || document.visibilityState !== 'visible' || commandInFlight) {{
+        streamStatus.textContent = teleopReady ? 'Command stream paused' : 'Command stream idle';
+        return;
+      }}
+      commandInFlight = true;
+      try {{
+        const result = await postJson('/api/v1/teleop/command', commandPayload());
+        streamStatus.textContent = result.success ? 'Command stream active' : (result.message || 'Command rejected');
+      }} catch (error) {{
+        streamStatus.textContent = error.message || 'Command stream failed';
+      }} finally {{
+        commandInFlight = false;
+      }}
+    }}
+    function setBusyButton(label) {{
+      transitionBusy = true;
+      teleopToggleButton.disabled = true;
+      teleopToggleButton.classList.remove('stop');
+      teleopToggleButton.innerHTML = `<span class="gear" aria-hidden="true">&#9881;</span><span style="position:absolute;left:-9999px;">${{label}}</span>`;
+    }}
+    function renderButton() {{
+      if (transitionBusy) {{
+        return;
+      }}
+      teleopToggleButton.disabled = false;
+      teleopToggleButton.classList.toggle('stop', teleopReady);
+      teleopToggleButton.textContent = teleopReady ? 'Stop' : 'Start';
+    }}
+    async function loadStatus() {{
+      const response = await fetch('/api/v1/status', {{ cache: 'no-store' }});
+      const data = await response.json();
+      const fsm = data.fsm_status || data.fsm_state || {{}};
+      const display = data.fsm_display || {{}};
+      const active = data.active_execution || {{}};
+      const transitionActive = Boolean(display.transition_active) ||
+        String(fsm.transition_status || '').toUpperCase() === 'TRANSITIONING';
+      teleopReady = String(fsm.current_state || '').toUpperCase() === 'RUNNING' &&
+        Number(fsm.current_profile) === 220 &&
+        !transitionActive &&
+        active &&
+        active.mission_id === 'Teleop' &&
+        active.active !== false;
+      lightsEnabled = Boolean(data.teleop_lights_enabled);
+      lightsButton.classList.toggle('enabled', lightsEnabled);
+      transitionBusy = transitionActive && (
+        Number(fsm.transitioning_to_profile) === 220 ||
+        Number(fsm.current_profile) === 220 ||
+        active.mission_id === 'Teleop'
+      );
+      document.getElementById('fsm-state').textContent = display.current_state || fsm.current_state || 'Unknown';
+      document.getElementById('fsm-profile').textContent = formatProfileValue(
+        display.current_profile !== undefined && display.current_profile !== null ? display.current_profile : fsm.current_profile
+      );
+      document.getElementById('active-mission').textContent = active?.mission_id || '--';
+      if (transitionBusy) {{
+        setBusyButton('Transitioning');
+      }} else {{
+        renderButton();
+      }}
+    }}
+
+    teleopToggleButton.addEventListener('click', async () => {{
+      try {{
+        if (teleopReady) {{
+          setBusyButton('Stopping');
+          await sendZeroCommand();
+          const result = await postJson('/api/v1/teleop/stop', {{}});
+          setBanner(result.success ? 'ok' : 'error', result.message || 'Teleop stop request completed');
+        }} else {{
+          setBusyButton('Starting');
+          const result = await postJson('/api/v1/teleop/start', {{}});
+          setBanner(result.success ? 'ok' : 'error', result.message || 'Teleop start request completed');
+        }}
+      }} catch (error) {{
+        setBanner('error', error.message || 'Teleop request failed');
+      }} finally {{
+        await loadStatus();
+      }}
+    }});
+    lightsButton.addEventListener('click', async () => {{
+      const nextEnabled = !lightsEnabled;
+      lightsButton.disabled = true;
+      try {{
+        const result = await postJson('/api/v1/teleop/lights', {{ enabled: nextEnabled }});
+        if (result.success) {{
+          lightsEnabled = nextEnabled;
+          lightsButton.classList.toggle('enabled', lightsEnabled);
+        }}
+        setBanner(result.success ? 'ok' : 'error', result.message || 'Lights request completed');
+      }} catch (error) {{
+        setBanner('error', error.message || 'Lights request failed');
+      }} finally {{
+        lightsButton.disabled = false;
+      }}
+    }});
+    document.addEventListener('visibilitychange', () => {{
+      if (document.visibilityState !== 'visible') {{
+        sendZeroCommand(true);
+      }}
+    }});
+    window.addEventListener('pagehide', () => sendZeroCommand(true));
+    window.addEventListener('beforeunload', () => {{
+      const body = JSON.stringify({{ left_x: 0, left_y: 0, right_x: 0, right_y: 0 }});
+      navigator.sendBeacon('/api/v1/teleop/command', new Blob([body], {{ type: 'application/json' }}));
+    }});
+    setInterval(streamCommand, 50);
+    loadStatus().catch((error) => setBanner('error', error.message || 'Failed to load teleop status'));
+    setInterval(() => loadStatus().catch(() => null), 500);
+  </script>
+</body>
+</html>
+"""
+
     def render_map_html(self) -> str:
         title = escape(self._site_title)
         return f"""<!DOCTYPE html>
@@ -2147,6 +2568,7 @@ class MissionFrontendRenderer:
         <a class="nav-link" href="/">Dashboard</a>
         <a class="nav-link" href="/calendar">Calendar</a>
         <a class="nav-link" href="/map">Missions</a>
+        <a class="nav-link" href="/teleop">Teleop</a>
         <a class="nav-link" href="/record-map">Record Map</a>
         <a class="nav-link" href="/developer">Developer</a>
       </div>
@@ -2634,8 +3056,13 @@ class MissionFrontendRenderer:
       const response = await fetch('/api/v1/map-data', {{ cache: 'no-store' }});
       const data = await response.json();
       mapDataCache = data;
+      if (['RecordMap', 'Teleop'].includes(selectedMissionId)) {{
+        selectedMissionId = '';
+      }}
       if (!selectedMissionId) {{
-        const firstPreviewable = (data.missions || []).find((mission) => mission.mission_id !== 'RecordMap');
+        const firstPreviewable = (data.missions || []).find(
+          (mission) => !['RecordMap', 'Teleop'].includes(mission.mission_id)
+        );
         if (firstPreviewable) {{
           selectedMissionId = firstPreviewable.mission_id;
           updateSelectedMissionLabel();
@@ -2647,8 +3074,8 @@ class MissionFrontendRenderer:
     function renderMissionList() {{
       missionList.innerHTML = '';
 
-      const defaultMissionOrder = ['SpotSweep', '3x3Sweep', 'Teleop'];
-      const hiddenMissionIds = new Set(['RecordMap']);
+      const defaultMissionOrder = ['SpotSweep', '3x3Sweep'];
+      const hiddenMissionIds = new Set(['RecordMap', 'Teleop']);
       const missions = (missionsCache || []).filter((mission) => !hiddenMissionIds.has(mission.mission_id));
       const defaultMissionMap = new Map(missions.map((mission) => [mission.mission_id, mission]));
       const defaultMissions = defaultMissionOrder
@@ -2702,8 +3129,16 @@ class MissionFrontendRenderer:
       if (!selectedMissionId) {{
         selectedMissionId = window.localStorage.getItem(missionSelectionStorageKey()) || '';
       }}
+      if (
+        ['RecordMap', 'Teleop'].includes(selectedMissionId) ||
+        !missionsCache.some((mission) => mission.mission_id === selectedMissionId)
+      ) {{
+        selectedMissionId = '';
+      }}
       if (!selectedMissionId) {{
-        const firstPreviewable = missionsCache.find((mission) => mission.mission_id !== 'RecordMap') || null;
+        const firstPreviewable = missionsCache.find(
+          (mission) => !['RecordMap', 'Teleop'].includes(mission.mission_id)
+        ) || null;
         if (firstPreviewable) {{
           selectedMissionId = firstPreviewable.mission_id;
         }}
@@ -2917,6 +3352,7 @@ class MissionFrontendRenderer:
         <a class="nav-link" href="/">Dashboard</a>
         <a class="nav-link" href="/calendar">Calendar</a>
         <a class="nav-link" href="/map">Missions</a>
+        <a class="nav-link" href="/teleop">Teleop</a>
         <a class="nav-link" href="/record-map">Record Map</a>
         <a class="nav-link" href="/developer">Developer</a>
       </div>
@@ -3179,6 +3615,9 @@ class MissionFrontendHttpNode(Node, MissionFrontendRenderer):
                 if parsed.path == "/record-map":
                     self._send_html(node.render_record_map_html())
                     return
+                if parsed.path == "/teleop":
+                    self._send_html(node.render_teleop_html())
+                    return
                 if parsed.path.startswith("/api/v1/"):
                     self._proxy_to_backend()
                     return
@@ -3273,6 +3712,10 @@ class MissionFrontendHttpNode(Node, MissionFrontendRenderer):
                     "/api/v1/system/reinitialize": "REINITIALIZE_SYSTEM",
                     "/api/v1/safety/clear": "CLEAR_SAFETY_STOP",
                     "/api/v1/safety/stop": "TRIGGER_SAFETY_STOP",
+                    "/api/v1/teleop/start": "START_TELEOP",
+                    "/api/v1/teleop/stop": "STOP_TELEOP",
+                    "/api/v1/teleop/command": "SEND_TELEOP_COMMAND",
+                    "/api/v1/teleop/lights": "SET_TELEOP_LIGHTS",
                     "/api/v1/record-map/start": "START_RECORD_MAP",
                     "/api/v1/record-map/stop": "STOP_RECORD_MAP",
                     "/api/v1/record-map/save-mission": "SAVE_RECORDED_MISSION",

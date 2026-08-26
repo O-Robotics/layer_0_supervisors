@@ -12,6 +12,7 @@ import stat
 import threading
 import time
 import calendar
+import struct
 from datetime import datetime, timedelta, timezone
 from collections import deque
 from html import escape
@@ -34,6 +35,7 @@ from amr_sweeper_mission_executor.srv import (
     UploadVda5050Mission,
 )
 from amr_sweeper_safety_msgs.msg import SafetyStop
+from geometry_msgs.msg import Twist
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
@@ -92,6 +94,21 @@ MISSION_LAYER_OVERRIDE_FALLBACKS = {
     "use_amr_sweeper_mapping": False,
     "use_amr_sweeper_navigation": True,
     "auto_start_mission": True,
+}
+
+TELEOP_MISSION_ID = "Teleop"
+TELEOP_PROFILE_ID = 220
+TELEOP_DRIVE_LINEAR_SCALE = 0.5
+TELEOP_DRIVE_ANGULAR_SCALE = 0.785
+TELEOP_TOOL_LINEAR_SCALE = 0.10
+TELEOP_TOOL_ANGULAR_SCALE = 0.10
+TELEOP_INPUT_DEADZONE = 0.05
+
+LED_MODULE_COMMAND_IDS = {
+    "front_left": 0x400,
+    "front_right": 0x425,
+    "rear_left": 0x450,
+    "rear_right": 0x475,
 }
 
 ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*m")
@@ -415,6 +432,15 @@ class MissionBackendNode(Node):
         self._safety_clear_min_delay_sec = float(
             self.declare_parameter("safety_clear_min_delay_sec", 2.0).value
         )
+        self._teleop_drive_command_topic = self.declare_parameter(
+            "teleop_drive_command_topic",
+            "teleop/cmd_vel_drive",
+        ).value
+        self._teleop_tool_command_topic = self.declare_parameter(
+            "teleop_tool_command_topic",
+            "teleop/cmd_vel_tools",
+        ).value
+        self._led_can_interface = str(self.declare_parameter("led_can_interface", "can0").value)
         self._list_missions_client = self.create_client(
             ListExecutableMissions,
             self._list_missions_service,
@@ -451,8 +477,21 @@ class MissionBackendNode(Node):
             self._safety_stop_topic,
             safety_stop_qos,
         )
+        self._teleop_drive_publisher = self.create_publisher(
+            Twist,
+            self._teleop_drive_command_topic,
+            10,
+        )
+        self._teleop_tool_publisher = self.create_publisher(
+            Twist,
+            self._teleop_tool_command_topic,
+            10,
+        )
 
         self._state_lock = threading.Lock()
+        self._led_can_lock = threading.Lock()
+        self._led_can_socket: socket.socket | None = None
+        self._led_lights_enabled = False
         self._latest_fsm_state: dict[str, Any] | None = None
         self._latest_fsm_status: dict[str, Any] | None = None
         self._latest_navsat: dict[str, Any] | None = None
@@ -503,6 +542,8 @@ class MissionBackendNode(Node):
         )
 
     def stop_ipc_server(self) -> None:
+        with self._led_can_lock:
+            self._close_led_can_socket_locked()
         if self._ipc_server is None:
             return
         self._ipc_server.shutdown()
@@ -604,6 +645,14 @@ class MissionBackendNode(Node):
                 if not mission_id:
                     return self._ipc_error_response(HTTPStatus.BAD_REQUEST, "mission_id is required")
                 return self._ipc_backend_response(self.execute_manual_mission(mission_id, payload))
+            if action == "START_TELEOP":
+                return self._ipc_backend_response(self.start_teleop(payload))
+            if action == "STOP_TELEOP":
+                return self._ipc_backend_response(self.stop_teleop(payload))
+            if action == "SEND_TELEOP_COMMAND":
+                return self._ipc_backend_response(self.send_teleop_command(payload))
+            if action == "SET_TELEOP_LIGHTS":
+                return self._ipc_backend_response(self.set_teleop_lights(payload))
             if action == "UPLOAD_VDA5050_MISSION":
                 return self._ipc_backend_response(self.upload_vda5050_mission(payload))
             if action in {"IMPORT_VDA5050_PACKAGE", "APPLY_VDA5050_ORDER"}:
@@ -978,6 +1027,123 @@ class MissionBackendNode(Node):
         request_payload.setdefault("request_idling", True)
         return self.stop_active_mission(request_payload)
 
+    def start_teleop(self, payload: dict[str, Any]) -> dict[str, Any]:
+        request_payload = dict(payload)
+        layer_overrides = dict(request_payload.get("layer_overrides", {}))
+        layer_overrides["use_joy_node"] = False
+        request_payload["layer_overrides"] = layer_overrides
+        request_payload.setdefault("reason", "web teleop requested from HTTP UI")
+        request_payload.setdefault("priority", 200)
+        request_payload.setdefault("requester", "frontend_teleop")
+        return self.execute_manual_mission(TELEOP_MISSION_ID, request_payload)
+
+    def stop_teleop(self, payload: dict[str, Any]) -> dict[str, Any]:
+        self._publish_zero_teleop_command()
+        request_payload = dict(payload)
+        request_payload.setdefault("mission_id", TELEOP_MISSION_ID)
+        request_payload.setdefault("reason", "web teleop stop requested from HTTP UI")
+        request_payload.setdefault("outcome", "completed")
+        request_payload.setdefault("requester", "frontend_teleop")
+        request_payload.setdefault("request_idling", True)
+        return self.stop_active_mission(request_payload)
+
+    def send_teleop_command(self, payload: dict[str, Any]) -> dict[str, Any]:
+        left_x = self._normalized_axis(payload.get("left_x", 0.0))
+        left_y = self._normalized_axis(payload.get("left_y", 0.0))
+        right_x = self._normalized_axis(payload.get("right_x", 0.0))
+        right_y = self._normalized_axis(payload.get("right_y", 0.0))
+        non_zero = any(abs(value) > 0.0 for value in (left_x, left_y, right_x, right_y))
+
+        ready, reason = self._teleop_command_ready()
+        if non_zero and not ready:
+            self._publish_zero_teleop_command()
+            return {
+                "success": False,
+                "message": f"Teleop command rejected: {reason}",
+                "ready": False,
+            }
+
+        drive_command = Twist()
+        drive_command.linear.x = left_y * TELEOP_DRIVE_LINEAR_SCALE
+        drive_command.angular.z = left_x * TELEOP_DRIVE_ANGULAR_SCALE
+        tool_command = Twist()
+        tool_command.linear.x = right_y * TELEOP_TOOL_LINEAR_SCALE
+        tool_command.angular.z = right_x * TELEOP_TOOL_ANGULAR_SCALE
+        self._teleop_drive_publisher.publish(drive_command)
+        self._teleop_tool_publisher.publish(tool_command)
+        return {
+            "success": True,
+            "message": "Teleop command published",
+            "ready": ready,
+        }
+
+    def set_teleop_lights(self, payload: dict[str, Any]) -> dict[str, Any]:
+        enabled = bool(payload.get("enabled", False))
+        priority = self._byte_value(payload.get("priority", 100), "priority")
+        brightness = self._byte_value(payload.get("brightness", 255), "brightness")
+        requests = [
+            ("front_left", 255 if enabled else 0, 255 if enabled else 0, 255 if enabled else 0, brightness if enabled else 0, priority),
+            ("front_right", 255 if enabled else 0, 255 if enabled else 0, 255 if enabled else 0, brightness if enabled else 0, priority),
+            ("rear_left", 255 if enabled else 0, 0, 0, brightness if enabled else 0, priority),
+            ("rear_right", 255 if enabled else 0, 0, 0, brightness if enabled else 0, priority),
+        ]
+        results = []
+        success = True
+        for module, red, green, blue, module_brightness, module_priority in requests:
+            result = self.set_led(module, red, green, blue, module_brightness, module_priority)
+            results.append(result)
+            success = success and bool(result.get("success", False))
+        if success:
+            self._led_lights_enabled = enabled
+        return {
+            "success": success,
+            "message": "Lights updated" if success else "One or more LED modules failed to update",
+            "enabled": enabled,
+            "modules": results,
+        }
+
+    def set_led(
+        self,
+        module: str,
+        red: int,
+        green: int,
+        blue: int,
+        brightness: int,
+        priority: int,
+    ) -> dict[str, Any]:
+        if module not in LED_MODULE_COMMAND_IDS:
+            return {"success": False, "module": module, "message": f"Unknown LED module: {module}"}
+        try:
+            red = self._byte_value(red, "red")
+            green = self._byte_value(green, "green")
+            blue = self._byte_value(blue, "blue")
+            brightness = self._byte_value(brightness, "brightness")
+            priority = self._byte_value(priority, "priority")
+        except ValueError as exc:
+            return {"success": False, "module": module, "message": str(exc)}
+
+        # Temporary firmware workaround: base-ID byte 0 values 0x00..0x06 collide
+        # with firmware-update opcodes. RGB565 conversion makes 0..7 equivalent red.
+        wire_red = max(red, 7)
+        payload = bytes([wire_red, green, blue, brightness, priority])
+        can_id = LED_MODULE_COMMAND_IDS[module]
+        try:
+            self._send_classic_can_frame(can_id, payload)
+        except OSError as exc:
+            return {
+                "success": False,
+                "module": module,
+                "can_id": f"0x{can_id:03X}",
+                "message": f"SocketCAN write failed on {self._led_can_interface}: {exc}",
+            }
+        return {
+            "success": True,
+            "module": module,
+            "can_id": f"0x{can_id:03X}",
+            "wire_payload_hex": payload.hex().upper(),
+            "message": "LED command sent",
+        }
+
     def create_recorded_mission(self, payload: dict[str, Any]) -> dict[str, Any]:
         request = CreateRecordedMission.Request()
         request.mission_name = str(payload.get("mission_name", ""))
@@ -1121,6 +1287,7 @@ class MissionBackendNode(Node):
             "position": navsat,
             "battery": battery,
             "safety_stop": safety_status,
+            "teleop_lights_enabled": self._led_lights_enabled,
             "active_execution": active_execution,
             "recent_logs": recent_logs,
         }
@@ -1201,6 +1368,92 @@ class MissionBackendNode(Node):
         if not current_state and fsm_state is not None:
             current_state = str(fsm_state.get("current_state", "")).strip().upper()
         return current_state == "RUNNING"
+
+    @staticmethod
+    def _normalized_axis(value: Any) -> float:
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            number = 0.0
+        number = max(-1.0, min(1.0, number))
+        return 0.0 if abs(number) < TELEOP_INPUT_DEADZONE else number
+
+    @staticmethod
+    def _byte_value(value: Any, name: str) -> int:
+        try:
+            number = int(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{name} must be an integer in 0..255") from exc
+        if number < 0 or number > 255:
+            raise ValueError(f"{name} must be in 0..255")
+        return number
+
+    def _publish_zero_teleop_command(self) -> None:
+        self._teleop_drive_publisher.publish(Twist())
+        self._teleop_tool_publisher.publish(Twist())
+
+    def _teleop_command_ready(self) -> tuple[bool, str]:
+        with self._state_lock:
+            fsm_status = dict(self._latest_fsm_status) if self._latest_fsm_status is not None else None
+            fsm_state = dict(self._latest_fsm_state) if self._latest_fsm_state is not None else None
+
+        current_state = ""
+        current_profile = None
+        transition_status = ""
+        if fsm_status is not None:
+            current_state = str(fsm_status.get("current_state", "")).strip().upper()
+            current_profile = fsm_status.get("current_profile")
+            transition_status = str(fsm_status.get("transition_status", "")).strip().upper()
+        if not current_state and fsm_state is not None:
+            current_state = str(fsm_state.get("current_state", "")).strip().upper()
+            current_profile = fsm_state.get("current_profile")
+        try:
+            current_profile_id = int(current_profile)
+        except (TypeError, ValueError):
+            current_profile_id = -1
+
+        if current_state != "RUNNING":
+            return False, f"FSM state is {current_state or 'unknown'}"
+        if current_profile_id != TELEOP_PROFILE_ID:
+            return False, f"FSM profile is {current_profile_id if current_profile_id >= 0 else 'unknown'}"
+        if transition_status and transition_status != "STABLE":
+            return False, f"FSM transition status is {transition_status}"
+
+        active_execution = self._discover_active_execution() or {}
+        if str(active_execution.get("mission_id", "")) != TELEOP_MISSION_ID:
+            return False, "active mission is not Teleop"
+        if active_execution.get("active", True) is False:
+            return False, "Teleop mission is not active"
+        return True, "ready"
+
+    def _send_classic_can_frame(self, can_id: int, payload: bytes) -> None:
+        if len(payload) > 8:
+            raise OSError("Classic CAN payload cannot exceed 8 bytes")
+        if can_id < 0 or can_id > 0x7FF:
+            raise OSError("Classic CAN standard identifier must be 11-bit")
+        padded_payload = payload.ljust(8, b"\x00")
+        frame = struct.pack("=IB3x8s", can_id, len(payload), padded_payload)
+        with self._led_can_lock:
+            if self._led_can_socket is None:
+                can_socket = socket.socket(socket.PF_CAN, socket.SOCK_RAW, socket.CAN_RAW)
+                can_socket.bind((self._led_can_interface,))
+                self._led_can_socket = can_socket
+            try:
+                sent = self._led_can_socket.send(frame)
+            except OSError:
+                self._close_led_can_socket_locked()
+                raise
+            if sent != len(frame):
+                self._close_led_can_socket_locked()
+                raise OSError(f"incomplete CAN frame write: {sent}/{len(frame)} bytes")
+
+    def _close_led_can_socket_locked(self) -> None:
+        if self._led_can_socket is None:
+            return
+        try:
+            self._led_can_socket.close()
+        finally:
+            self._led_can_socket = None
 
     def _discover_active_execution(self) -> dict[str, Any] | None:
         if not self._fsm_reports_running():
