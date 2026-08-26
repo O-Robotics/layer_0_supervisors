@@ -13,8 +13,13 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
+import cv2
+import numpy as np
 import rclpy
+from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
+from sensor_msgs.msg import Image
 
 
 DEFAULT_BACKEND_SOCKET_PATH = "/tmp/amr_sweeper_interface_backend.sock"
@@ -1996,7 +2001,63 @@ class MissionFrontendRenderer:
       grid-template-columns: minmax(220px, 1fr) 180px minmax(220px, 1fr);
       gap: 22px;
       align-items: center;
+    }}
+    .teleop-stage {{
+      position: relative;
+      overflow: hidden;
       margin-top: 18px;
+    }}
+    .teleop-stage::before {{
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+      background: rgba(5, 8, 10, 0.34);
+      opacity: 0;
+      transition: opacity 160ms ease;
+    }}
+    .teleop-stage.camera-active::before {{
+      opacity: 1;
+    }}
+    .teleop-stage.camera-waiting::before {{
+      opacity: 0.52;
+    }}
+    .camera-feed {{
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      display: none;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      background: #101214;
+    }}
+    .teleop-stage.camera-active .camera-feed {{
+      display: block;
+    }}
+    .teleop-stage > .teleop-layout {{
+      position: relative;
+      z-index: 2;
+    }}
+    .camera-message {{
+      position: absolute;
+      inset: 0;
+      z-index: 3;
+      display: none;
+      place-items: center;
+      pointer-events: none;
+      color: var(--ink);
+      font-size: 1.05rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      text-align: center;
+      padding: 24px;
+      text-shadow: 0 2px 12px rgba(0, 0, 0, 0.74);
+    }}
+    .teleop-stage.camera-waiting .camera-message {{
+      display: grid;
     }}
     .stick-panel {{
       display: grid;
@@ -2062,6 +2123,11 @@ class MissionFrontendRenderer:
       color: #111827;
       box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.32);
     }}
+    .camera-button.enabled {{
+      background: #d7f3ff;
+      color: #062233;
+      box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.28);
+    }}
     .status-row {{
       display: flex;
       gap: 12px;
@@ -2118,24 +2184,29 @@ class MissionFrontendRenderer:
       </div>
     </section>
 
-    <section class="card teleop-layout">
-      <section class="stick-panel">
-        <h2>Drive</h2>
-        <div id="left-stick" class="stick-shell" aria-label="Drive joystick">
-          <div id="left-knob" class="stick-knob"></div>
-        </div>
-      </section>
-      <section class="center-controls">
-        <button id="teleop-toggle-button" type="button">Start</button>
-        <button id="lights-button" class="toggle-button" type="button">Lights</button>
-        <div id="stream-status" class="muted">Command stream idle</div>
-      </section>
-      <section class="stick-panel">
-        <h2>Tools</h2>
-        <div id="right-stick" class="stick-shell" aria-label="Tool joystick">
-          <div id="right-knob" class="stick-knob"></div>
-        </div>
-      </section>
+    <section id="teleop-stage" class="card teleop-stage">
+      <img id="camera-feed" class="camera-feed" alt="">
+      <div id="camera-message" class="camera-message">Waiting for Teleop to start</div>
+      <div class="teleop-layout">
+        <section class="stick-panel">
+          <h2>Drive</h2>
+          <div id="left-stick" class="stick-shell" aria-label="Drive joystick">
+            <div id="left-knob" class="stick-knob"></div>
+          </div>
+        </section>
+        <section class="center-controls">
+          <button id="teleop-toggle-button" type="button">Start</button>
+          <button id="lights-button" class="toggle-button" type="button">Lights</button>
+          <button id="camera-button" class="camera-button" type="button">Camera</button>
+          <div id="stream-status" class="muted">Command stream idle</div>
+        </section>
+        <section class="stick-panel">
+          <h2>Tools</h2>
+          <div id="right-stick" class="stick-shell" aria-label="Tool joystick">
+            <div id="right-knob" class="stick-knob"></div>
+          </div>
+        </section>
+      </div>
     </section>
   </main>
 
@@ -2143,10 +2214,15 @@ class MissionFrontendRenderer:
     const banner = document.getElementById('banner');
     const teleopToggleButton = document.getElementById('teleop-toggle-button');
     const lightsButton = document.getElementById('lights-button');
+    const cameraButton = document.getElementById('camera-button');
+    const cameraFeed = document.getElementById('camera-feed');
+    const teleopStage = document.getElementById('teleop-stage');
     const streamStatus = document.getElementById('stream-status');
     let teleopReady = false;
     let transitionBusy = false;
     let lightsEnabled = false;
+    let cameraEnabled = false;
+    let cameraStreamActive = false;
     let commandInFlight = false;
     const sticks = {{
       left: {{ x: 0, y: 0, shell: document.getElementById('left-stick'), knob: document.getElementById('left-knob'), pointerId: null }},
@@ -2220,6 +2296,38 @@ class MissionFrontendRenderer:
     function commandPayload() {{
       return {{ left_x: sticks.left.x, left_y: sticks.left.y, right_x: sticks.right.x, right_y: sticks.right.y }};
     }}
+    function closeCameraStream() {{
+      if (cameraStreamActive) {{
+        cameraFeed.removeAttribute('src');
+        cameraStreamActive = false;
+      }}
+    }}
+    function disableCamera() {{
+      cameraEnabled = false;
+      closeCameraStream();
+      cameraButton.classList.remove('enabled');
+      teleopStage.classList.remove('camera-active', 'camera-waiting');
+    }}
+    function updateCameraState() {{
+      cameraButton.classList.toggle('enabled', cameraEnabled);
+      if (!cameraEnabled) {{
+        closeCameraStream();
+        teleopStage.classList.remove('camera-active', 'camera-waiting');
+        return;
+      }}
+      if (!teleopReady) {{
+        closeCameraStream();
+        teleopStage.classList.add('camera-waiting');
+        teleopStage.classList.remove('camera-active');
+        return;
+      }}
+      teleopStage.classList.add('camera-active');
+      teleopStage.classList.remove('camera-waiting');
+      if (!cameraStreamActive) {{
+        cameraFeed.src = `/api/v1/teleop/camera/stream?ts=${{Date.now()}}`;
+        cameraStreamActive = true;
+      }}
+    }}
     async function sendZeroCommand(keepalive = false) {{
       try {{
         await postJson('/api/v1/teleop/command', {{ left_x: 0, left_y: 0, right_x: 0, right_y: 0 }}, keepalive);
@@ -2285,6 +2393,7 @@ class MissionFrontendRenderer:
       }} else {{
         renderButton();
       }}
+      updateCameraState();
     }}
 
     teleopToggleButton.addEventListener('click', async () => {{
@@ -2321,13 +2430,22 @@ class MissionFrontendRenderer:
         lightsButton.disabled = false;
       }}
     }});
+    cameraButton.addEventListener('click', () => {{
+      cameraEnabled = !cameraEnabled;
+      updateCameraState();
+    }});
     document.addEventListener('visibilitychange', () => {{
       if (document.visibilityState !== 'visible') {{
+        disableCamera();
         sendZeroCommand(true);
       }}
     }});
-    window.addEventListener('pagehide', () => sendZeroCommand(true));
+    window.addEventListener('pagehide', () => {{
+      disableCamera();
+      sendZeroCommand(true);
+    }});
     window.addEventListener('beforeunload', () => {{
+      disableCamera();
       const body = JSON.stringify({{ left_x: 0, left_y: 0, right_x: 0, right_y: 0 }});
       navigator.sendBeacon('/api/v1/teleop/command', new Blob([body], {{ type: 'application/json' }}));
     }});
@@ -3565,7 +3683,18 @@ class MissionFrontendHttpNode(Node, MissionFrontendRenderer):
             "public_base_url",
             "http://192.168.2.1:8080",
         ).value
+        self._teleop_camera_rgb_topic = str(
+            self.declare_parameter(
+                "teleop_camera_rgb_topic",
+                "/amr_sweeper/depth_camera/color/image_raw",
+            ).value
+        )
         self._http_server: ThreadingHTTPServer | None = None
+        self._camera_condition = threading.Condition()
+        self._camera_subscription = None
+        self._camera_client_count = 0
+        self._camera_latest_jpeg: bytes | None = None
+        self._camera_latest_stamp = 0.0
 
     def start_http_server(self) -> None:
         handler = self._build_handler()
@@ -3594,6 +3723,79 @@ class MissionFrontendHttpNode(Node, MissionFrontendRenderer):
             raise RuntimeError("HTTP server not initialized")
         self._http_server.serve_forever()
 
+    def add_camera_stream_client(self) -> None:
+        with self._camera_condition:
+            self._camera_client_count += 1
+            if self._camera_subscription is None:
+                self._camera_subscription = self.create_subscription(
+                    Image,
+                    self._teleop_camera_rgb_topic,
+                    self._handle_teleop_camera_image,
+                    qos_profile_sensor_data,
+                )
+                self.get_logger().info(
+                    f"Teleop camera stream subscribed to {self._teleop_camera_rgb_topic}"
+                )
+
+    def remove_camera_stream_client(self) -> None:
+        with self._camera_condition:
+            self._camera_client_count = max(0, self._camera_client_count - 1)
+            if self._camera_client_count == 0 and self._camera_subscription is not None:
+                self.destroy_subscription(self._camera_subscription)
+                self._camera_subscription = None
+                self._camera_latest_jpeg = None
+                self._camera_latest_stamp = 0.0
+                self._camera_condition.notify_all()
+                self.get_logger().info("Teleop camera stream unsubscribed; no connected clients")
+
+    def wait_for_camera_jpeg(self, last_stamp: float, timeout_sec: float = 2.0) -> tuple[bytes | None, float]:
+        deadline = time.monotonic() + timeout_sec
+        with self._camera_condition:
+            while self._camera_latest_stamp <= last_stamp:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0.0:
+                    return None, last_stamp
+                self._camera_condition.wait(timeout=remaining)
+            return self._camera_latest_jpeg, self._camera_latest_stamp
+
+    def _handle_teleop_camera_image(self, msg: Image) -> None:
+        try:
+            jpeg = self._encode_camera_image_to_jpeg(msg)
+        except ValueError as exc:
+            self.get_logger().warn(f"Skipping teleop camera frame: {exc}", throttle_duration_sec=5.0)
+            return
+        with self._camera_condition:
+            self._camera_latest_jpeg = jpeg
+            self._camera_latest_stamp = time.monotonic()
+            self._camera_condition.notify_all()
+
+    @staticmethod
+    def _encode_camera_image_to_jpeg(msg: Image) -> bytes:
+        if msg.width <= 0 or msg.height <= 0:
+            raise ValueError("empty image dimensions")
+        if msg.encoding not in {"rgb8", "bgr8"}:
+            raise ValueError(f"unsupported encoding {msg.encoding!r}; expected rgb8 or bgr8")
+        channels = 3
+        expected_row_bytes = int(msg.width) * channels
+        if msg.step < expected_row_bytes:
+            raise ValueError(
+                f"invalid image step {msg.step}; expected at least {expected_row_bytes}"
+            )
+        raw = np.frombuffer(msg.data, dtype=np.uint8)
+        required_bytes = int(msg.step) * int(msg.height)
+        if raw.size < required_bytes:
+            raise ValueError(
+                f"image data too short ({raw.size} bytes); expected {required_bytes}"
+            )
+        rows = raw[:required_bytes].reshape((int(msg.height), int(msg.step)))
+        image = rows[:, :expected_row_bytes].reshape((int(msg.height), int(msg.width), channels))
+        if msg.encoding == "rgb8":
+            image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+        success, encoded = cv2.imencode(".jpg", image, [int(cv2.IMWRITE_JPEG_QUALITY), 78])
+        if not success:
+            raise ValueError("JPEG encoding failed")
+        return encoded.tobytes()
+
     def _build_handler(self):
         node = self
 
@@ -3617,6 +3819,9 @@ class MissionFrontendHttpNode(Node, MissionFrontendRenderer):
                     return
                 if parsed.path == "/teleop":
                     self._send_html(node.render_teleop_html())
+                    return
+                if parsed.path == "/api/v1/teleop/camera/stream":
+                    self._send_teleop_camera_stream()
                     return
                 if parsed.path.startswith("/api/v1/"):
                     self._proxy_to_backend()
@@ -3834,6 +4039,39 @@ class MissionFrontendHttpNode(Node, MissionFrontendRenderer):
                     },
                 )
 
+            def _send_teleop_camera_stream(self) -> None:
+                boundary = "teleop-camera-frame"
+                node.add_camera_stream_client()
+                last_stamp = 0.0
+                try:
+                    self.send_response(HTTPStatus.OK)
+                    self.send_header(
+                        "Content-Type",
+                        f"multipart/x-mixed-replace; boundary={boundary}",
+                    )
+                    self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
+                    self.send_header("Pragma", "no-cache")
+                    self.send_header("Connection", "close")
+                    self.end_headers()
+                    while True:
+                        jpeg, last_stamp = node.wait_for_camera_jpeg(last_stamp)
+                        if jpeg is None:
+                            continue
+                        part_headers = (
+                            f"--{boundary}\r\n"
+                            "Content-Type: image/jpeg\r\n"
+                            f"Content-Length: {len(jpeg)}\r\n\r\n"
+                        ).encode("ascii")
+                        self.wfile.write(part_headers)
+                        self.wfile.write(jpeg)
+                        self.wfile.write(b"\r\n")
+                        self.wfile.flush()
+                except OSError as exc:
+                    if not self._is_client_disconnect(exc):
+                        raise
+                finally:
+                    node.remove_camera_stream_client()
+
             def _send_bytes(
                 self,
                 status: HTTPStatus,
@@ -3866,20 +4104,26 @@ class MissionFrontendHttpNode(Node, MissionFrontendRenderer):
 def main(args: list[str] | None = None) -> int:
     rclpy.init(args=args)
     node = MissionFrontendHttpNode()
+    executor = MultiThreadedExecutor()
+    executor.add_node(node)
     server_thread: threading.Thread | None = None
 
     try:
         node.start_http_server()
         server_thread = threading.Thread(target=node.serve_forever, name="mission_http_frontend", daemon=True)
         server_thread.start()
-        while rclpy.ok() and server_thread.is_alive():
-            time.sleep(0.5)
+        executor.spin()
     except KeyboardInterrupt:
         pass
     except Exception as exc:  # noqa: BLE001
         node.get_logger().error(f"Mission frontend HTTP startup failed: {exc}")
         return 1
     finally:
+        executor.shutdown()
+        try:
+            executor.remove_node(node)
+        except (KeyboardInterrupt, RuntimeError, AttributeError):
+            pass
         try:
             node.stop_http_server()
         except RuntimeError:
