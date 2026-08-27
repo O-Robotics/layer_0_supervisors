@@ -1065,7 +1065,7 @@ class MissionBackendNode(Node):
 
         drive_command = Twist()
         drive_command.linear.x = left_y * TELEOP_DRIVE_LINEAR_SCALE
-        drive_command.angular.z = left_x * TELEOP_DRIVE_ANGULAR_SCALE
+        drive_command.angular.z = -left_x * TELEOP_DRIVE_ANGULAR_SCALE
         tool_command = Twist()
         tool_command.linear.x = right_y * TELEOP_TOOL_LINEAR_SCALE
         tool_command.angular.z = right_x * TELEOP_TOOL_ANGULAR_SCALE
