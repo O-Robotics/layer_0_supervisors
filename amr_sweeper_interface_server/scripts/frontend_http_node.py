@@ -2198,7 +2198,6 @@ class MissionFrontendRenderer:
           <button id="teleop-toggle-button" type="button">Start</button>
           <button id="lights-button" class="toggle-button" type="button">Lights</button>
           <button id="camera-button" class="camera-button" type="button">Camera</button>
-          <div id="stream-status" class="muted">Command stream idle</div>
         </section>
         <section class="stick-panel">
           <h2>Tools</h2>
@@ -2217,7 +2216,6 @@ class MissionFrontendRenderer:
     const cameraButton = document.getElementById('camera-button');
     const cameraFeed = document.getElementById('camera-feed');
     const teleopStage = document.getElementById('teleop-stage');
-    const streamStatus = document.getElementById('stream-status');
     let teleopReady = false;
     let transitionBusy = false;
     let lightsEnabled = false;
@@ -2335,15 +2333,12 @@ class MissionFrontendRenderer:
     }}
     async function streamCommand() {{
       if (!teleopReady || document.visibilityState !== 'visible' || commandInFlight) {{
-        streamStatus.textContent = teleopReady ? 'Command stream paused' : 'Command stream idle';
         return;
       }}
       commandInFlight = true;
       try {{
-        const result = await postJson('/api/v1/teleop/command', commandPayload());
-        streamStatus.textContent = result.success ? 'Command stream active' : (result.message || 'Command rejected');
-      }} catch (error) {{
-        streamStatus.textContent = error.message || 'Command stream failed';
+        await postJson('/api/v1/teleop/command', commandPayload());
+      }} catch (_error) {{
       }} finally {{
         commandInFlight = false;
       }}
