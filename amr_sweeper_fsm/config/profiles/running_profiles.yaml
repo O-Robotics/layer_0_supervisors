@@ -64,13 +64,13 @@ profiles:
                 required: true
               - type: "topic"
                 target: "usb_cameras/rear_left_camera/image_raw/compressed"
-                required: true
+                required: false
               - type: "topic"
                 target: "usb_cameras/rear_right_camera/image_raw/compressed"
-                required: true
+                required: false
               - type: "topic"
                 target: "usb_cameras/tools_camera/image_raw/compressed"
-                required: true
+                required: false
               - type: "topic_message"
                 target: "depth_camera/depth/camera_info"
                 required: true
@@ -112,7 +112,7 @@ profiles:
             - "node=battery_node;level>=WARN;action=DEGRADED"
             - "node=depth_camera_watchdog;level>=ERROR;action=DEGRADED"
             - "node=depth_camera_watchdog;level>=WARN;action=DEGRADED"
-            - "level>=ERROR;match=Failed to open V4L2 device;action=FAULT"
+            - "level>=ERROR;match=Failed to open V4L2 device;action=WARN_ONLY"
           errors:
             on_readiness_fail: "FAULT"
             on_unexpected_exit: "FAULT"
@@ -320,13 +320,13 @@ profiles:
                 required: true
               - type: "topic"
                 target: "usb_cameras/rear_left_camera/image_raw/compressed"
-                required: true
+                required: false
               - type: "topic"
                 target: "usb_cameras/rear_right_camera/image_raw/compressed"
-                required: true
+                required: false
               - type: "topic"
                 target: "usb_cameras/tools_camera/image_raw/compressed"
-                required: true
+                required: false
               - type: "topic_message"
                 target: "depth_camera/depth/camera_info"
                 required: false
@@ -371,7 +371,7 @@ profiles:
             - "node=battery_node;level>=WARN;action=DEGRADED"
             - "node=depth_camera_watchdog;level>=ERROR;action=DEGRADED"
             - "node=depth_camera_watchdog;level>=WARN;action=DEGRADED"
-            - "level>=ERROR;match=Failed to open V4L2 device;action=FAULT"
+            - "level>=ERROR;match=Failed to open V4L2 device;action=WARN_ONLY"
           errors:
             on_readiness_fail: "FAULT"
             on_unexpected_exit: "FAULT"
@@ -612,13 +612,13 @@ profiles:
                 required: true
               - type: "topic"
                 target: "usb_cameras/rear_left_camera/image_raw/compressed"
-                required: true
+                required: false
               - type: "topic"
                 target: "usb_cameras/rear_right_camera/image_raw/compressed"
-                required: true
+                required: false
               - type: "topic"
                 target: "usb_cameras/tools_camera/image_raw/compressed"
-                required: true
+                required: false
               - type: "topic_message"
                 target: "depth_camera/depth/camera_info"
                 required: false
@@ -663,7 +663,7 @@ profiles:
             - "node=battery_node;level>=WARN;action=DEGRADED"
             - "node=depth_camera_watchdog;level>=ERROR;action=DEGRADED"
             - "node=depth_camera_watchdog;level>=WARN;action=DEGRADED"
-            - "level>=ERROR;match=Failed to open V4L2 device;action=FAULT"
+            - "level>=ERROR;match=Failed to open V4L2 device;action=WARN_ONLY"
           errors:
             on_readiness_fail: "FAULT"
             on_unexpected_exit: "FAULT"
@@ -905,13 +905,13 @@ profiles:
                 required: true
               - type: "topic"
                 target: "usb_cameras/rear_left_camera/image_raw/compressed"
-                required: true
+                required: false
               - type: "topic"
                 target: "usb_cameras/rear_right_camera/image_raw/compressed"
-                required: true
+                required: false
               - type: "topic"
                 target: "usb_cameras/tools_camera/image_raw/compressed"
-                required: true
+                required: false
               - type: "topic_message"
                 target: "depth_camera/depth/camera_info"
                 required: false
@@ -956,7 +956,7 @@ profiles:
             - "node=battery_node;level>=WARN;action=DEGRADED"
             - "node=depth_camera_watchdog;level>=ERROR;action=DEGRADED"
             - "node=depth_camera_watchdog;level>=WARN;action=DEGRADED"
-            - "level>=ERROR;match=Failed to open V4L2 device;action=FAULT"
+            - "level>=ERROR;match=Failed to open V4L2 device;action=WARN_ONLY"
           errors:
             on_readiness_fail: "FAULT"
             on_unexpected_exit: "FAULT"
@@ -1175,7 +1175,7 @@ profiles:
               - "use_amr_sweeper_ros2_control:=true"
               - "use_amr_sweeper_battery:=true"
               - "use_amr_sweeper_system_info:=true"
-              - "use_amr_sweeper_usb_cameras:=true"
+              - "use_amr_sweeper_usb_cameras:=false"
               - "use_amr_sweeper_depth_camera:=true"
               - "use_amr_sweeper_imu:=true"
               - "use_amr_sweeper_gnss:=true"
@@ -1198,13 +1198,13 @@ profiles:
                 required: true
               - type: "topic"
                 target: "usb_cameras/rear_left_camera/image_raw/compressed"
-                required: true
+                required: false
               - type: "topic"
                 target: "usb_cameras/rear_right_camera/image_raw/compressed"
-                required: true
+                required: false
               - type: "topic"
                 target: "usb_cameras/tools_camera/image_raw/compressed"
-                required: true
+                required: false
               - type: "topic_message"
                 target: "depth_camera/depth/camera_info"
                 required: false
@@ -1249,7 +1249,7 @@ profiles:
             - "node=battery_node;level>=WARN;action=DEGRADED"
             - "node=depth_camera_watchdog;level>=ERROR;action=DEGRADED"
             - "node=depth_camera_watchdog;level>=WARN;action=DEGRADED"
-            - "level>=ERROR;match=Failed to open V4L2 device;action=FAULT"
+            - "level>=ERROR;match=Failed to open V4L2 device;action=WARN_ONLY"
           errors:
             on_readiness_fail: "FAULT"
             on_unexpected_exit: "FAULT"
@@ -1380,13 +1380,13 @@ profiles:
                 required: true
               - type: "topic"
                 target: "usb_cameras/rear_left_camera/image_raw/compressed"
-                required: true
+                required: false
               - type: "topic"
                 target: "usb_cameras/rear_right_camera/image_raw/compressed"
-                required: true
+                required: false
               - type: "topic"
                 target: "usb_cameras/tools_camera/image_raw/compressed"
-                required: true
+                required: false
               - type: "topic_message"
                 target: "depth_camera/depth/camera_info"
                 required: false
@@ -1428,7 +1428,7 @@ profiles:
             - "node=battery_node;level>=WARN;action=DEGRADED"
             - "node=depth_camera_watchdog;level>=ERROR;action=DEGRADED"
             - "node=depth_camera_watchdog;level>=WARN;action=DEGRADED"
-            - "level>=ERROR;match=Failed to open V4L2 device;action=FAULT"
+            - "level>=ERROR;match=Failed to open V4L2 device;action=WARN_ONLY"
           errors:
             on_readiness_fail: "FAULT"
             on_unexpected_exit: "FAULT"
