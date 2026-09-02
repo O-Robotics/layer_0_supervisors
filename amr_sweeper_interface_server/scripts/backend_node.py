@@ -6,6 +6,7 @@ import json
 import errno
 import os
 import re
+import shutil
 import socket
 import socketserver
 import stat
@@ -65,6 +66,7 @@ MISSION_LAYER_OVERRIDE_KEYS = (
     "use_amr_sweeper_localization",
     "use_amr_sweeper_mapping",
     "use_amr_sweeper_navigation",
+    "use_gaussian",
     "auto_start_mission",
 )
 
@@ -93,6 +95,7 @@ MISSION_LAYER_OVERRIDE_FALLBACKS = {
     "use_amr_sweeper_localization": True,
     "use_amr_sweeper_mapping": False,
     "use_amr_sweeper_navigation": True,
+    "use_gaussian": False,
     "auto_start_mission": True,
 }
 
@@ -384,6 +387,10 @@ class MissionBackendNode(Node):
         self._missions_from_db_directory = self.declare_parameter(
             "missions_from_db_directory",
             "missions/database",
+        ).value
+        self._maps_directory = self.declare_parameter(
+            "maps_directory",
+            "missions/maps",
         ).value
         self._list_missions_service = self.declare_parameter(
             "list_missions_service",
@@ -707,6 +714,12 @@ class MissionBackendNode(Node):
                 return self._ipc_backend_response(self.delete_planned_schedule_entry(payload))
             if action == "GET_MAP_DATA":
                 return self._ipc_backend_response(self.map_snapshot())
+            if action == "LIST_MAPS":
+                return self._ipc_backend_response(self.maps_snapshot())
+            if action == "SAVE_MAP":
+                return self._ipc_backend_response(self.save_map(payload))
+            if action == "DELETE_MAP":
+                return self._ipc_backend_response(self.delete_map(payload))
             if action == "GET_RECORD_MAP":
                 return self._ipc_backend_response(self.record_map_snapshot())
             if action == "START_RECORD_MAP":
@@ -926,6 +939,13 @@ class MissionBackendNode(Node):
         request.priority = int(payload.get("priority", 200))
         request.force = bool(payload.get("force", False))
         request.record_rosbag = bool(payload.get("record_rosbag", False))
+        layer_overrides = dict(payload.get("layer_overrides", {}) or {})
+        if _coerce_bool_value(layer_overrides.get("use_gaussian")) is True:
+            layer_overrides["use_amr_sweeper_usb_cameras"] = True
+            layer_overrides["use_amr_sweeper_depth_camera"] = True
+            layer_overrides["use_amr_sweeper_localization"] = True
+            layer_overrides["use_amr_sweeper_mapping"] = True
+        request.layer_overrides_json = json.dumps(layer_overrides)
         request.reason = str(payload.get("reason", "manual mission requested from HTTP UI"))
 
         response = self._call_service(
@@ -937,7 +957,7 @@ class MissionBackendNode(Node):
         if bool(response.success):
             _write_execution_context_preferences(
                 response.execution_context_file,
-                payload.get("layer_overrides", {}),
+                layer_overrides,
                 {
                     "record_rosbag": payload.get("record_rosbag"),
                 },
@@ -1057,18 +1077,43 @@ class MissionBackendNode(Node):
 
     def start_teleop(self, payload: dict[str, Any]) -> dict[str, Any]:
         request_payload = dict(payload)
+        mode = str(request_payload.pop("mode", "teleop")).strip().lower()
         layer_overrides = dict(request_payload.get("layer_overrides", {}))
         layer_overrides["use_joy_node"] = False
+        if mode == "record_map":
+            request_payload["record_rosbag"] = True
+            layer_overrides.update(
+                {
+                    "use_amr_sweeper_usb_cameras": True,
+                    "use_amr_sweeper_depth_camera": True,
+                    "use_amr_sweeper_localization": True,
+                    "use_amr_sweeper_mapping": True,
+                    "use_gaussian": True,
+                }
+            )
         request_payload["layer_overrides"] = layer_overrides
-        request_payload.setdefault("reason", "web teleop requested from HTTP UI")
+        request_payload.setdefault(
+            "reason",
+            "web record map requested from HTTP UI"
+            if mode == "record_map"
+            else "web teleop requested from HTTP UI",
+        )
         request_payload.setdefault("priority", 200)
         request_payload.setdefault("requester", "frontend_teleop")
-        return self.execute_manual_mission(TELEOP_MISSION_ID, request_payload)
+        return self.execute_manual_mission(
+            "RecordMap" if mode == "record_map" else TELEOP_MISSION_ID,
+            request_payload,
+        )
 
     def stop_teleop(self, payload: dict[str, Any]) -> dict[str, Any]:
         self._publish_zero_teleop_command()
         request_payload = dict(payload)
-        request_payload.setdefault("mission_id", TELEOP_MISSION_ID)
+        active_execution = self._discover_active_execution() or {}
+        active_mission_id = str(active_execution.get("mission_id", ""))
+        if active_mission_id in {TELEOP_MISSION_ID, "RecordMap"}:
+            request_payload.setdefault("mission_id", active_mission_id)
+        else:
+            request_payload.setdefault("mission_id", TELEOP_MISSION_ID)
         request_payload.setdefault("reason", "web teleop stop requested from HTTP UI")
         request_payload.setdefault("outcome", "completed")
         request_payload.setdefault("requester", "frontend_teleop")
@@ -1471,16 +1516,16 @@ class MissionBackendNode(Node):
 
         if current_state != "RUNNING":
             return False, f"FSM state is {current_state or 'unknown'}"
-        if current_profile_id != TELEOP_PROFILE_ID:
+        if current_profile_id not in {TELEOP_PROFILE_ID, 225}:
             return False, f"FSM profile is {current_profile_id if current_profile_id >= 0 else 'unknown'}"
         if transition_status and transition_status != "STABLE":
             return False, f"FSM transition status is {transition_status}"
 
         active_execution = self._discover_active_execution() or {}
-        if str(active_execution.get("mission_id", "")) != TELEOP_MISSION_ID:
-            return False, "active mission is not Teleop"
+        if str(active_execution.get("mission_id", "")) not in {TELEOP_MISSION_ID, "RecordMap"}:
+            return False, "active mission is not Teleop or RecordMap"
         if active_execution.get("active", True) is False:
-            return False, "Teleop mission is not active"
+            return False, "Teleop/RecordMap mission is not active"
         return True, "ready"
 
     def _send_classic_can_frame(self, can_id: int, payload: bytes) -> None:
@@ -1769,6 +1814,7 @@ class MissionBackendNode(Node):
                     "schedule_type": event.get("X-SCHEDULE-TYPE", ""),
                     "mission_id": event.get("X-MISSION-ID", ""),
                     "record_rosbag": event.get("X-RECORD-ROSBAG", "").strip().upper() == "TRUE",
+                    "gaussian_capture": event.get("X-GAUSSIAN-CAPTURE", "").strip().upper() == "TRUE",
                     "robot_id": event.get("X-ROBOT-ID", ""),
                     "start": occurrence_start.isoformat(),
                     "end": occurrence_end.isoformat(),
@@ -1882,6 +1928,7 @@ class MissionBackendNode(Node):
             "schedule_type": event.get("X-SCHEDULE-TYPE", "WORK") or "WORK",
             "mission_id": event.get("X-MISSION-ID", ""),
             "record_rosbag": event.get("X-RECORD-ROSBAG", "").strip().upper() == "TRUE",
+            "gaussian_capture": event.get("X-GAUSSIAN-CAPTURE", "").strip().upper() == "TRUE",
             "robot_id": event.get("X-ROBOT-ID", ""),
             "start_local": start.strftime("%Y-%m-%dT%H:%M"),
             "end_local": end.strftime("%Y-%m-%dT%H:%M"),
@@ -2044,6 +2091,7 @@ class MissionBackendNode(Node):
         if event.get("mission_id"):
             lines.append(f"X-MISSION-ID:{_escape_ics_text(event['mission_id'])}")
         lines.append(f"X-RECORD-ROSBAG:{'TRUE' if event.get('record_rosbag') else 'FALSE'}")
+        lines.append(f"X-GAUSSIAN-CAPTURE:{'TRUE' if event.get('gaussian_capture') else 'FALSE'}")
         lines.append("END:VEVENT")
         return lines
 
@@ -2069,6 +2117,7 @@ class MissionBackendNode(Node):
             "recurrence_interval_minutes": 1,
             "recurrence_until_local": str(payload.get("recurrence_until_local", "")).strip(),
             "record_rosbag": _coerce_bool_value(payload.get("record_rosbag", False)) or False,
+            "gaussian_capture": _coerce_bool_value(payload.get("gaussian_capture", False)) or False,
         }
         if not entry["start_local"] or not entry["end_local"]:
             raise RuntimeError("start_local and end_local are required")
@@ -2341,6 +2390,153 @@ class MissionBackendNode(Node):
             "active_route_geojson": active_route,
             "current_position": navsat,
         }
+
+    def maps_snapshot(self) -> dict[str, Any]:
+        maps_directory = _resolve_path(self._maps_directory)
+        maps_directory.mkdir(parents=True, exist_ok=True)
+        maps: list[dict[str, Any]] = []
+        for metadata_file in sorted(maps_directory.glob("*/map.json")):
+            try:
+                metadata = json.loads(metadata_file.read_text(encoding="utf-8"))
+            except Exception as exc:  # noqa: BLE001
+                metadata = {
+                    "map_id": metadata_file.parent.name,
+                    "name": metadata_file.parent.name,
+                    "error": str(exc),
+                }
+            maps.append(self._map_payload_from_metadata(metadata_file.parent, metadata))
+
+        latest_snapshot = self.record_map_snapshot()
+        return {
+            "success": True,
+            "maps": maps,
+            "latest_recorded_map": latest_snapshot.get("latest_recorded_map"),
+            "latest_route_geojson": latest_snapshot.get("latest_route_geojson"),
+            "latest_navsat_geojson": latest_snapshot.get("latest_navsat_geojson"),
+            "active_recording": latest_snapshot.get("active_recording", False),
+            "active_navsat_geojson": latest_snapshot.get("active_navsat_geojson"),
+            "current_position": latest_snapshot.get("current_position"),
+            "patterns": latest_snapshot.get("patterns", ["zigzag", "random", "spiral"]),
+            "default_pattern": latest_snapshot.get("default_pattern", "zigzag"),
+        }
+
+    def save_map(self, payload: dict[str, Any]) -> dict[str, Any]:
+        map_id = self._sanitize_map_id(str(payload.get("map_id") or payload.get("name") or ""))
+        if not map_id:
+            return {"success": False, "message": "map_id or name is required"}
+        maps_directory = _resolve_path(self._maps_directory)
+        map_directory = maps_directory / map_id
+        overwrite = bool(payload.get("overwrite_existing", True))
+        if map_directory.exists() and not overwrite:
+            return {"success": False, "message": f"Map '{map_id}' already exists"}
+        map_directory.mkdir(parents=True, exist_ok=True)
+
+        existing_metadata_file = map_directory / "map.json"
+        existing_metadata: dict[str, Any] = {}
+        if existing_metadata_file.exists():
+            try:
+                existing_metadata = json.loads(existing_metadata_file.read_text(encoding="utf-8"))
+            except Exception:
+                existing_metadata = {}
+
+        source = str(payload.get("source", "latest_recorded_map")).strip()
+        metadata = {
+            **existing_metadata,
+            "map_id": map_id,
+            "name": str(payload.get("name") or existing_metadata.get("name") or map_id),
+            "description": str(payload.get("description") or existing_metadata.get("description") or ""),
+            "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "sweep_pattern": str(payload.get("sweep_pattern") or existing_metadata.get("sweep_pattern") or "zigzag"),
+            "start_position": payload.get("start_position", existing_metadata.get("start_position")),
+            "end_position": payload.get("end_position", existing_metadata.get("end_position")),
+            "layer_visibility": payload.get("layer_visibility", existing_metadata.get("layer_visibility", {})),
+        }
+
+        if source == "latest_recorded_map":
+            self._copy_latest_recorded_map_into_map_directory(map_directory, metadata)
+
+        metadata_file = map_directory / "map.json"
+        metadata_file.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+        return {
+            "success": True,
+            "message": f"Map '{map_id}' saved",
+            "map": self._map_payload_from_metadata(map_directory, metadata),
+        }
+
+    def delete_map(self, payload: dict[str, Any]) -> dict[str, Any]:
+        map_id = self._sanitize_map_id(str(payload.get("map_id", "")))
+        if not map_id:
+            return {"success": False, "message": "map_id is required"}
+        maps_directory = _resolve_path(self._maps_directory)
+        map_directory = (maps_directory / map_id).resolve()
+        maps_root = maps_directory.resolve()
+        if maps_root not in map_directory.parents:
+            return {"success": False, "message": "Refusing to delete outside maps directory"}
+        if not map_directory.exists():
+            return {"success": False, "message": f"Map '{map_id}' was not found"}
+        shutil.rmtree(map_directory)
+        return {"success": True, "message": f"Map '{map_id}' deleted", "map_id": map_id}
+
+    def _copy_latest_recorded_map_into_map_directory(
+        self,
+        map_directory: Path,
+        metadata: dict[str, Any],
+    ) -> None:
+        latest_directory = _resolve_path(self._missions_log_directory) / "latest_recorded_map"
+        latest_metadata_file = latest_directory / "latest_recorded_map.json"
+        if not latest_metadata_file.exists():
+            raise RuntimeError("No latest recorded map is available to save")
+        latest_metadata = json.loads(latest_metadata_file.read_text(encoding="utf-8"))
+        copy_specs = {
+            "recorded_work_area_route_file": "boundary.geojson",
+            "recorded_work_area_navsat_file": "boundary_navsat.geojson",
+            "recorded_work_area_static_costmap_yaml": "static_costmap.yaml",
+            "recorded_work_area_static_costmap_image": "static_costmap.pgm",
+        }
+        for key, filename in copy_specs.items():
+            source_path = Path(str(latest_metadata.get(key, "")))
+            if source_path.exists() and source_path.is_file():
+                destination = map_directory / filename
+                shutil.copyfile(source_path, destination)
+                metadata[key] = str(destination)
+        metadata["source_latest_recorded_map_file"] = str(latest_metadata_file)
+        metadata["source_mission_id"] = latest_metadata.get("mission_id", "")
+        metadata["source_run_started_at"] = latest_metadata.get("run_started_at", "")
+        metadata["recorded_obstacle_count"] = latest_metadata.get("recorded_obstacle_count", 0)
+        metadata["recorded_obstacle_points"] = latest_metadata.get("recorded_obstacle_points", [])
+        metadata["geo_transform"] = latest_metadata.get("geo_transform", {})
+
+    def _map_payload_from_metadata(self, map_directory: Path, metadata: dict[str, Any]) -> dict[str, Any]:
+        payload = dict(metadata)
+        payload.setdefault("map_id", map_directory.name)
+        payload.setdefault("name", payload["map_id"])
+        payload["directory"] = str(map_directory)
+        route_path = Path(str(payload.get("recorded_work_area_route_file", "")))
+        navsat_path = Path(str(payload.get("recorded_work_area_navsat_file", "")))
+        zone_set_path = map_directory / "zoneSet.json"
+        gaussian_manifest_path = Path(str(payload.get("gaussian_manifest_file", "")))
+        if route_path.exists():
+            payload["route_geojson"] = self._load_geojson_feature_collection(route_path)
+        if navsat_path.exists():
+            payload["navsat_geojson"] = self._load_geojson_feature_collection(navsat_path)
+        if zone_set_path.exists():
+            try:
+                payload["zoneSet"] = json.loads(zone_set_path.read_text(encoding="utf-8"))
+            except Exception as exc:  # noqa: BLE001
+                payload["zoneSet_error"] = str(exc)
+        if gaussian_manifest_path.exists():
+            try:
+                payload["gaussian_manifest"] = json.loads(
+                    gaussian_manifest_path.read_text(encoding="utf-8")
+                )
+            except Exception as exc:  # noqa: BLE001
+                payload["gaussian_error"] = str(exc)
+        return payload
+
+    @staticmethod
+    def _sanitize_map_id(value: str) -> str:
+        cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "_", value.strip())
+        return cleaned.strip("._-")
 
     def mission_file_path(self, mission_id: str) -> Path:
         if not mission_id:

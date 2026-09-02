@@ -271,7 +271,7 @@ profiles:
             exec: "ros2 launch amr_sweeper_layer_3_navigation_bringup amr_sweeper_layer_3_navigation_bringup.launch.py"
             args:
               - "namespace:={ns}"
-              - "use_amr_sweeper_visual_odometry:=false"
+              - "use_amr_sweeper_visual_odometry:={use_amr_sweeper_visual_odometry}"
               - "use_amr_sweeper_localization:=true"
               - "use_amr_sweeper_mapping:=true"
               - "use_amr_sweeper_navigation:=true"
@@ -300,7 +300,7 @@ profiles:
                 required: true
               - type: "service"
                 target: "gaussian_node/get_parameters"
-                required: true
+                required: false
               - type: "service"
                 target: "mapping_node/get_parameters"
                 required: true
@@ -569,7 +569,7 @@ profiles:
             exec: "ros2 launch amr_sweeper_layer_3_navigation_bringup amr_sweeper_layer_3_navigation_bringup.launch.py"
             args:
               - "namespace:={ns}"
-              - "use_amr_sweeper_visual_odometry:=false"
+              - "use_amr_sweeper_visual_odometry:={use_amr_sweeper_visual_odometry}"
               - "use_amr_sweeper_localization:=true"
               - "use_amr_sweeper_mapping:=true"
               - "use_amr_sweeper_navigation:=true"
@@ -598,7 +598,7 @@ profiles:
                 required: true
               - type: "service"
                 target: "gaussian_node/get_parameters"
-                required: true
+                required: false
               - type: "service"
                 target: "mapping_node/get_parameters"
                 required: true
@@ -894,7 +894,7 @@ profiles:
               - "namespace:={ns}"
               - "use_simulation:=true"
               - "use_sim_time:=true"
-              - "use_amr_sweeper_visual_odometry:=false"
+              - "use_amr_sweeper_visual_odometry:={use_amr_sweeper_visual_odometry}"
               - "use_amr_sweeper_localization:=true"
               - "use_amr_sweeper_mapping:=true"
               - "use_amr_sweeper_navigation:=true"
@@ -923,7 +923,7 @@ profiles:
                 required: true
               - type: "service"
                 target: "gaussian_node/get_parameters"
-                required: true
+                required: false
               - type: "service"
                 target: "mapping_node/get_parameters"
                 required: true

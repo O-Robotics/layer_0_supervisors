@@ -360,9 +360,9 @@ class MissionFrontendRenderer:
       <div class="nav">
         <a class="nav-link" href="/">Dashboard</a>
         <a class="nav-link" href="/calendar">Calendar</a>
-        <a class="nav-link" href="/map">Missions</a>
+        <a class="nav-link" href="/missions">Missions</a>
         <a class="nav-link" href="/teleop">Teleop</a>
-        <a class="nav-link" href="/record-map">Record Map</a>
+        <a class="nav-link" href="/map">Map</a>
         <a class="nav-link" href="/developer">Developer</a>
       </div>
     </section>
@@ -1008,9 +1008,9 @@ class MissionFrontendRenderer:
       <div class="nav">
         <a class="nav-link" href="/">Dashboard</a>
         <a class="nav-link" href="/calendar">Calendar</a>
-        <a class="nav-link" href="/map">Missions</a>
+        <a class="nav-link" href="/missions">Missions</a>
         <a class="nav-link" href="/teleop">Teleop</a>
-        <a class="nav-link" href="/record-map">Record Map</a>
+        <a class="nav-link" href="/map">Map</a>
         <a class="nav-link" href="/developer">Developer</a>
       </div>
     </section>
@@ -1083,6 +1083,10 @@ class MissionFrontendRenderer:
           <label class="span-2">
             <input id="entry-record-rosbag" type="checkbox">
             Record rosbag
+          </label>
+          <label class="span-2">
+            <input id="entry-gaussian-capture" type="checkbox">
+            Gaussian capture
           </label>
           <label class="span-2">
             Description
@@ -1188,6 +1192,7 @@ class MissionFrontendRenderer:
       document.getElementById('entry-recurrence-interval-minutes').value = '10';
       document.getElementById('entry-continuous-duration-minutes').value = '180';
       document.getElementById('entry-record-rosbag').checked = false;
+      document.getElementById('entry-gaussian-capture').checked = false;
       const baseDate = activeScheduleData?.week_start ? parseLocalDate(activeScheduleData.week_start) : new Date();
       const start = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate(), 8, 0, 0, 0);
       const end = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate(), 10, 0, 0, 0);
@@ -1214,6 +1219,7 @@ class MissionFrontendRenderer:
         document.getElementById('entry-continuous-duration-minutes').value = '180';
       }}
       document.getElementById('entry-record-rosbag').checked = Boolean(entry.record_rosbag);
+      document.getElementById('entry-gaussian-capture').checked = Boolean(entry.gaussian_capture);
       document.getElementById('entry-description').value = entry.description || '';
     }}
 
@@ -1240,7 +1246,7 @@ class MissionFrontendRenderer:
         card.innerHTML = `
           <div><strong>${{entry.summary || entry.schedule_type || 'Planned entry'}}</strong></div>
           <div class="muted">${{entry.start_local || '-'}} to ${{entry.end_local || '-'}} | ${{entry.recurrence_label || 'One-off'}}</div>
-          <div class="muted">${{entry.schedule_type || 'WORK'}}${{entry.mission_id ? ` | Mission: ${{entry.mission_id}}` : ''}}${{entry.robot_id ? ` | Robot: ${{entry.robot_id}}` : ''}}</div>
+          <div class="muted">${{entry.schedule_type || 'WORK'}}${{entry.mission_id ? ` | Mission: ${{entry.mission_id}}` : ''}}${{entry.robot_id ? ` | Robot: ${{entry.robot_id}}` : ''}}${{entry.gaussian_capture ? ' | Gaussian capture' : ''}}</div>
           <div class="entry-actions">
             <button class="secondary" type="button">Edit</button>
             <button class="danger" type="button">Delete</button>
@@ -1398,6 +1404,7 @@ class MissionFrontendRenderer:
         recurrence_interval_minutes: document.getElementById('entry-recurrence-interval-minutes').value,
         continuous_duration_minutes: document.getElementById('entry-continuous-duration-minutes').value,
         record_rosbag: document.getElementById('entry-record-rosbag').checked,
+        gaussian_capture: document.getElementById('entry-gaussian-capture').checked,
         description: document.getElementById('entry-description').value,
       }};
       const result = await postJson('/api/v1/schedule/entry', payload);
@@ -1422,13 +1429,16 @@ class MissionFrontendRenderer:
 """
 
     def render_record_map_html(self) -> str:
+        return self.render_map_html()
+
+    def render_map_html(self) -> str:
         title = escape(self._site_title)
         return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{title} - Record Map</title>
+  <title>{title} - Map</title>
   <link
     rel="stylesheet"
     href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -1630,15 +1640,15 @@ class MissionFrontendRenderer:
 <body>
   <main>
     <section class="card hero">
-      <h1>Record Map And Create Missions</h1>
-      <div class="muted">Drive the robot around the working-area perimeter, let RecordMap update the latest recorded map, then create one or more named autonomous missions from that map using a sweep pattern.</div>
+      <h1>Map</h1>
+      <div class="muted">Display, edit, save, and delete recorded maps. Start new map recordings from Teleop.</div>
       <div id="banner" class="banner"></div>
       <div class="nav">
         <a class="nav-link" href="/">Dashboard</a>
         <a class="nav-link" href="/calendar">Calendar</a>
-        <a class="nav-link" href="/map">Missions</a>
+        <a class="nav-link" href="/missions">Missions</a>
         <a class="nav-link" href="/teleop">Teleop</a>
-        <a class="nav-link" href="/record-map">Record Map</a>
+        <a class="nav-link" href="/map">Map</a>
         <a class="nav-link" href="/developer">Developer</a>
       </div>
     </section>
@@ -1651,14 +1661,22 @@ class MissionFrontendRenderer:
         <section class="card">
           <div class="toolbar">
             <div id="recording-chip" class="status-chip idle">RecordMap idle</div>
-            <button id="record-button">Record</button>
-            <button id="stop-button" class="stop">Stop</button>
+            <button id="save-map-button">Save As Map</button>
+            <button id="delete-map-button" class="stop">Delete Map</button>
           </div>
-          <div class="muted" style="margin-top: 12px;">The latest recorded map is overwritten whenever a new RecordMap session is completed.</div>
+          <div class="muted" style="margin-top: 12px;">New recordings are started from Teleop. Saved maps persist here after later recordings replace the latest capture.</div>
         </section>
 
         <section class="card">
-          <h2>Latest Recorded Map</h2>
+          <h2>Saved Maps</h2>
+          <div style="margin-top: 12px;">
+            <label for="map-select">Map</label>
+            <select id="map-select"></select>
+          </div>
+          <div style="margin-top: 12px;">
+            <label for="map-name">Map name</label>
+            <input id="map-name" type="text" placeholder="yard_east">
+          </div>
           <div class="meta-grid" style="margin-top: 12px;">
             <div class="meta">
               <strong>Recorded Run</strong>
@@ -1669,15 +1687,11 @@ class MissionFrontendRenderer:
               <div id="latest-obstacles" class="muted" style="margin-top: 6px;">-</div>
             </div>
           </div>
-          <div id="latest-map-message" class="muted" style="margin-top: 12px;">Complete a RecordMap session to unlock mission creation.</div>
+          <div id="latest-map-message" class="muted" style="margin-top: 12px;">Record from Teleop or select a saved map.</div>
         </section>
 
         <section class="card">
-          <h2>Create Autonomous Mission</h2>
-          <div style="margin-top: 12px;">
-            <label for="mission-name">Mission name</label>
-            <input id="mission-name" type="text" placeholder="yard_east_zigzag">
-          </div>
+          <h2>Edit Path</h2>
           <div style="margin-top: 14px;">
             <strong>Pattern</strong>
             <div id="pattern-countdown" class="countdown"></div>
@@ -1687,9 +1701,31 @@ class MissionFrontendRenderer:
               <label class="pattern-option"><input type="radio" name="pattern" value="spiral"> Spiral inward coverage</label>
             </div>
           </div>
+          <div style="margin-top: 14px;">
+            <label for="start-position">Start position</label>
+            <input id="start-position" type="range" min="0" max="100" value="0">
+          </div>
+          <div style="margin-top: 14px;">
+            <label class="pattern-option"><input id="use-end-position" type="checkbox"> Use end position</label>
+            <input id="end-position" type="range" min="0" max="100" value="100">
+          </div>
           <div class="toolbar" style="margin-top: 16px;">
-            <button id="save-button">Save Mission</button>
+            <button id="save-button">Save Map</button>
             <button id="refresh-button" class="secondary">Refresh</button>
+          </div>
+        </section>
+        <section class="card">
+          <h2>Layers</h2>
+          <div class="pattern-list">
+            <label class="pattern-option"><input class="layer-toggle" data-layer="background" type="checkbox" checked> Background</label>
+            <label class="pattern-option"><input class="layer-toggle" data-layer="boundary" type="checkbox" checked> Boundary</label>
+            <label class="pattern-option"><input class="layer-toggle" data-layer="recorded" type="checkbox" checked> Recorded trace</label>
+            <label class="pattern-option"><input class="layer-toggle" data-layer="zones" type="checkbox" checked> VDA5050 zones</label>
+            <label class="pattern-option"><input class="layer-toggle" data-layer="gaussian" type="checkbox" checked> Gaussian</label>
+          </div>
+          <div class="toolbar" style="margin-top: 16px;">
+            <button id="view-2d-button">2D</button>
+            <button id="view-3d-button" class="secondary">3D</button>
           </div>
         </section>
       </section>
@@ -1709,7 +1745,17 @@ class MissionFrontendRenderer:
     const latestMapMessage = document.getElementById('latest-map-message');
     const patternCountdown = document.getElementById('pattern-countdown');
     const patternInputs = [...document.querySelectorAll('input[name="pattern"]')];
-    const missionNameInput = document.getElementById('mission-name');
+    const mapSelect = document.getElementById('map-select');
+    const mapNameInput = document.getElementById('map-name');
+    const startPositionInput = document.getElementById('start-position');
+    const useEndPositionInput = document.getElementById('use-end-position');
+    const endPositionInput = document.getElementById('end-position');
+    const layerToggles = [...document.querySelectorAll('.layer-toggle')];
+    const view2dButton = document.getElementById('view-2d-button');
+    const view3dButton = document.getElementById('view-3d-button');
+    let mapsCache = [];
+    let selectedMapId = '';
+    let currentView = '2d';
     let patternTouched = false;
     let countdownTimer = null;
     let countdownSeconds = 20;
@@ -1718,6 +1764,8 @@ class MissionFrontendRenderer:
     let latestPolyline = null;
     let perimeterPolyline = null;
     let currentMarker = null;
+    let boundaryMaskLayer = null;
+    let gaussianLayer = null;
 
     const map = L.map('record-map', {{ zoomControl: true }}).setView([55.6761, 12.5683], 18);
     L.tileLayer(
@@ -1737,6 +1785,15 @@ class MissionFrontendRenderer:
     function selectedPattern() {{
       const selected = patternInputs.find((input) => input.checked);
       return selected ? selected.value : '';
+    }}
+
+    function layerEnabled(layer) {{
+      const input = layerToggles.find((toggle) => toggle.dataset.layer === layer);
+      return !input || input.checked;
+    }}
+
+    function selectedMap() {{
+      return mapsCache.find((entry) => entry.map_id === selectedMapId) || null;
     }}
 
     function ensureDefaultPatternSelection() {{
@@ -1809,23 +1866,59 @@ class MissionFrontendRenderer:
         map.removeLayer(currentMarker);
         currentMarker = null;
       }}
+      if (boundaryMaskLayer) {{
+        map.removeLayer(boundaryMaskLayer);
+        boundaryMaskLayer = null;
+      }}
+      if (gaussianLayer) {{
+        map.removeLayer(gaussianLayer);
+        gaussianLayer = null;
+      }}
 
       const bounds = [];
+      const mapEntry = selectedMap();
+      const selectedNavsat = mapEntry?.navsat_geojson || null;
+      const selectedRoute = mapEntry?.route_geojson || null;
       const activeLatLngs = lineStringLatLngs(data.active_navsat_geojson);
-      if (activeLatLngs.length > 1) {{
+      if (layerEnabled('recorded') && activeLatLngs.length > 1) {{
         activePolyline = L.polyline(activeLatLngs, {{ color: '#dc2626', weight: 4 }}).addTo(map);
         bounds.push(...activeLatLngs);
       }}
 
-      const latestLatLngs = lineStringLatLngs(data.latest_navsat_geojson);
-      if (latestLatLngs.length > 1) {{
+      const latestLatLngs = lineStringLatLngs(selectedNavsat || data.latest_navsat_geojson);
+      if (layerEnabled('recorded') && latestLatLngs.length > 1) {{
         latestPolyline = L.polyline(latestLatLngs, {{ color: '#0f766e', weight: 4 }}).addTo(map);
         bounds.push(...latestLatLngs);
       }}
 
-      const perimeterLatLngs = lineStringLatLngs(data.latest_route_geojson);
-      if (perimeterLatLngs.length > 1) {{
+      const perimeterLatLngs = lineStringLatLngs(selectedRoute || data.latest_route_geojson);
+      if (layerEnabled('boundary') && perimeterLatLngs.length > 1) {{
         perimeterPolyline = L.polyline(perimeterLatLngs, {{ color: '#f59e0b', weight: 3, dashArray: '8 8' }}).addTo(map);
+        boundaryMaskLayer = L.polygon(perimeterLatLngs, {{
+          color: '#fdca0f',
+          weight: 1,
+          fillColor: '#020617',
+          fillOpacity: layerEnabled('background') ? 0.04 : 0.26,
+        }}).addTo(map);
+        boundaryMaskLayer.bringToBack();
+      }}
+
+      if (layerEnabled('gaussian')) {{
+        const obstaclePoints = mapEntry?.recorded_obstacle_points || data.latest_recorded_map?.recorded_obstacle_points || [];
+        const gaussianLatLngs = latestLatLngs.length > 0 ? latestLatLngs : perimeterLatLngs;
+        if (obstaclePoints.length > 0 && gaussianLatLngs.length > 0) {{
+          gaussianLayer = L.layerGroup();
+          for (const point of gaussianLatLngs.slice(0, Math.min(gaussianLatLngs.length, 120))) {{
+            L.circleMarker(point, {{
+              radius: 2,
+              color: '#38bdf8',
+              weight: 1,
+              fillColor: '#38bdf8',
+              fillOpacity: 0.55,
+            }}).addTo(gaussianLayer);
+          }}
+          gaussianLayer.addTo(map);
+        }}
       }}
 
       const position = data.current_position;
@@ -1842,9 +1935,42 @@ class MissionFrontendRenderer:
       }}
     }}
 
+    function populateMapSelect() {{
+      mapSelect.innerHTML = '<option value="">Latest recording</option>';
+      for (const entry of mapsCache) {{
+        const option = document.createElement('option');
+        option.value = entry.map_id;
+        option.textContent = entry.name || entry.map_id;
+        mapSelect.appendChild(option);
+      }}
+      mapSelect.value = selectedMapId;
+    }}
+
+    function applySelectedMapToEditor() {{
+      const entry = selectedMap();
+      if (entry) {{
+        mapNameInput.value = entry.name || entry.map_id;
+        const pattern = patternInputs.find((input) => input.value === (entry.sweep_pattern || 'zigzag'));
+        if (pattern) {{
+          pattern.checked = true;
+        }}
+        startPositionInput.value = String(entry.start_position?.percent ?? 0);
+        useEndPositionInput.checked = Boolean(entry.end_position);
+        endPositionInput.value = String(entry.end_position?.percent ?? 100);
+      }} else if (!mapNameInput.value) {{
+        mapNameInput.value = '';
+      }}
+    }}
+
     async function loadRecordMapSnapshot() {{
-      const response = await fetch('/api/v1/record-map', {{ cache: 'no-store' }});
+      const response = await fetch('/api/v1/maps', {{ cache: 'no-store' }});
       const data = await response.json();
+      mapsCache = data.maps || [];
+      if (selectedMapId && !mapsCache.some((entry) => entry.map_id === selectedMapId)) {{
+        selectedMapId = '';
+      }}
+      populateMapSelect();
+      applySelectedMapToEditor();
       chip.textContent = data.active_recording ? 'RecordMap recording' : 'RecordMap idle';
       chip.className = data.active_recording ? 'status-chip' : 'status-chip idle';
 
@@ -1852,7 +1978,9 @@ class MissionFrontendRenderer:
       if (latest && !latest.error) {{
         latestRun.textContent = latest.run_started_at || 'Latest recording available';
         latestObstacles.textContent = String(latest.recorded_obstacle_count ?? '-');
-        latestMapMessage.textContent = 'This latest recorded map can be reused to make several missions with different patterns.';
+        latestMapMessage.textContent = selectedMapId
+          ? 'Editing saved map metadata and display preferences.'
+          : 'Latest recording is ready to save as a named map.';
         const latestRunId = String(latest.run_started_at || '');
         if (latestRunId && latestRunId !== lastLatestRunId) {{
           startPatternCountdown();
@@ -1861,7 +1989,9 @@ class MissionFrontendRenderer:
       }} else {{
         latestRun.textContent = 'No recording captured yet.';
         latestObstacles.textContent = '-';
-        latestMapMessage.textContent = 'Complete a RecordMap session to unlock mission creation.';
+        latestMapMessage.textContent = selectedMapId
+          ? 'Editing saved map metadata and display preferences.'
+          : 'Record from Teleop to create a new latest map.';
         window.clearInterval(countdownTimer);
         patternCountdown.textContent = '';
         lastLatestRunId = '';
@@ -1880,38 +2010,91 @@ class MissionFrontendRenderer:
       return response.json();
     }}
 
-    document.getElementById('record-button').addEventListener('click', async () => {{
-      const data = await postJson('/api/v1/record-map/start', {{}});
-      setBanner(data.success ? 'ok' : 'error', data.message || 'RecordMap request completed');
+    mapSelect.addEventListener('change', async () => {{
+      selectedMapId = mapSelect.value;
       await loadRecordMapSnapshot();
     }});
 
-    document.getElementById('stop-button').addEventListener('click', async () => {{
-      const data = await postJson('/api/v1/record-map/stop', {{}});
-      setBanner(data.success ? 'ok' : 'error', data.message || 'RecordMap stop request completed');
+    document.getElementById('save-map-button').addEventListener('click', async () => {{
+      const mapName = mapNameInput.value.trim();
+      if (!mapName) {{
+        setBanner('error', 'Enter a map name before saving.');
+        return;
+      }}
+      const data = await postJson('/api/v1/maps/save', {{
+        map_id: mapName,
+        name: mapName,
+        source: 'latest_recorded_map',
+        sweep_pattern: selectedPattern(),
+        start_position: {{ percent: Number(startPositionInput.value) }},
+        end_position: useEndPositionInput.checked ? {{ percent: Number(endPositionInput.value) }} : null,
+        layer_visibility: Object.fromEntries(layerToggles.map((input) => [input.dataset.layer, input.checked])),
+        overwrite_existing: true
+      }});
+      setBanner(data.success ? 'ok' : 'error', data.message || 'Save map request completed');
+      if (data.success) {{
+        selectedMapId = data.map?.map_id || '';
+      }}
+      await loadRecordMapSnapshot();
+    }});
+
+    document.getElementById('delete-map-button').addEventListener('click', async () => {{
+      if (!selectedMapId) {{
+        setBanner('error', 'Select a saved map before deleting.');
+        return;
+      }}
+      const data = await postJson('/api/v1/maps/delete', {{ map_id: selectedMapId }});
+      setBanner(data.success ? 'ok' : 'error', data.message || 'Delete map request completed');
+      if (data.success) {{
+        selectedMapId = '';
+      }}
       await loadRecordMapSnapshot();
     }});
 
     document.getElementById('save-button').addEventListener('click', async () => {{
       ensureDefaultPatternSelection();
-      const missionName = missionNameInput.value.trim();
-      if (!missionName) {{
-        setBanner('error', 'Enter a mission name before saving.');
+      const mapName = mapNameInput.value.trim();
+      if (!mapName) {{
+        setBanner('error', 'Enter a map name before saving.');
         return;
       }}
-      const data = await postJson('/api/v1/record-map/save-mission', {{
-        mission_name: missionName,
+      const data = await postJson('/api/v1/maps/save', {{
+        map_id: selectedMapId || mapName,
+        name: mapName,
+        source: selectedMapId ? 'metadata' : 'latest_recorded_map',
         sweep_pattern: selectedPattern(),
-        overwrite_existing: false
+        start_position: {{ percent: Number(startPositionInput.value) }},
+        end_position: useEndPositionInput.checked ? {{ percent: Number(endPositionInput.value) }} : null,
+        layer_visibility: Object.fromEntries(layerToggles.map((input) => [input.dataset.layer, input.checked])),
+        overwrite_existing: true
       }});
-      setBanner(data.success ? 'ok' : 'error', data.message || 'Save mission request completed');
+      setBanner(data.success ? 'ok' : 'error', data.message || 'Save map request completed');
       if (data.success) {{
-        missionNameInput.value = '';
+        selectedMapId = data.map?.map_id || selectedMapId;
       }}
+      await loadRecordMapSnapshot();
     }});
 
     document.getElementById('refresh-button').addEventListener('click', async () => {{
       await loadRecordMapSnapshot();
+    }});
+
+    for (const input of [...layerToggles, startPositionInput, endPositionInput, useEndPositionInput]) {{
+      input.addEventListener('input', () => loadRecordMapSnapshot().catch(() => null));
+      input.addEventListener('change', () => loadRecordMapSnapshot().catch(() => null));
+    }}
+    view2dButton.addEventListener('click', () => {{
+      currentView = '2d';
+      view2dButton.classList.remove('secondary');
+      view3dButton.classList.add('secondary');
+      document.getElementById('record-map').style.filter = '';
+    }});
+    view3dButton.addEventListener('click', () => {{
+      currentView = '3d';
+      view3dButton.classList.remove('secondary');
+      view2dButton.classList.add('secondary');
+      document.getElementById('record-map').style.filter = 'contrast(1.15) saturate(0.72)';
+      setBanner('ok', '3D Gaussian view uses the saved Gaussian artifact preview when available.');
     }});
 
     ensureDefaultPatternSelection();
@@ -2141,9 +2324,23 @@ class MissionFrontendRenderer:
     }}
     .center-controls {{
       display: grid;
-      gap: 14px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
       justify-items: stretch;
       align-content: center;
+    }}
+    .center-controls.active-mode .idle-start {{
+      display: none;
+    }}
+    .merged-button {{
+      display: none;
+      grid-column: 1 / -1;
+    }}
+    .center-controls.active-mode .merged-button {{
+      display: block;
+    }}
+    .left-column-button {{
+      grid-column: 1;
     }}
     button {{
       border: 0;
@@ -2169,6 +2366,11 @@ class MissionFrontendRenderer:
       display: inline-block;
       font-size: 1.15rem;
       animation: spin 0.95s linear infinite, pulse-fade 1.2s ease-in-out infinite;
+    }}
+    .busy-label {{
+      display: inline-block;
+      margin-right: 10px;
+      vertical-align: middle;
     }}
     .toggle-button.enabled {{
       background: #f8fafc;
@@ -2234,9 +2436,9 @@ class MissionFrontendRenderer:
       <div class="nav">
         <a class="nav-link" href="/">Dashboard</a>
         <a class="nav-link" href="/calendar">Calendar</a>
-        <a class="nav-link" href="/map">Missions</a>
+        <a class="nav-link" href="/missions">Missions</a>
         <a class="nav-link" href="/teleop">Teleop</a>
-        <a class="nav-link" href="/record-map">Record Map</a>
+        <a class="nav-link" href="/map">Map</a>
         <a class="nav-link" href="/developer">Developer</a>
       </div>
       <div class="status-row">
@@ -2263,10 +2465,12 @@ class MissionFrontendRenderer:
           </div>
         </section>
         <section class="center-controls">
-          <button id="teleop-toggle-button" type="button">Start</button>
-          <button id="two-stick-button" class="mode-button" type="button">Two Stick</button>
+          <button id="teleop-start-button" class="idle-start" type="button">Teleop</button>
+          <button id="record-map-start-button" class="idle-start" type="button">Record Map</button>
+          <button id="teleop-toggle-button" class="merged-button" type="button">Stop</button>
           <button id="lights-button" class="toggle-button" type="button">Lights</button>
           <button id="camera-button" class="camera-button" type="button">Camera</button>
+          <button id="two-stick-button" class="mode-button left-column-button" type="button">Two Stick</button>
         </section>
         <section id="tools-panel" class="stick-panel tools-panel">
           <h2>Tools</h2>
@@ -2285,6 +2489,8 @@ class MissionFrontendRenderer:
 
   <script>
     const banner = document.getElementById('banner');
+    const teleopStartButton = document.getElementById('teleop-start-button');
+    const recordMapStartButton = document.getElementById('record-map-start-button');
     const teleopToggleButton = document.getElementById('teleop-toggle-button');
     const twoStickButton = document.getElementById('two-stick-button');
     const lightsButton = document.getElementById('lights-button');
@@ -2292,6 +2498,7 @@ class MissionFrontendRenderer:
     const cameraFeed = document.getElementById('camera-feed');
     const teleopStage = document.getElementById('teleop-stage');
     const teleopLayout = document.getElementById('teleop-layout');
+    const centerControls = document.querySelector('.center-controls');
     const driveToolScaleSlot = document.getElementById('drive-tool-scale-slot');
     const toolScaleSlot = document.getElementById('tool-scale-slot');
     const speedScales = {{
@@ -2300,6 +2507,7 @@ class MissionFrontendRenderer:
     }};
     let teleopReady = false;
     let transitionBusy = false;
+    let activeTeleopMode = '';
     let twoStickEnabled = false;
     let lightsEnabled = false;
     let cameraEnabled = false;
@@ -2500,14 +2708,24 @@ class MissionFrontendRenderer:
     }}
     function setBusyButton(label) {{
       transitionBusy = true;
+      centerControls.classList.add('active-mode');
       teleopToggleButton.disabled = true;
       teleopToggleButton.classList.remove('stop');
-      teleopToggleButton.innerHTML = `<span class="gear" aria-hidden="true">&#9881;</span><span style="position:absolute;left:-9999px;">${{label}}</span>`;
+      teleopToggleButton.textContent = '';
+      const labelSpan = document.createElement('span');
+      labelSpan.className = 'busy-label';
+      labelSpan.textContent = label;
+      const gearSpan = document.createElement('span');
+      gearSpan.className = 'gear';
+      gearSpan.setAttribute('aria-hidden', 'true');
+      gearSpan.innerHTML = '&#9881;';
+      teleopToggleButton.append(labelSpan, gearSpan);
     }}
     function renderButton() {{
       if (transitionBusy) {{
         return;
       }}
+      centerControls.classList.toggle('active-mode', teleopReady);
       teleopToggleButton.disabled = false;
       teleopToggleButton.classList.toggle('stop', teleopReady);
       teleopToggleButton.textContent = teleopReady ? 'Stop' : 'Start';
@@ -2520,18 +2738,19 @@ class MissionFrontendRenderer:
       const active = data.active_execution || {{}};
       const transitionActive = Boolean(display.transition_active) ||
         String(fsm.transition_status || '').toUpperCase() === 'TRANSITIONING';
+      activeTeleopMode = active?.mission_id === 'RecordMap' ? 'record_map' : (active?.mission_id === 'Teleop' ? 'teleop' : '');
       teleopReady = String(fsm.current_state || '').toUpperCase() === 'RUNNING' &&
-        Number(fsm.current_profile) === 220 &&
+        [220, 225].includes(Number(fsm.current_profile)) &&
         !transitionActive &&
         active &&
-        active.mission_id === 'Teleop' &&
+        ['Teleop', 'RecordMap'].includes(active.mission_id) &&
         active.active !== false;
       lightsEnabled = Boolean(data.teleop_lights_enabled);
       lightsButton.classList.toggle('enabled', lightsEnabled);
       transitionBusy = transitionActive && (
-        Number(fsm.transitioning_to_profile) === 220 ||
-        Number(fsm.current_profile) === 220 ||
-        active.mission_id === 'Teleop'
+        [220, 225].includes(Number(fsm.transitioning_to_profile)) ||
+        [220, 225].includes(Number(fsm.current_profile)) ||
+        ['Teleop', 'RecordMap'].includes(active.mission_id)
       );
       document.getElementById('fsm-state').textContent = display.current_state || fsm.current_state || 'Unknown';
       document.getElementById('fsm-profile').textContent = formatProfileValue(
@@ -2539,12 +2758,32 @@ class MissionFrontendRenderer:
       );
       document.getElementById('active-mission').textContent = active?.mission_id || '--';
       if (transitionBusy) {{
-        setBusyButton('Transitioning');
+        setBusyButton(display.transition_progress || 'Transitioning');
       }} else {{
         renderButton();
       }}
       updateCameraState();
     }}
+
+    async function startTeleopMode(mode) {{
+      try {{
+        setBusyButton(mode === 'record_map' ? 'Recording' : 'Starting');
+        const result = await postJson('/api/v1/teleop/start', {{ mode }});
+        setBanner(result.success ? 'ok' : 'error', result.message || 'Teleop start request completed');
+      }} catch (error) {{
+        setBanner('error', error.message || 'Teleop request failed');
+      }} finally {{
+        await loadStatus();
+      }}
+    }}
+
+    teleopStartButton.addEventListener('click', () => {{
+      startTeleopMode('teleop');
+    }});
+
+    recordMapStartButton.addEventListener('click', () => {{
+      startTeleopMode('record_map');
+    }});
 
     teleopToggleButton.addEventListener('click', async () => {{
       try {{
@@ -2554,9 +2793,8 @@ class MissionFrontendRenderer:
           const result = await postJson('/api/v1/teleop/stop', {{}});
           setBanner(result.success ? 'ok' : 'error', result.message || 'Teleop stop request completed');
         }} else {{
-          setBusyButton('Starting');
-          const result = await postJson('/api/v1/teleop/start', {{}});
-          setBanner(result.success ? 'ok' : 'error', result.message || 'Teleop start request completed');
+          await startTeleopMode(activeTeleopMode || 'teleop');
+          return;
         }}
       }} catch (error) {{
         setBanner('error', error.message || 'Teleop request failed');
@@ -2619,7 +2857,7 @@ class MissionFrontendRenderer:
 </html>
 """
 
-    def render_map_html(self) -> str:
+    def render_missions_html(self) -> str:
         title = escape(self._site_title)
         return f"""<!DOCTYPE html>
 <html lang="en">
@@ -2847,9 +3085,9 @@ class MissionFrontendRenderer:
       <div class="nav">
         <a class="nav-link" href="/">Dashboard</a>
         <a class="nav-link" href="/calendar">Calendar</a>
-        <a class="nav-link" href="/map">Missions</a>
+        <a class="nav-link" href="/missions">Missions</a>
         <a class="nav-link" href="/teleop">Teleop</a>
-        <a class="nav-link" href="/record-map">Record Map</a>
+        <a class="nav-link" href="/map">Map</a>
         <a class="nav-link" href="/developer">Developer</a>
       </div>
       <div class="hero-actions">
@@ -2934,6 +3172,7 @@ class MissionFrontendRenderer:
       ['use_amr_sweeper_localization', 'Localization'],
       ['use_amr_sweeper_mapping', 'Mapping'],
       ['use_amr_sweeper_navigation', 'Navigation'],
+      ['use_gaussian', 'Gaussian Capture'],
       ['auto_start_mission', 'Auto Start Mission'],
     ];
     const fallbackLayerOverrides = {{
@@ -2957,6 +3196,7 @@ class MissionFrontendRenderer:
       use_amr_sweeper_localization: true,
       use_amr_sweeper_mapping: false,
       use_amr_sweeper_navigation: true,
+      use_gaussian: false,
       auto_start_mission: true,
     }};
 
@@ -3631,9 +3871,9 @@ class MissionFrontendRenderer:
       <div class="nav">
         <a class="nav-link" href="/">Dashboard</a>
         <a class="nav-link" href="/calendar">Calendar</a>
-        <a class="nav-link" href="/map">Missions</a>
+        <a class="nav-link" href="/missions">Missions</a>
         <a class="nav-link" href="/teleop">Teleop</a>
-        <a class="nav-link" href="/record-map">Record Map</a>
+        <a class="nav-link" href="/map">Map</a>
         <a class="nav-link" href="/developer">Developer</a>
       </div>
     </section>
@@ -3682,6 +3922,7 @@ class MissionFrontendRenderer:
       ['use_amr_sweeper_localization', 'Localization'],
       ['use_amr_sweeper_mapping', 'Mapping'],
       ['use_amr_sweeper_navigation', 'Navigation'],
+      ['use_gaussian', 'Gaussian Capture'],
       ['auto_start_mission', 'Auto Start Mission'],
     ];
     const fallbackLayerOverrides = {{
@@ -3705,6 +3946,7 @@ class MissionFrontendRenderer:
       use_amr_sweeper_localization: true,
       use_amr_sweeper_mapping: false,
       use_amr_sweeper_navigation: true,
+      use_gaussian: false,
       auto_start_mission: true,
     }};
     let executableMissions = [];
@@ -3973,11 +4215,14 @@ class MissionFrontendHttpNode(Node, MissionFrontendRenderer):
                 if parsed.path == "/map":
                     self._send_html(node.render_map_html())
                     return
+                if parsed.path == "/missions":
+                    self._send_html(node.render_missions_html())
+                    return
                 if parsed.path == "/developer":
                     self._send_html(node.render_developer_html())
                     return
                 if parsed.path == "/record-map":
-                    self._send_html(node.render_record_map_html())
+                    self._send_redirect("/map")
                     return
                 if parsed.path == "/teleop":
                     self._send_html(node.render_teleop_html())
@@ -4057,6 +4302,8 @@ class MissionFrontendHttpNode(Node, MissionFrontendRenderer):
                     return {"action": "GET_SCHEDULE", "payload": {"week": query.get("week", [""])[0]}}
                 if self.command == "GET" and parsed.path == "/api/v1/map-data":
                     return {"action": "GET_MAP_DATA", "payload": {}}
+                if self.command == "GET" and parsed.path == "/api/v1/maps":
+                    return {"action": "LIST_MAPS", "payload": {}}
                 if self.command == "GET" and parsed.path == "/api/v1/record-map":
                     return {"action": "GET_RECORD_MAP", "payload": {}}
 
@@ -4083,6 +4330,8 @@ class MissionFrontendHttpNode(Node, MissionFrontendRenderer):
                     "/api/v1/teleop/stop": "STOP_TELEOP",
                     "/api/v1/teleop/command": "SEND_TELEOP_COMMAND",
                     "/api/v1/teleop/lights": "SET_TELEOP_LIGHTS",
+                    "/api/v1/maps/save": "SAVE_MAP",
+                    "/api/v1/maps/delete": "DELETE_MAP",
                     "/api/v1/record-map/start": "START_RECORD_MAP",
                     "/api/v1/record-map/stop": "STOP_RECORD_MAP",
                     "/api/v1/record-map/save-mission": "SAVE_RECORDED_MISSION",
@@ -4198,6 +4447,17 @@ class MissionFrontendHttpNode(Node, MissionFrontendRenderer):
                         "Content-Type": "application/json; charset=utf-8",
                         "Cache-Control": "no-store",
                         "Content-Length": str(len(encoded)),
+                    },
+                )
+
+            def _send_redirect(self, location: str) -> None:
+                self._send_bytes(
+                    HTTPStatus.FOUND,
+                    b"",
+                    {
+                        "Location": location,
+                        "Cache-Control": "no-store",
+                        "Content-Length": "0",
                     },
                 )
 

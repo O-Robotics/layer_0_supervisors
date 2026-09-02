@@ -530,6 +530,7 @@ TimeWindow build_window(
   window.type = event.type;
   window.mission_id = event.mission_id;
   window.record_rosbag = event.record_rosbag;
+  window.gaussian_capture = event.gaussian_capture;
   window.runtime_status = event.runtime_status;
   window.tzid = event.dtstart_tzid;
   window.start_local = format_local_timestamp(time_point_to_tm_in_timezone(start_time, event.dtstart_tzid));
@@ -795,6 +796,11 @@ ScheduleModel IcalParserMinimal::parse_file(const std::string & ics_path, const 
     if (starts_with(line, "X-RECORD-ROSBAG:")) {
       const auto value = line.substr(std::string("X-RECORD-ROSBAG:").size());
       current.record_rosbag = value == "TRUE" || value == "true" || value == "1";
+      continue;
+    }
+    if (starts_with(line, "X-GAUSSIAN-CAPTURE:")) {
+      const auto value = line.substr(std::string("X-GAUSSIAN-CAPTURE:").size());
+      current.gaussian_capture = value == "TRUE" || value == "true" || value == "1";
       continue;
     }
     if (starts_with(line, "X-RUNTIME-STATUS:")) {
@@ -1478,7 +1484,8 @@ void SchedulerNode::publish_windows(const std::vector<TimeWindow> & windows)
            << "\"type\":\"" << schedule_type_to_cstr(window.type) << "\","
            << "\"start\":\"" << window.start_local << "\","
            << "\"end\":\"" << window.end_local << "\","
-           << "\"record_rosbag\":" << (window.record_rosbag ? "true" : "false");
+           << "\"record_rosbag\":" << (window.record_rosbag ? "true" : "false") << ","
+           << "\"gaussian_capture\":" << (window.gaussian_capture ? "true" : "false");
     if (window.runtime_status) {
       stream << ",\"runtime_status\":\"" << *window.runtime_status << "\"";
     }
@@ -1690,12 +1697,19 @@ void SchedulerNode::request_mission_execution(const TimeWindow & window)
   request->priority = 210;
   request->force = false;
   request->record_rosbag = force_record_rosbag_ || window.record_rosbag;
+  if (window.gaussian_capture) {
+    request->layer_overrides_json =
+      "{\"use_gaussian\":true,\"use_amr_sweeper_usb_cameras\":true,"
+      "\"use_amr_sweeper_depth_camera\":true,\"use_amr_sweeper_localization\":true,"
+      "\"use_amr_sweeper_mapping\":true}";
+  }
   request->reason =
     "Scheduled mission window active; mission_id=" +
     window.mission_id.value_or(std::string("unknown")) +
     "; start=" + window.start_local +
     "; end=" + window.end_local +
-    "; record_rosbag=" + std::string(request->record_rosbag ? "true" : "false");
+    "; record_rosbag=" + std::string(request->record_rosbag ? "true" : "false") +
+    "; gaussian_capture=" + std::string(window.gaussian_capture ? "true" : "false");
   mission_executor_execute_client_->async_send_request(
     request,
     [this, window](

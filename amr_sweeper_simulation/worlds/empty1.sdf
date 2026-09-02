@@ -48,5 +48,61 @@
         </visual>
       </link>
     </model>
+
+    <model name="vo_feature_targets">
+      <static>true</static>
+      <link name="pattern_link">
+        <visual name="floor_dark_0">
+          <pose>-4.5 -5.75 0.004 0 0 0</pose>
+          <geometry><box><size>0.5 0.5 0.005</size></box></geometry>
+          <material><ambient>0.05 0.05 0.05 1</ambient><diffuse>0.05 0.05 0.05 1</diffuse></material>
+        </visual>
+        <visual name="floor_light_0">
+          <pose>-4.0 -5.25 0.004 0 0 0</pose>
+          <geometry><box><size>0.5 0.5 0.005</size></box></geometry>
+          <material><ambient>0.9 0.9 0.9 1</ambient><diffuse>0.9 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="floor_dark_1">
+          <pose>-3.5 -4.75 0.004 0 0 0</pose>
+          <geometry><box><size>0.5 0.5 0.005</size></box></geometry>
+          <material><ambient>0.05 0.05 0.05 1</ambient><diffuse>0.05 0.05 0.05 1</diffuse></material>
+        </visual>
+        <visual name="floor_light_1">
+          <pose>-3.0 -4.25 0.004 0 0 0</pose>
+          <geometry><box><size>0.5 0.5 0.005</size></box></geometry>
+          <material><ambient>0.9 0.9 0.9 1</ambient><diffuse>0.9 0.9 0.9 1</diffuse></material>
+        </visual>
+        <visual name="panel_00">
+          <pose>-1.0 -5.65 0.35 0 0 0</pose>
+          <geometry><box><size>0.02 0.28 0.28</size></box></geometry>
+          <material><ambient>0.02 0.02 0.02 1</ambient><diffuse>0.02 0.02 0.02 1</diffuse></material>
+        </visual>
+        <visual name="panel_01">
+          <pose>-1.0 -5.30 0.70 0 0 0</pose>
+          <geometry><box><size>0.02 0.28 0.28</size></box></geometry>
+          <material><ambient>0.95 0.95 0.95 1</ambient><diffuse>0.95 0.95 0.95 1</diffuse></material>
+        </visual>
+        <visual name="panel_02">
+          <pose>-1.0 -4.95 1.05 0 0 0</pose>
+          <geometry><box><size>0.02 0.28 0.28</size></box></geometry>
+          <material><ambient>0.02 0.02 0.02 1</ambient><diffuse>0.02 0.02 0.02 1</diffuse></material>
+        </visual>
+        <visual name="panel_03">
+          <pose>-1.0 -4.60 0.35 0 0 0</pose>
+          <geometry><box><size>0.02 0.28 0.28</size></box></geometry>
+          <material><ambient>0.95 0.95 0.95 1</ambient><diffuse>0.95 0.95 0.95 1</diffuse></material>
+        </visual>
+        <visual name="panel_04">
+          <pose>-1.0 -4.25 0.70 0 0 0</pose>
+          <geometry><box><size>0.02 0.28 0.28</size></box></geometry>
+          <material><ambient>0.02 0.02 0.02 1</ambient><diffuse>0.02 0.02 0.02 1</diffuse></material>
+        </visual>
+        <visual name="panel_05">
+          <pose>-1.0 -3.90 1.05 0 0 0</pose>
+          <geometry><box><size>0.02 0.28 0.28</size></box></geometry>
+          <material><ambient>0.95 0.95 0.95 1</ambient><diffuse>0.95 0.95 0.95 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
   </world>
 </sdf>

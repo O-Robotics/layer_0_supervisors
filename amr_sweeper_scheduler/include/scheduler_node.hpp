@@ -39,6 +39,7 @@ struct ScheduleEvent
   ScheduleType type{ScheduleType::WORK};
   std::optional<std::string> mission_id;
   bool record_rosbag{false};
+  bool gaussian_capture{false};
   std::optional<std::string> runtime_status;
   std::string dtstart_tzid;
   std::string dtstart_local;
@@ -60,6 +61,7 @@ struct TimeWindow
   ScheduleType type{ScheduleType::WORK};
   std::optional<std::string> mission_id;
   bool record_rosbag{false};
+  bool gaussian_capture{false};
   std::optional<std::string> runtime_status;
   std::optional<std::string> mission_path;
   std::string tzid;

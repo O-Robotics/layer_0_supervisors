@@ -155,7 +155,8 @@ private:
     std::string & message) const;
   void writeMissionExecutionPreferences(
     const std::filesystem::path & context_path,
-    bool record_rosbag) const;
+    bool record_rosbag,
+    const std::string & layer_overrides_json = "") const;
   [[nodiscard]] std::vector<std::string> loadRosbagTopics() const;
   [[nodiscard]] bool startMissionRosbagRecording(
     const PreparedMissionContext & context,

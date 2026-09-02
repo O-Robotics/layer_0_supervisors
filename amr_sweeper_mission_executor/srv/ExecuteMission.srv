@@ -6,6 +6,7 @@ string requester
 uint8 priority
 bool force
 bool record_rosbag
+string layer_overrides_json
 string reason
 ---
 bool success

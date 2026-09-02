@@ -54,3 +54,18 @@ topics:
   - /amr_sweeper/gnss/navsat
   - /amr_sweeper/gnss/fix
   - /amr_sweeper/depth_camera/scan
+  - /amr_sweeper/depth_camera/color/image_raw
+  - /amr_sweeper/depth_camera/color/camera_info
+  - /amr_sweeper/depth_camera/depth/color/points
+  - /amr_sweeper/usb_cameras/front_left_camera/image_raw
+  - /amr_sweeper/usb_cameras/front_left_camera/front_left_camera_info
+  - /amr_sweeper/usb_cameras/front_right_camera/image_raw
+  - /amr_sweeper/usb_cameras/front_right_camera/front_right_camera_info
+  - /amr_sweeper/usb_cameras/rear_left_camera/image_raw
+  - /amr_sweeper/usb_cameras/rear_left_camera/rear_left_camera_info
+  - /amr_sweeper/usb_cameras/rear_right_camera/image_raw
+  - /amr_sweeper/usb_cameras/rear_right_camera/rear_right_camera_info
+  - /amr_sweeper/usb_cameras/tools_camera/image_raw
+  - /amr_sweeper/usb_cameras/tools_camera/tools_camera_info
+  - /amr_sweeper/mapping/gaussian/status
+  - /amr_sweeper/mapping/gaussian/world_points

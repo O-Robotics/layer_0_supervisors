@@ -179,6 +179,7 @@ static const std::vector<std::string> kMissionLayerOverrideKeys{
   "use_amr_sweeper_localization",
   "use_amr_sweeper_mapping",
   "use_amr_sweeper_navigation",
+  "use_gaussian",
   "auto_start_mission",
 };
 

@@ -68,6 +68,9 @@ constexpr char kSimulationActualScheduleLogFilename[] = "simulation_schedule.ics
 constexpr char kDepthCameraScanTopic[] = "/amr_sweeper/depth_camera/scan";
 constexpr char kDepthCameraInfoTopic[] = "/amr_sweeper/depth_camera/depth/camera_info";
 constexpr char kDepthCameraMotionSampleTopic[] = "/amr_sweeper/depth_camera/motion/sample";
+constexpr char kDepthCameraColorImageTopic[] = "/amr_sweeper/depth_camera/color/image_raw";
+constexpr char kDepthCameraColorInfoTopic[] = "/amr_sweeper/depth_camera/color/camera_info";
+constexpr char kDepthCameraPointcloudTopic[] = "/amr_sweeper/depth_camera/depth/color/points";
 constexpr char kSimulationPoseInfoTopic[] = "/amr_sweeper/simulation/pose/info";
 constexpr char kImuDataRawTopic[] = "/amr_sweeper/imu/data_raw";
 constexpr char kImuDataAccGyroTopic[] = "/amr_sweeper/imu/data_acc_gyro";
@@ -85,6 +88,30 @@ constexpr unsigned char kRecordMapInsideCost = 0U;
 constexpr unsigned char kRecordMapEdgeBandCost = 180U;
 constexpr unsigned char kRecordMapOutsideCost = 254U;
 constexpr unsigned char kRecordMapObstacleCost = 254U;
+
+const std::set<std::string> kMissionLayerOverrideKeys{
+  "use_amr_sweeper_ros2_control",
+  "use_amr_sweeper_battery",
+  "use_amr_sweeper_system_info",
+  "use_amr_sweeper_usb_cameras",
+  "use_amr_sweeper_depth_camera",
+  "use_amr_sweeper_imu",
+  "use_amr_sweeper_gnss",
+  "use_ntrip_client",
+  "use_amr_sweeper_drive_controller",
+  "use_amr_sweeper_tool_controller",
+  "use_amr_sweeper_teleop",
+  "use_amr_sweeper_sweeping_controller",
+  "use_amr_sweeper_attitude_controller",
+  "use_amr_sweeper_collision_detector",
+  "use_amr_sweeper_safety_controller",
+  "use_joy_node",
+  "use_amr_sweeper_visual_odometry",
+  "use_amr_sweeper_localization",
+  "use_amr_sweeper_mapping",
+  "use_amr_sweeper_navigation",
+  "use_gaussian",
+  "auto_start_mission"};
 
 struct MapPoint
 {
@@ -496,6 +523,19 @@ std::filesystem::path writeRosbagRuntimeQosOverridesFile(
       kImuAzimuthTopic,
       kDepthCameraInfoTopic,
       kDepthCameraMotionSampleTopic,
+      kDepthCameraColorImageTopic,
+      kDepthCameraColorInfoTopic,
+      kDepthCameraPointcloudTopic,
+      "/amr_sweeper/usb_cameras/front_left_camera/image_raw",
+      "/amr_sweeper/usb_cameras/front_left_camera/front_left_camera_info",
+      "/amr_sweeper/usb_cameras/front_right_camera/image_raw",
+      "/amr_sweeper/usb_cameras/front_right_camera/front_right_camera_info",
+      "/amr_sweeper/usb_cameras/rear_left_camera/image_raw",
+      "/amr_sweeper/usb_cameras/rear_left_camera/rear_left_camera_info",
+      "/amr_sweeper/usb_cameras/rear_right_camera/image_raw",
+      "/amr_sweeper/usb_cameras/rear_right_camera/rear_right_camera_info",
+      "/amr_sweeper/usb_cameras/tools_camera/image_raw",
+      "/amr_sweeper/usb_cameras/tools_camera/tools_camera_info",
     })
   {
     output_stream
@@ -2457,7 +2497,10 @@ void MissionExecutorNode::handleExecuteMission(
         request->mission_window_end);
     }
     const bool effective_record_rosbag = request->record_rosbag || record_mission_rosbag_;
-    writeMissionExecutionPreferences(context.execution_context_file, effective_record_rosbag);
+    writeMissionExecutionPreferences(
+      context.execution_context_file,
+      effective_record_rosbag,
+      request->layer_overrides_json);
     rewriteBuiltinLocalPatternArtifacts(resolved_mission, context);
     std::string message;
     if (!requestRunningState(context, *request, message)) {
@@ -3371,6 +3414,7 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
   const fs::path actual_path_navsat_file =
     mission_run_directory / (run_artifact_stem + "_path_navsat.geojson");
   const fs::path gaussian_output_directory = mission_run_directory / "gaussian";
+  const fs::path gaussian_manifest_file = gaussian_output_directory / "manifest.json";
   const fs::path captured_images_directory = mission_run_directory / "captured_images";
   const fs::path collected_artifacts_directory = mission_run_directory / "artifacts";
 
@@ -3423,6 +3467,7 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
     {"actual_path_file", actual_path_file.string()},
     {"actual_path_navsat_file", actual_path_navsat_file.string()},
     {"gaussian_output_directory", gaussian_output_directory.string()},
+    {"gaussian_manifest_file", gaussian_manifest_file.string()},
     {"captured_images_directory", captured_images_directory.string()},
     {"collected_artifacts_directory", collected_artifacts_directory.string()},
     {"schedule_log_path", ensureScheduleLogPath(resolveScheduleSourcePath()).string()},
@@ -4592,7 +4637,8 @@ bool MissionExecutorNode::requestRunningState(
 
 void MissionExecutorNode::writeMissionExecutionPreferences(
   const std::filesystem::path & context_path,
-  const bool record_rosbag) const
+  const bool record_rosbag,
+  const std::string & layer_overrides_json) const
 {
   if (context_path.empty()) {
     return;
@@ -4600,6 +4646,34 @@ void MissionExecutorNode::writeMissionExecutionPreferences(
 
   auto context_document = loadJsonDocument(context_path);
   context_document["record_rosbag"] = record_rosbag;
+  if (!layer_overrides_json.empty()) {
+    try {
+      const auto requested_overrides = nlohmann::json::parse(layer_overrides_json);
+      if (requested_overrides.is_object()) {
+        nlohmann::json normalized_overrides = nlohmann::json::object();
+        if (context_document.contains("layer_overrides") &&
+          context_document["layer_overrides"].is_object())
+        {
+          normalized_overrides = context_document["layer_overrides"];
+        }
+        for (const auto & [key, value] : requested_overrides.items()) {
+          if (kMissionLayerOverrideKeys.count(key) == 0U || !value.is_boolean()) {
+            continue;
+          }
+          normalized_overrides[key] = value.get<bool>();
+        }
+        if (!normalized_overrides.empty()) {
+          context_document["layer_overrides"] = normalized_overrides;
+        }
+      }
+    } catch (const std::exception & exception) {
+      RCLCPP_WARN(
+        get_logger(),
+        "Ignoring malformed layer_overrides_json on mission context %s: %s",
+        context_path.string().c_str(),
+        exception.what());
+    }
+  }
   if (!context_document.contains("rosbag_output_directory")) {
     context_document["rosbag_output_directory"] = "";
   }
