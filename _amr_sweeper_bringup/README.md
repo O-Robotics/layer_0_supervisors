@@ -25,5 +25,5 @@ Simulation ownership:
 
 Test schedule mode:
 - `use_test:=false` by default keeps `missions/database` free of checked-in test fixtures.
-- `use_test:=true` makes bringup pass `src/layer_0_supervisors/tests/schedule_20260000T000000Z.ics` to the mission executor and scheduler when `schedule_ics_path` is otherwise empty.
-- The same `use_test:=true` path also makes FSM-managed layer 3 mapping fall back to generic test artifacts under `src/layer_3_navigation/tests` when no mission execution folder is active.
+- `use_test:=true` makes bringup pass `test_schedule_ics_path` to the mission executor and scheduler when `schedule_ics_path` is otherwise empty.
+- The same `use_test:=true` path also makes FSM-managed layer 3 mapping fall back to generic test artifacts under `/tmp/amr_sweeper_test_artifacts` when no mission execution folder is active.

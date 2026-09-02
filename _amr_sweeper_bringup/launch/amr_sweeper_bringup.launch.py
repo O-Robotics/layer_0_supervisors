@@ -738,7 +738,7 @@ def generate_launch_description():
             ),
         ),
         DeclareLaunchArgument("state_params_file", default_value=default_state_params_file),
-        DeclareLaunchArgument("test_output_directory", default_value="src/layer_3_navigation/tests"),
+        DeclareLaunchArgument("test_output_directory", default_value="/tmp/amr_sweeper_test_artifacts"),
         DeclareLaunchArgument("use_profile", default_value="001"),
         DeclareLaunchArgument("tick_period_ms", default_value="100"),
         DeclareLaunchArgument("missions_from_db_directory", default_value="missions/database"),
@@ -759,7 +759,7 @@ def generate_launch_description():
         DeclareLaunchArgument("use_test", default_value="false"),
         DeclareLaunchArgument(
             "test_schedule_ics_path",
-            default_value="src/layer_0_supervisors/tests/schedule_20260000T000000Z.ics",
+            default_value="",
         ),
         DeclareLaunchArgument("record_rosbag", default_value="false"),
         DeclareLaunchArgument("record_system_rosbag", default_value="false"),

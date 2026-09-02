@@ -130,7 +130,7 @@ def generate_launch_description():
 
     declare_test_output_directory = DeclareLaunchArgument(
         "test_output_directory",
-        default_value="src/layer_3_navigation/tests",
+        default_value="/tmp/amr_sweeper_test_artifacts",
         description="Shared generic artifact directory used by test-mode FSM-managed processes.",
     )
 
