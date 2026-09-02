@@ -100,6 +100,7 @@ profiles:
               - "use_amr_sweeper_system_info:=true"
               - "use_amr_sweeper_usb_cameras:=false"
               - "use_amr_sweeper_depth_camera:=false"
+              - "enable_description_seed_publishers:=false"
               - "use_amr_sweeper_imu:=false"
               - "use_amr_sweeper_gnss:=true"
               - "use_ntrip_client:=false"

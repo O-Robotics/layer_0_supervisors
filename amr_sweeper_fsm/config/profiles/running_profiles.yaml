@@ -1181,6 +1181,7 @@ profiles:
               - "use_amr_sweeper_system_info:=true"
               - "use_amr_sweeper_usb_cameras:=false"
               - "use_amr_sweeper_depth_camera:=true"
+              - "use_gaussian:=false"
               - "use_amr_sweeper_imu:=true"
               - "use_amr_sweeper_gnss:=true"
               - "use_ntrip_client:=true"
@@ -1364,6 +1365,7 @@ profiles:
               - "use_amr_sweeper_system_info:=true"
               - "use_amr_sweeper_usb_cameras:=true"
               - "use_amr_sweeper_depth_camera:=true"
+              - "use_gaussian:=true"
               - "use_amr_sweeper_imu:=true"
               - "use_amr_sweeper_gnss:=true"
               - "use_ntrip_client:=true"
@@ -1443,10 +1445,82 @@ profiles:
           restart:
             max_restarts: 5
             restart_delay_ms: 1000
-            shutdown:
-              sigint_timeout_ms: 1000
-              sigterm_timeout_ms: 1000
-              sigkill_timeout_ms: 1000
+          shutdown:
+            sigint_timeout_ms: 1000
+            sigterm_timeout_ms: 1000
+            sigkill_timeout_ms: 1000
+
+        - name: "amr_sweeper_layer_2_controllers_bringup"
+          importance: "critical"
+          startup:
+            exec: "ros2 launch amr_sweeper_layer_2_controllers_bringup amr_sweeper_layer_2_controllers_bringup.launch.py"
+            args:
+              - "namespace:={ns}"
+              - "use_amr_sweeper_drive_controller:=true"
+              - "use_amr_sweeper_tool_controller:=true"
+              - "use_amr_sweeper_teleop:=true"
+              - "use_joy_node:=false"
+              - "use_amr_sweeper_sweeping_controller:=true"
+              - "use_amr_sweeper_attitude_controller:=true"
+              - "use_amr_sweeper_collision_detector:=true"
+              - "use_amr_sweeper_safety_controller:=true"
+              - "use_sweeping_mode:=cmd_vel_sweeping"
+            ready:
+              - type: "topic"
+                target: "sweeping_controller/cmd_vel_drive"
+                required: true
+              - type: "topic"
+                target: "sweeping_controller/cmd_vel_tools"
+                required: true
+              - type: "topic_message"
+                target: "attitude_controller/roll_pitch"
+                required: true
+              - type: "topic_message"
+                target: "drive_controller/odom"
+                required: true
+              - type: "topic_message"
+                target: "safety_controller/status"
+                required: true
+              - type: "topic_message"
+                target: "collision_detector/impact_detected"
+                required: true
+              - type: "service"
+                target: "amr_sweeper_attitude_controller/enable_attitude_estimation"
+                required: true
+              - type: "service"
+                target: "amr_sweeper_safety_controller/enable_controller"
+                required: true
+              - type: "service"
+                target: "amr_sweeper_collision_detector/enable_detector"
+                required: true
+              - type: "controller"
+                target: "drive_controller"
+                required: true
+              - type: "controller"
+                target: "tool_controller"
+                required: true
+            window_ms: 30000
+          rosout_triggers:
+            - "level>=FATAL;action=FAULT"
+            - "node=bt_navigator;level>=ERROR;match=Goal failed;action=WARN_ONLY"
+            - "node=bt_navigator;level>=ERROR;match=Robot pose is not available;action=WARN_ONLY"
+            - "node=bt_navigator_navigate_through_poses_rclcpp_node;level>=ERROR;match=Failed to get result for follow_path in node halt!;action=WARN_ONLY"
+            - "node=bt_navigator_navigate_through_poses_rclcpp_node;level>=ERROR;match=Failed to get result for compute_path_through_poses in node halt!;action=WARN_ONLY"
+            - "node=planner_server;level>=ERROR;match=Failed to create a plan from potential;action=WARN_ONLY"
+            - "node=controller_server;level>=ERROR;match=Resulting plan has 0 poses in it.;action=WARN_ONLY"
+            - "level>=ERROR;action=FAULT"
+          errors:
+            on_readiness_fail: "FAULT"
+            on_unexpected_exit: "FAULT"
+            priority: 250
+            force: true
+          restart:
+            max_restarts: 5
+            restart_delay_ms: 1000
+          shutdown:
+            sigint_timeout_ms: 1500
+            sigterm_timeout_ms: 1500
+            sigkill_timeout_ms: 1500
 
 
     # ---------------------------------------------------------------------------

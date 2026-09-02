@@ -1081,6 +1081,7 @@ class MissionBackendNode(Node):
         layer_overrides = dict(request_payload.get("layer_overrides", {}))
         layer_overrides["use_joy_node"] = False
         layer_overrides["use_amr_sweeper_usb_cameras"] = False
+        layer_overrides["use_gaussian"] = False
         if mode == "record_map":
             request_payload["record_rosbag"] = True
             layer_overrides.update(
