@@ -449,6 +449,10 @@ class MissionBackendNode(Node):
             "teleop_tool_scale_topic",
             "teleop/tool_scale",
         ).value
+        self._teleop_wheel_scale_topic = self.declare_parameter(
+            "teleop_wheel_scale_topic",
+            "teleop/wheel_scale",
+        ).value
         self._led_can_interface = str(self.declare_parameter("led_can_interface", "can0").value)
         self._list_missions_client = self.create_client(
             ListExecutableMissions,
@@ -504,6 +508,11 @@ class MissionBackendNode(Node):
         self._teleop_tool_scale_publisher = self.create_publisher(
             Float32,
             self._teleop_tool_scale_topic,
+            10,
+        )
+        self._teleop_wheel_scale_publisher = self.create_publisher(
+            Float32,
+            self._teleop_wheel_scale_topic,
             10,
         )
 
@@ -1086,13 +1095,14 @@ class MissionBackendNode(Node):
             }
 
         drive_command = Twist()
-        drive_command.linear.x = left_y * TELEOP_DRIVE_LINEAR_SCALE * wheel_scale
-        drive_command.angular.z = -left_x * TELEOP_DRIVE_ANGULAR_SCALE * wheel_scale
+        drive_scale = wheel_scale if control_mode == "two_stick" else 1.0
+        drive_command.linear.x = left_y * TELEOP_DRIVE_LINEAR_SCALE * drive_scale
+        drive_command.angular.z = -left_x * TELEOP_DRIVE_ANGULAR_SCALE * drive_scale
         tool_command = Twist()
         if control_mode == "two_stick":
             tool_command.linear.x = right_y * TELEOP_TOOL_LINEAR_SCALE * tool_scale
             tool_command.angular.z = right_x * TELEOP_TOOL_ANGULAR_SCALE * tool_scale
-        self._publish_teleop_mode(control_mode, tool_scale)
+        self._publish_teleop_mode(control_mode, wheel_scale, tool_scale)
         self._teleop_drive_publisher.publish(drive_command)
         self._teleop_tool_publisher.publish(tool_command)
         return {
@@ -1428,12 +1438,15 @@ class MissionBackendNode(Node):
         self._teleop_drive_publisher.publish(Twist())
         self._teleop_tool_publisher.publish(Twist())
 
-    def _publish_teleop_mode(self, control_mode: str, tool_scale: float) -> None:
+    def _publish_teleop_mode(self, control_mode: str, wheel_scale: float, tool_scale: float) -> None:
         mode_message = String()
         mode_message.data = control_mode
+        wheel_scale_message = Float32()
+        wheel_scale_message.data = float(wheel_scale)
         scale_message = Float32()
         scale_message.data = float(tool_scale)
         self._teleop_control_mode_publisher.publish(mode_message)
+        self._teleop_wheel_scale_publisher.publish(wheel_scale_message)
         self._teleop_tool_scale_publisher.publish(scale_message)
 
     def _teleop_command_ready(self) -> tuple[bool, str]:
