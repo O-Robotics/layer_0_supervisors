@@ -889,6 +889,25 @@ StateNodeBase::RosoutTrigger StateNodeBase::parse_trigger_line(const std::string
   return t;
 }
 
+bool StateNodeBase::rosout_trigger_matches_(
+  const RosoutTrigger & trigger,
+  const rcl_interfaces::msg::Log & msg)
+{
+  if (static_cast<int>(msg.level) < trigger.min_level) {
+    return false;
+  }
+
+  if (trigger.has_node && !(msg.name == trigger.node || ends_with(msg.name, trigger.node))) {
+    return false;
+  }
+
+  if (trigger.has_match && msg.msg.find(trigger.match) == std::string::npos) {
+    return false;
+  }
+
+  return true;
+}
+
 // ---------- Construction ----------
 
 StateNodeBase::StateNodeBase(const std::string & node_name, const rclcpp::NodeOptions & options)
@@ -2317,41 +2336,29 @@ void StateNodeBase::on_rosout(const rcl_interfaces::msg::Log::SharedPtr msg)
     return;
   }
 
-  // Evaluate rules in order; first match wins.
+  // Explicit WARN_ONLY rules are exceptions to broad catch-all fault rules.
   for (auto & t : rosout_triggers_) {
-    // 1) Level gate.
-    if (static_cast<int>(msg->level) < t.min_level) {
+    if (t.action != RosoutAction::WARN_ONLY || !rosout_trigger_matches_(t, *msg)) {
       continue;
     }
 
-    // 2) Node name gate (optional).
-    //
-    // We allow suffix-match because logger names often include namespaces, e.g.:
-    //   /amr_sweeper/battery_monitor
-    // while the YAML may just use:
-    //   battery_monitor
-    if (t.has_node) {
-      if (!(msg->name == t.node || ends_with(msg->name, t.node))) {
-        continue;
-      }
+    RCLCPP_WARN(
+      get_logger(),
+      "rosout WARN trigger matched: rule='%s' src='%s' msg='%s'",
+      t.raw.c_str(),
+      msg->name.c_str(),
+      msg->msg.c_str());
+
+    return;
+  }
+
+  // Evaluate fault/degraded rules in order; first match wins.
+  for (auto & t : rosout_triggers_) {
+    if (!rosout_trigger_matches_(t, *msg)) {
+      continue;
     }
 
-    // 3) String match gate (optional).
-    if (t.has_match) {
-      if (msg->msg.find(t.match) == std::string::npos) {
-        continue;
-      }
-    }
-
-    // --- Rule matched ---
     if (t.action == RosoutAction::WARN_ONLY) {
-      RCLCPP_WARN(
-        get_logger(),
-        "rosout WARN trigger matched: rule='%s' src='%s' msg='%s'",
-        t.raw.c_str(),
-        msg->name.c_str(),
-        msg->msg.c_str());
-
       return;
     }
 

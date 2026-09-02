@@ -314,6 +314,9 @@ private:
 
   /// Parse a single trigger line: "node=x;match=y;level>=ERROR;action=FAULT"
   static RosoutTrigger parse_trigger_line(const std::string & line);
+  static bool rosout_trigger_matches_(
+    const RosoutTrigger & trigger,
+    const rcl_interfaces::msg::Log & msg);
 
   // ----- Per-process monitoring / restart -----
   void start_process_monitoring_();
