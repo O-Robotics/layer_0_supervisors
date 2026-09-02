@@ -41,7 +41,7 @@ from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from rcl_interfaces.msg import Log
 from sensor_msgs.msg import BatteryState, NavSatFix
-from std_msgs.msg import String
+from std_msgs.msg import Float32, String
 from std_srvs.srv import Trigger
 
 MISSION_LAYER_OVERRIDE_KEYS = (
@@ -103,6 +103,7 @@ TELEOP_DRIVE_ANGULAR_SCALE = 0.785
 TELEOP_TOOL_LINEAR_SCALE = 0.10
 TELEOP_TOOL_ANGULAR_SCALE = 0.10
 TELEOP_INPUT_DEADZONE = 0.05
+TELEOP_DEFAULT_SPEED_SCALE = 0.5
 
 LED_MODULE_COMMAND_IDS = {
     "front_left": 0x400,
@@ -440,6 +441,14 @@ class MissionBackendNode(Node):
             "teleop_tool_command_topic",
             "teleop/cmd_vel_tools",
         ).value
+        self._teleop_control_mode_topic = self.declare_parameter(
+            "teleop_control_mode_topic",
+            "teleop/control_mode",
+        ).value
+        self._teleop_tool_scale_topic = self.declare_parameter(
+            "teleop_tool_scale_topic",
+            "teleop/tool_scale",
+        ).value
         self._led_can_interface = str(self.declare_parameter("led_can_interface", "can0").value)
         self._list_missions_client = self.create_client(
             ListExecutableMissions,
@@ -485,6 +494,16 @@ class MissionBackendNode(Node):
         self._teleop_tool_publisher = self.create_publisher(
             Twist,
             self._teleop_tool_command_topic,
+            10,
+        )
+        self._teleop_control_mode_publisher = self.create_publisher(
+            String,
+            self._teleop_control_mode_topic,
+            10,
+        )
+        self._teleop_tool_scale_publisher = self.create_publisher(
+            Float32,
+            self._teleop_tool_scale_topic,
             10,
         )
 
@@ -1052,6 +1071,9 @@ class MissionBackendNode(Node):
         left_y = self._normalized_axis(payload.get("left_y", 0.0))
         right_x = self._normalized_axis(payload.get("right_x", 0.0))
         right_y = self._normalized_axis(payload.get("right_y", 0.0))
+        control_mode = self._teleop_control_mode(payload.get("control_mode", "one_stick"))
+        wheel_scale = self._normalized_speed_scale(payload.get("wheel_scale", TELEOP_DEFAULT_SPEED_SCALE))
+        tool_scale = self._normalized_speed_scale(payload.get("tool_scale", TELEOP_DEFAULT_SPEED_SCALE))
         non_zero = any(abs(value) > 0.0 for value in (left_x, left_y, right_x, right_y))
 
         ready, reason = self._teleop_command_ready()
@@ -1064,11 +1086,13 @@ class MissionBackendNode(Node):
             }
 
         drive_command = Twist()
-        drive_command.linear.x = left_y * TELEOP_DRIVE_LINEAR_SCALE
-        drive_command.angular.z = -left_x * TELEOP_DRIVE_ANGULAR_SCALE
+        drive_command.linear.x = left_y * TELEOP_DRIVE_LINEAR_SCALE * wheel_scale
+        drive_command.angular.z = -left_x * TELEOP_DRIVE_ANGULAR_SCALE * wheel_scale
         tool_command = Twist()
-        tool_command.linear.x = right_y * TELEOP_TOOL_LINEAR_SCALE
-        tool_command.angular.z = right_x * TELEOP_TOOL_ANGULAR_SCALE
+        if control_mode == "two_stick":
+            tool_command.linear.x = right_y * TELEOP_TOOL_LINEAR_SCALE * tool_scale
+            tool_command.angular.z = right_x * TELEOP_TOOL_ANGULAR_SCALE * tool_scale
+        self._publish_teleop_mode(control_mode, tool_scale)
         self._teleop_drive_publisher.publish(drive_command)
         self._teleop_tool_publisher.publish(tool_command)
         return {
@@ -1379,6 +1403,18 @@ class MissionBackendNode(Node):
         return 0.0 if abs(number) < TELEOP_INPUT_DEADZONE else number
 
     @staticmethod
+    def _normalized_speed_scale(value: Any) -> float:
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            number = TELEOP_DEFAULT_SPEED_SCALE
+        return max(0.0, min(1.0, number))
+
+    @staticmethod
+    def _teleop_control_mode(value: Any) -> str:
+        return "two_stick" if str(value).strip() == "two_stick" else "one_stick"
+
+    @staticmethod
     def _byte_value(value: Any, name: str) -> int:
         try:
             number = int(value)
@@ -1391,6 +1427,14 @@ class MissionBackendNode(Node):
     def _publish_zero_teleop_command(self) -> None:
         self._teleop_drive_publisher.publish(Twist())
         self._teleop_tool_publisher.publish(Twist())
+
+    def _publish_teleop_mode(self, control_mode: str, tool_scale: float) -> None:
+        mode_message = String()
+        mode_message.data = control_mode
+        scale_message = Float32()
+        scale_message.data = float(tool_scale)
+        self._teleop_control_mode_publisher.publish(mode_message)
+        self._teleop_tool_scale_publisher.publish(scale_message)
 
     def _teleop_command_ready(self) -> tuple[bool, str]:
         with self._state_lock:

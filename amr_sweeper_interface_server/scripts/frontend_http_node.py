@@ -2002,6 +2002,9 @@ class MissionFrontendRenderer:
       gap: 22px;
       align-items: center;
     }}
+    .teleop-layout.one-stick {{
+      grid-template-columns: minmax(320px, 1fr) 180px;
+    }}
     .teleop-stage {{
       position: relative;
       overflow: hidden;
@@ -2064,9 +2067,23 @@ class MissionFrontendRenderer:
       justify-items: center;
       gap: 12px;
     }}
+    .teleop-layout.one-stick .tools-panel {{
+      display: none;
+    }}
+    .stick-cluster {{
+      --stick-size: min(32vw, 310px);
+      --bar-width: clamp(42px, 6vw, 58px);
+      --cluster-gap: clamp(8px, 1.6vw, 12px);
+      display: grid;
+      grid-template-columns: var(--bar-width) var(--stick-size) var(--bar-width);
+      gap: var(--cluster-gap);
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+    }}
     .stick-shell {{
-      width: min(32vw, 310px);
-      min-width: 220px;
+      width: var(--stick-size);
+      min-width: 0;
       aspect-ratio: 1;
       border-radius: 50%;
       border: 3px solid rgba(253, 202, 15, 0.55);
@@ -2086,6 +2103,40 @@ class MissionFrontendRenderer:
       top: 50%;
       transform: translate(-50%, -50%);
       pointer-events: none;
+    }}
+    .scale-slot {{
+      width: var(--bar-width);
+      min-height: calc(var(--stick-size) * 0.72);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }}
+    .speed-scale {{
+      width: var(--bar-width);
+      height: calc(var(--stick-size) * 0.86);
+      min-height: 0;
+      max-height: 270px;
+      display: flex;
+      flex-direction: column-reverse;
+      align-items: center;
+      justify-content: space-between;
+      padding: 7px 0;
+      touch-action: none;
+      user-select: none;
+      cursor: pointer;
+    }}
+    .scale-segment {{
+      height: 8px;
+      border-radius: 2px;
+      background: rgba(8, 9, 10, 0.88);
+      border: 1px solid rgba(245, 241, 223, 0.08);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      transition: background 90ms ease, border-color 90ms ease;
+    }}
+    .scale-segment.active {{
+      background: linear-gradient(90deg, #f59e0b 0%, var(--accent) 100%);
+      border-color: rgba(253, 202, 15, 0.68);
+      box-shadow: 0 0 10px rgba(253, 202, 15, 0.2);
     }}
     .center-controls {{
       display: grid;
@@ -2123,6 +2174,11 @@ class MissionFrontendRenderer:
       color: #111827;
       box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.32);
     }}
+    .mode-button.enabled {{
+      background: #fff4bd;
+      color: #111827;
+      box-shadow: 0 0 0 3px rgba(253, 202, 15, 0.24);
+    }}
     .camera-button.enabled {{
       background: #d7f3ff;
       color: #062233;
@@ -2159,8 +2215,16 @@ class MissionFrontendRenderer:
     }}
     @media (max-width: 820px) {{
       .teleop-layout {{ grid-template-columns: 1fr; }}
+      .teleop-layout.one-stick {{ grid-template-columns: 1fr; }}
       .center-controls {{ grid-row: 1; }}
-      .stick-shell {{ width: min(78vw, 310px); }}
+      .stick-cluster {{
+        --cluster-gap: clamp(6px, 2vw, 10px);
+        --bar-width: clamp(34px, 10vw, 48px);
+        --stick-size: min(
+          310px,
+          calc((100vw - 48px - (2 * var(--bar-width)) - (2 * var(--cluster-gap))) * 0.98)
+        );
+      }}
     }}
   </style>
 </head>
@@ -2187,37 +2251,58 @@ class MissionFrontendRenderer:
     <section id="teleop-stage" class="card teleop-stage">
       <img id="camera-feed" class="camera-feed" alt="">
       <div id="camera-message" class="camera-message">Waiting for Teleop to start</div>
-      <div class="teleop-layout">
-        <section class="stick-panel">
+      <div id="teleop-layout" class="teleop-layout one-stick">
+        <section class="stick-panel drive-panel">
           <h2>Drive</h2>
-          <div id="left-stick" class="stick-shell" aria-label="Drive joystick">
-            <div id="left-knob" class="stick-knob"></div>
+          <div class="stick-cluster">
+            <div class="scale-slot">
+              <div id="wheel-scale" class="speed-scale" role="slider" aria-label="Wheel speed" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"></div>
+            </div>
+            <div id="left-stick" class="stick-shell" aria-label="Drive joystick">
+              <div id="left-knob" class="stick-knob"></div>
+            </div>
+            <div id="drive-tool-scale-slot" class="scale-slot"></div>
           </div>
         </section>
         <section class="center-controls">
           <button id="teleop-toggle-button" type="button">Start</button>
+          <button id="two-stick-button" class="mode-button" type="button">Two Stick</button>
           <button id="lights-button" class="toggle-button" type="button">Lights</button>
           <button id="camera-button" class="camera-button" type="button">Camera</button>
         </section>
-        <section class="stick-panel">
+        <section id="tools-panel" class="stick-panel tools-panel">
           <h2>Tools</h2>
-          <div id="right-stick" class="stick-shell" aria-label="Tool joystick">
-            <div id="right-knob" class="stick-knob"></div>
+          <div class="stick-cluster">
+            <div class="scale-slot"></div>
+            <div id="right-stick" class="stick-shell" aria-label="Tool joystick">
+              <div id="right-knob" class="stick-knob"></div>
+            </div>
+            <div id="tool-scale-slot" class="scale-slot"></div>
           </div>
         </section>
       </div>
+      <div id="tool-scale" class="speed-scale" role="slider" aria-label="Tool speed" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"></div>
     </section>
   </main>
 
   <script>
     const banner = document.getElementById('banner');
     const teleopToggleButton = document.getElementById('teleop-toggle-button');
+    const twoStickButton = document.getElementById('two-stick-button');
     const lightsButton = document.getElementById('lights-button');
     const cameraButton = document.getElementById('camera-button');
     const cameraFeed = document.getElementById('camera-feed');
     const teleopStage = document.getElementById('teleop-stage');
+    const teleopLayout = document.getElementById('teleop-layout');
+    const driveToolScaleSlot = document.getElementById('drive-tool-scale-slot');
+    const toolScaleSlot = document.getElementById('tool-scale-slot');
+    const speedScales = {{
+      wheel: {{ value: 0.5, shell: document.getElementById('wheel-scale'), pointerId: null }},
+      tool: {{ value: 0.5, shell: document.getElementById('tool-scale'), pointerId: null }},
+    }};
     let teleopReady = false;
     let transitionBusy = false;
+    let twoStickEnabled = false;
     let lightsEnabled = false;
     let cameraEnabled = false;
     let cameraStreamActive = false;
@@ -2248,6 +2333,42 @@ class MissionFrontendRenderer:
       const shellRect = stick.shell.getBoundingClientRect();
       const travel = (shellRect.width * 0.5) - (shellRect.width * 0.155);
       stick.knob.style.transform = `translate(calc(-50% + ${{stick.x * travel}}px), calc(-50% + ${{-stick.y * travel}}px))`;
+    }}
+    function renderScale(scale) {{
+      const activeCount = Math.round(scale.value * scale.shell.children.length);
+      [...scale.shell.children].forEach((segment, index) => {{
+        segment.classList.toggle('active', index < activeCount);
+      }});
+      scale.shell.setAttribute('aria-valuenow', String(Math.round(scale.value * 100)));
+    }}
+    function handleScalePointer(scale, event) {{
+      const rect = scale.shell.getBoundingClientRect();
+      const y = clamp(event.clientY - rect.top, 0, rect.height);
+      scale.value = clamp(1 - (y / rect.height), 0, 1);
+      renderScale(scale);
+    }}
+    function createScaleSegments(scale) {{
+      const segmentCount = 20;
+      for (let index = 0; index < segmentCount; index += 1) {{
+        const segment = document.createElement('div');
+        segment.className = 'scale-segment';
+        segment.style.width = `${{24 + index * 1.15}}px`;
+        scale.shell.appendChild(segment);
+      }}
+      renderScale(scale);
+    }}
+    function renderControlMode(resetHiddenToolStick = true) {{
+      teleopLayout.classList.toggle('one-stick', !twoStickEnabled);
+      twoStickButton.classList.toggle('enabled', twoStickEnabled);
+      if (twoStickEnabled) {{
+        toolScaleSlot.appendChild(speedScales.tool.shell);
+      }} else {{
+        driveToolScaleSlot.appendChild(speedScales.tool.shell);
+        if (resetHiddenToolStick) {{
+          resetStick(sticks.right);
+        }}
+      }}
+      twoStickButton.textContent = twoStickEnabled ? 'One Stick' : 'Two Stick';
     }}
     function handlePointer(stick, event) {{
       const rect = stick.shell.getBoundingClientRect();
@@ -2281,6 +2402,26 @@ class MissionFrontendRenderer:
       stick.shell.addEventListener('pointercancel', () => resetStick(stick));
       updateKnob(stick);
     }}
+    for (const scale of Object.values(speedScales)) {{
+      createScaleSegments(scale);
+      scale.shell.addEventListener('pointerdown', (event) => {{
+        scale.pointerId = event.pointerId;
+        scale.shell.setPointerCapture(event.pointerId);
+        handleScalePointer(scale, event);
+      }});
+      scale.shell.addEventListener('pointermove', (event) => {{
+        if (scale.pointerId === event.pointerId) {{
+          handleScalePointer(scale, event);
+        }}
+      }});
+      scale.shell.addEventListener('pointerup', () => {{
+        scale.pointerId = null;
+      }});
+      scale.shell.addEventListener('pointercancel', () => {{
+        scale.pointerId = null;
+      }});
+    }}
+    renderControlMode(false);
 
     async function postJson(path, body, keepalive = false) {{
       const response = await fetch(path, {{
@@ -2292,7 +2433,15 @@ class MissionFrontendRenderer:
       return response.json();
     }}
     function commandPayload() {{
-      return {{ left_x: sticks.left.x, left_y: sticks.left.y, right_x: sticks.right.x, right_y: sticks.right.y }};
+      return {{
+        left_x: sticks.left.x,
+        left_y: sticks.left.y,
+        right_x: twoStickEnabled ? sticks.right.x : 0,
+        right_y: twoStickEnabled ? sticks.right.y : 0,
+        control_mode: twoStickEnabled ? 'two_stick' : 'one_stick',
+        wheel_scale: speedScales.wheel.value,
+        tool_scale: speedScales.tool.value,
+      }};
     }}
     function closeCameraStream() {{
       if (cameraStreamActive) {{
@@ -2328,7 +2477,15 @@ class MissionFrontendRenderer:
     }}
     async function sendZeroCommand(keepalive = false) {{
       try {{
-        await postJson('/api/v1/teleop/command', {{ left_x: 0, left_y: 0, right_x: 0, right_y: 0 }}, keepalive);
+        await postJson('/api/v1/teleop/command', {{
+          left_x: 0,
+          left_y: 0,
+          right_x: 0,
+          right_y: 0,
+          control_mode: twoStickEnabled ? 'two_stick' : 'one_stick',
+          wheel_scale: speedScales.wheel.value,
+          tool_scale: speedScales.tool.value,
+        }}, keepalive);
       }} catch (_error) {{}}
     }}
     async function streamCommand() {{
@@ -2425,6 +2582,10 @@ class MissionFrontendRenderer:
         lightsButton.disabled = false;
       }}
     }});
+    twoStickButton.addEventListener('click', () => {{
+      twoStickEnabled = !twoStickEnabled;
+      renderControlMode();
+    }});
     cameraButton.addEventListener('click', () => {{
       cameraEnabled = !cameraEnabled;
       updateCameraState();
@@ -2441,7 +2602,15 @@ class MissionFrontendRenderer:
     }});
     window.addEventListener('beforeunload', () => {{
       disableCamera();
-      const body = JSON.stringify({{ left_x: 0, left_y: 0, right_x: 0, right_y: 0 }});
+      const body = JSON.stringify({{
+        left_x: 0,
+        left_y: 0,
+        right_x: 0,
+        right_y: 0,
+        control_mode: twoStickEnabled ? 'two_stick' : 'one_stick',
+        wheel_scale: speedScales.wheel.value,
+        tool_scale: speedScales.tool.value,
+      }});
       navigator.sendBeacon('/api/v1/teleop/command', new Blob([body], {{ type: 'application/json' }}));
     }});
     setInterval(streamCommand, 50);
