@@ -2072,10 +2072,11 @@ class MissionFrontendRenderer:
     }}
     .stick-cluster {{
       --stick-size: min(32vw, 310px);
-      --bar-width: clamp(42px, 6vw, 58px);
+      --bar-height: clamp(36px, 5vw, 48px);
       --cluster-gap: clamp(8px, 1.6vw, 12px);
       display: grid;
-      grid-template-columns: var(--bar-width) var(--stick-size) var(--bar-width);
+      grid-template-columns: var(--stick-size);
+      grid-template-rows: var(--bar-height) var(--stick-size) var(--bar-height);
       gap: var(--cluster-gap);
       align-items: center;
       justify-content: center;
@@ -2105,28 +2106,28 @@ class MissionFrontendRenderer:
       pointer-events: none;
     }}
     .scale-slot {{
-      width: var(--bar-width);
-      min-height: calc(var(--stick-size) * 0.72);
+      width: var(--stick-size);
+      min-height: var(--bar-height);
       display: flex;
       align-items: center;
       justify-content: center;
     }}
     .speed-scale {{
-      width: var(--bar-width);
-      height: calc(var(--stick-size) * 0.86);
+      width: var(--stick-size);
+      height: var(--bar-height);
       min-height: 0;
-      max-height: 270px;
+      max-height: 48px;
       display: flex;
-      flex-direction: column-reverse;
+      flex-direction: row;
       align-items: center;
       justify-content: space-between;
-      padding: 7px 0;
+      padding: 0 7px;
       touch-action: none;
       user-select: none;
       cursor: pointer;
     }}
     .scale-segment {{
-      height: 8px;
+      width: 8px;
       border-radius: 2px;
       background: rgba(8, 9, 10, 0.88);
       border: 1px solid rgba(245, 241, 223, 0.08);
@@ -2219,11 +2220,8 @@ class MissionFrontendRenderer:
       .center-controls {{ grid-row: 1; }}
       .stick-cluster {{
         --cluster-gap: clamp(6px, 2vw, 10px);
-        --bar-width: clamp(34px, 10vw, 48px);
-        --stick-size: min(
-          310px,
-          calc((100vw - 48px - (2 * var(--bar-width)) - (2 * var(--cluster-gap))) * 0.98)
-        );
+        --bar-height: clamp(32px, 9vw, 44px);
+        --stick-size: min(78vw, 310px);
       }}
     }}
   </style>
@@ -2273,11 +2271,11 @@ class MissionFrontendRenderer:
         <section id="tools-panel" class="stick-panel tools-panel">
           <h2>Tools</h2>
           <div class="stick-cluster">
-            <div class="scale-slot"></div>
+            <div id="tool-scale-slot" class="scale-slot"></div>
             <div id="right-stick" class="stick-shell" aria-label="Tool joystick">
               <div id="right-knob" class="stick-knob"></div>
             </div>
-            <div id="tool-scale-slot" class="scale-slot"></div>
+            <div class="scale-slot"></div>
           </div>
         </section>
       </div>
@@ -2343,8 +2341,8 @@ class MissionFrontendRenderer:
     }}
     function handleScalePointer(scale, event) {{
       const rect = scale.shell.getBoundingClientRect();
-      const y = clamp(event.clientY - rect.top, 0, rect.height);
-      scale.value = clamp(1 - (y / rect.height), 0, 1);
+      const x = clamp(event.clientX - rect.left, 0, rect.width);
+      scale.value = clamp(x / rect.width, 0, 1);
       renderScale(scale);
     }}
     function createScaleSegments(scale) {{
@@ -2352,7 +2350,7 @@ class MissionFrontendRenderer:
       for (let index = 0; index < segmentCount; index += 1) {{
         const segment = document.createElement('div');
         segment.className = 'scale-segment';
-        segment.style.width = `${{24 + index * 1.15}}px`;
+        segment.style.height = `${{14 + index * 0.9}}px`;
         scale.shell.appendChild(segment);
       }}
       renderScale(scale);
