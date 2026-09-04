@@ -1980,6 +1980,7 @@ class MissionFrontendRenderer:
     const view2dButton = document.getElementById('view-2d-button');
     const view3dButton = document.getElementById('view-3d-button');
     const buildGaussianButton = document.getElementById('build-gaussian-button');
+    const saveMapButton = document.getElementById('save-map-button');
     const recordMapElement = document.getElementById('record-map');
     const splatViewElement = document.getElementById('splat-view');
     const splatCanvas = document.getElementById('splat-canvas');
@@ -2659,7 +2660,7 @@ class MissionFrontendRenderer:
         body: JSON.stringify(body || {{}})
       }});
       const data = await response.json();
-      if (!response.ok) {{
+      if (!response.ok || data.success === false) {{
         throw new Error(data.message || `${{path}} failed with HTTP ${{response.status}}`);
       }}
       return data;
@@ -2680,32 +2681,43 @@ class MissionFrontendRenderer:
       mapNameTouched = true;
     }});
 
-    document.getElementById('save-map-button').addEventListener('click', async () => {{
+    saveMapButton.addEventListener('click', async () => {{
       const mapName = mapNameInput.value.trim();
       if (!mapName || (!selectedMapId && mapName === latestRecordingLabel)) {{
         setBanner('error', 'Enter a map name before saving.');
         return;
       }}
       const sourceEntry = selectedMap();
-      const data = await postJson('/api/v1/maps/save', {{
-        map_id: mapName,
-        name: mapName,
-        source: sourceEntry ? 'saved_map' : 'latest_recorded_map',
-        source_map_id: sourceEntry?.map_id || '',
-        sweep_pattern: selectedPattern(),
-        start_position: {{ percent: Number(startPositionInput.value) }},
-        end_position: useEndPositionInput.checked ? {{ percent: Number(endPositionInput.value) }} : null,
-        layer_visibility: layerVisibility(),
-        overwrite_existing: true
-      }});
-      setBanner(data.success ? 'ok' : 'error', data.message || 'Save map request completed');
-      if (data.success) {{
+      saveMapButton.disabled = true;
+      saveMapButton.textContent = 'Saving...';
+      latestMapMessage.textContent = `Saving map '${{mapName}}'...`;
+      try {{
+        const data = await postJson('/api/v1/maps/save', {{
+          map_id: mapName,
+          name: mapName,
+          source: sourceEntry ? 'saved_map' : 'latest_recorded_map',
+          source_map_id: sourceEntry?.map_id || '',
+          sweep_pattern: selectedPattern(),
+          start_position: {{ percent: Number(startPositionInput.value) }},
+          end_position: useEndPositionInput.checked ? {{ percent: Number(endPositionInput.value) }} : null,
+          layer_visibility: layerVisibility(),
+          overwrite_existing: true
+        }});
         setSelectedMapId(data.map?.map_id || '');
         mapNameInput.value = data.map?.name || data.map?.map_id || mapName;
         mapNameTouched = false;
         lastAppliedSourceMapId = selectedMapId;
+        setBanner('ok', data.message || `Map '${{mapName}}' saved`);
+      }} catch (error) {{
+        setBanner('error', error.message || 'Save map request failed');
+        latestMapMessage.textContent = error.message || 'Save map request failed';
+      }} finally {{
+        saveMapButton.disabled = false;
+        saveMapButton.textContent = 'Save Map';
+        await loadRecordMapSnapshot().catch((error) => {{
+          latestMapMessage.textContent = error.message || 'Failed to reload saved maps.';
+        }});
       }}
-      await loadRecordMapSnapshot();
     }});
 
     document.getElementById('delete-map-button').addEventListener('click', async () => {{
@@ -5131,7 +5143,7 @@ class MissionFrontendHttpNode(Node, MissionFrontendRenderer):
             def _exchange_backend_jsonl(self, request: dict[str, Any]) -> dict[str, Any]:
                 encoded = json.dumps(request, separators=(",", ":")).encode("utf-8") + b"\n"
                 with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
-                    connection.settimeout(20.0)
+                    connection.settimeout(self._backend_timeout_sec(request))
                     connection.connect(node._backend_socket_path)
                     connection.sendall(encoded)
                     connection.shutdown(socket.SHUT_WR)
@@ -5145,6 +5157,15 @@ class MissionFrontendHttpNode(Node, MissionFrontendRenderer):
                 if not isinstance(decoded, dict):
                     raise RuntimeError("Backend IPC response must be a JSON object")
                 return decoded
+
+            @staticmethod
+            def _backend_timeout_sec(request: dict[str, Any]) -> float:
+                action = str(request.get("action", "")).strip().upper()
+                if action == "SAVE_MAP":
+                    return 180.0
+                if action in {"BUILD_GAUSSIAN_SPLAT", "PAUSE_GAUSSIAN_SPLAT", "RESUME_GAUSSIAN_SPLAT"}:
+                    return 65.0
+                return 20.0
 
             def _read_backend_line(self, connection: socket.socket) -> bytes:
                 chunks: list[bytes] = []
