@@ -2065,6 +2065,41 @@ class MissionFrontendRenderer:
       return latlngs;
     }}
 
+    function routeFrameFromGeojson(geojson) {{
+      for (const feature of geojson?.features || []) {{
+        const properties = feature?.properties || {{}};
+        const coordinateFrame = String(properties.coordinate_frame || '').trim();
+        if (coordinateFrame) {{
+          return coordinateFrame;
+        }}
+        const frameId = String(properties.frame_id || '').trim();
+        if (frameId) {{
+          return frameId;
+        }}
+      }}
+      return '';
+    }}
+
+    function isLeafletLatLngGeojson(geojson) {{
+      const frame = routeFrameFromGeojson(geojson).toLowerCase();
+      if (frame) {{
+        return frame.includes('wgs84') || frame.includes('gps') || frame.includes('navsat') || frame.includes('latlon');
+      }}
+
+      const latlngs = lineStringLatLngs(geojson);
+      if (latlngs.length === 0) {{
+        return false;
+      }}
+      return latlngs.every((point) => (
+        Math.abs(point[0]) <= 90 &&
+        Math.abs(point[1]) <= 180
+      )) && latlngs.some((point) => Math.abs(point[0]) > 20 || Math.abs(point[1]) > 20);
+    }}
+
+    function leafletLatLngs(geojson) {{
+      return isLeafletLatLngGeojson(geojson) ? lineStringLatLngs(geojson) : [];
+    }}
+
     function clampPercent(value) {{
       const number = Number(value);
       if (!Number.isFinite(number)) {{
@@ -2132,20 +2167,21 @@ class MissionFrontendRenderer:
       const mapEntry = selectedMap();
       const selectedNavsat = mapEntry?.navsat_geojson || null;
       const selectedRoute = mapEntry?.route_geojson || null;
-      const activeLatLngs = lineStringLatLngs(data.active_navsat_geojson);
+      const activeLatLngs = leafletLatLngs(data.active_navsat_geojson);
       if (layerEnabled('recorded') && activeLatLngs.length > 1) {{
         activePolyline = L.polyline(activeLatLngs, {{ color: '#dc2626', weight: 4 }}).addTo(map);
         bounds.push(...activeLatLngs);
       }}
 
-      const latestLatLngs = lineStringLatLngs(selectedNavsat || data.latest_navsat_geojson);
+      const latestLatLngs = leafletLatLngs(selectedNavsat || data.latest_navsat_geojson);
       defaultBounds.push(...latestLatLngs);
       if (layerEnabled('recorded') && latestLatLngs.length > 1) {{
         latestPolyline = L.polyline(latestLatLngs, {{ color: '#0f766e', weight: 4 }}).addTo(map);
         bounds.push(...latestLatLngs);
       }}
 
-      const perimeterLatLngs = lineStringLatLngs(selectedRoute || data.latest_route_geojson);
+      const routeLatLngs = leafletLatLngs(selectedRoute || data.latest_route_geojson);
+      const perimeterLatLngs = routeLatLngs.length > 0 ? routeLatLngs : latestLatLngs;
       defaultBounds.push(...perimeterLatLngs);
       if (layerEnabled('boundary') && perimeterLatLngs.length > 1) {{
         perimeterPolyline = L.polyline(perimeterLatLngs, {{ color: '#f59e0b', weight: 3, dashArray: '8 8' }}).addTo(map);
