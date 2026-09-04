@@ -1721,6 +1721,60 @@ class MissionFrontendRenderer:
       background: rgba(18, 20, 21, 0.82);
       color: var(--ink);
     }}
+    .map-combo {{
+      position: relative;
+      display: grid;
+      grid-template-columns: 1fr 42px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: rgba(18, 20, 21, 0.82);
+    }}
+    .map-combo input {{
+      border: 0;
+      background: transparent;
+      border-radius: 12px 0 0 12px;
+    }}
+    .map-combo input:focus {{ outline: 0; }}
+    .map-combo button {{
+      border-radius: 0 12px 12px 0;
+      padding: 0;
+      color: var(--ink);
+      background: rgba(54, 58, 60, 0.92);
+      border-left: 1px solid var(--line);
+      font-size: 1.05rem;
+      line-height: 1;
+      letter-spacing: 0;
+    }}
+    .map-combo-list {{
+      display: none;
+      position: absolute;
+      z-index: 1200;
+      top: calc(100% + 4px);
+      left: 0;
+      right: 0;
+      max-height: 240px;
+      overflow-y: auto;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #111415;
+      box-shadow: 0 18px 42px rgba(0, 0, 0, 0.36);
+    }}
+    .map-combo.open .map-combo-list {{ display: block; }}
+    .map-combo-option {{
+      width: 100%;
+      border: 0;
+      border-radius: 0;
+      padding: 11px 12px;
+      color: var(--ink);
+      background: transparent;
+      text-align: left;
+      text-transform: none;
+      letter-spacing: 0;
+      font-weight: 600;
+    }}
+    .map-combo-option:hover, .map-combo-option.active {{
+      background: rgba(253, 202, 15, 0.16);
+    }}
     .pattern-list {{
       display: grid;
       gap: 10px;
@@ -1833,13 +1887,17 @@ class MissionFrontendRenderer:
           <h2>Saved Maps</h2>
           <div class="toolbar">
             <div id="recording-chip" class="status-chip idle">RecordMap idle</div>
-            <button id="save-map-button">Save As Map</button>
+            <button id="save-map-button">Save Map</button>
             <button id="build-gaussian-button" class="secondary">Build 3D map</button>
             <button id="delete-map-button" class="stop">Delete Map</button>
           </div>
           <div style="margin-top: 12px;">
-            <label for="map-select">Map</label>
-            <select id="map-select"></select>
+            <label for="map-name-input">Map</label>
+            <div id="map-combo" class="map-combo">
+              <input id="map-name-input" type="text" autocomplete="off" placeholder="Latest recording">
+              <button id="map-combo-button" type="button" aria-label="Select saved map" title="Select saved map">&#9662;</button>
+              <div id="map-combo-list" class="map-combo-list"></div>
+            </div>
           </div>
           <div class="meta-grid" style="margin-top: 12px;">
             <div class="meta">
@@ -1901,7 +1959,10 @@ class MissionFrontendRenderer:
     const gaussianBuildStatus = document.getElementById('gaussian-build-status');
     const patternCountdown = document.getElementById('pattern-countdown');
     const patternInputs = [...document.querySelectorAll('input[name="pattern"]')];
-    const mapSelect = document.getElementById('map-select');
+    const mapCombo = document.getElementById('map-combo');
+    const mapNameInput = document.getElementById('map-name-input');
+    const mapComboButton = document.getElementById('map-combo-button');
+    const mapComboList = document.getElementById('map-combo-list');
     const startPositionInput = document.getElementById('start-position');
     const useEndPositionInput = document.getElementById('use-end-position');
     const endPositionInput = document.getElementById('end-position');
@@ -1937,7 +1998,8 @@ class MissionFrontendRenderer:
     let appliedEditorStateKey = '';
     let lastFittedMapKey = '';
 
-    mapSelect.innerHTML = '<option value="">Loading saved maps...</option>';
+    mapNameInput.value = 'Latest recording';
+    mapComboList.innerHTML = '<button class="map-combo-option" type="button">Loading saved maps...</button>';
     gaussianOverlaySummary.style.display = 'none';
 
     const map = L.map('record-map', {{ zoomControl: true }}).setView([55.6761, 12.5683], 18);
@@ -2011,14 +2073,6 @@ class MissionFrontendRenderer:
 
     function selectedMap() {{
       return mapsCache.find((entry) => entry.map_id === selectedMapId) || null;
-    }}
-
-    function selectedMapDisplayName() {{
-      const entry = selectedMap();
-      if (entry) {{
-        return entry.name || entry.map_id;
-      }}
-      return lastMapSnapshot?.latest_recorded_map?.mission_id || 'RecordMap';
     }}
 
     function gaussianStatusMatchesSelectedSource(status) {{
@@ -2454,15 +2508,73 @@ class MissionFrontendRenderer:
       return latestGaussianStatus;
     }}
 
-    function populateMapSelect() {{
-      mapSelect.innerHTML = '<option value="">Latest recording</option>';
-      for (const entry of mapsCache) {{
-        const option = document.createElement('option');
-        option.value = entry.map_id;
-        option.textContent = entry.name || entry.map_id;
-        mapSelect.appendChild(option);
+    function mapEntryLabel(entry) {{
+      return entry?.name || entry?.map_id || '';
+    }}
+
+    function findMapByTypedName(name) {{
+      const normalized = String(name || '').trim().toLowerCase();
+      if (!normalized || normalized === 'latest recording') {{
+        return null;
       }}
-      mapSelect.value = selectedMapId;
+      return mapsCache.find((entry) => {{
+        return String(entry.map_id || '').toLowerCase() === normalized
+          || String(entry.name || '').toLowerCase() === normalized;
+      }}) || null;
+    }}
+
+    function setSelectedMapId(nextMapId) {{
+      selectedMapId = nextMapId || '';
+      if (selectedMapId) {{
+        window.localStorage.setItem(selectedMapStorageKey, selectedMapId);
+      }} else {{
+        window.localStorage.removeItem(selectedMapStorageKey);
+      }}
+    }}
+
+    function renderMapComboOptions() {{
+      mapComboList.innerHTML = '';
+      const latestOption = document.createElement('button');
+      latestOption.type = 'button';
+      latestOption.className = `map-combo-option${{selectedMapId ? '' : ' active'}}`;
+      latestOption.textContent = 'Latest recording';
+      latestOption.addEventListener('click', async () => {{
+        mapNameInput.value = 'Latest recording';
+        setSelectedMapId('');
+        mapCombo.classList.remove('open');
+        await loadRecordMapSnapshot();
+      }});
+      mapComboList.appendChild(latestOption);
+
+      for (const entry of mapsCache) {{
+        const option = document.createElement('button');
+        option.type = 'button';
+        option.className = `map-combo-option${{entry.map_id === selectedMapId ? ' active' : ''}}`;
+        option.textContent = mapEntryLabel(entry);
+        option.dataset.mapId = entry.map_id;
+        option.addEventListener('click', async () => {{
+          mapNameInput.value = mapEntryLabel(entry);
+          setSelectedMapId(entry.map_id);
+          mapCombo.classList.remove('open');
+          await loadRecordMapSnapshot();
+        }});
+        mapComboList.appendChild(option);
+      }}
+    }}
+
+    function refreshMapComboOptions() {{
+      renderMapComboOptions();
+      updateGaussianControls(latestGaussianStatus);
+    }}
+
+    function populateMapSelector() {{
+      renderMapComboOptions();
+      const selected = selectedMap();
+      if (selected) {{
+        mapNameInput.value = mapEntryLabel(selected);
+      }} else if (!mapNameInput.value.trim()) {{
+        mapNameInput.value = 'Latest recording';
+      }}
       if (mapsCache.length === 0 && !selectedMapId) {{
         latestMapMessage.textContent = 'No saved maps yet. Latest recording remains available when captured.';
       }}
@@ -2500,7 +2612,7 @@ class MissionFrontendRenderer:
         window.localStorage.removeItem(selectedMapStorageKey);
         setBanner('warn', 'Previously selected saved map is no longer available.');
       }}
-      populateMapSelect();
+      populateMapSelector();
       const nextEditorStateKey = editorStateKey(data);
       if (nextEditorStateKey !== appliedEditorStateKey) {{
         applySelectedMapToEditor();
@@ -2558,32 +2670,41 @@ class MissionFrontendRenderer:
       return data;
     }}
 
-    mapSelect.addEventListener('change', async () => {{
-      selectedMapId = mapSelect.value;
-      if (selectedMapId) {{
-        window.localStorage.setItem(selectedMapStorageKey, selectedMapId);
-      }} else {{
-        window.localStorage.removeItem(selectedMapStorageKey);
+    mapNameInput.addEventListener('input', refreshMapComboOptions);
+
+    mapNameInput.addEventListener('change', async () => {{
+      const matched = findMapByTypedName(mapNameInput.value);
+      if (matched) {{
+        setSelectedMapId(matched.map_id);
       }}
+      renderMapComboOptions();
       await loadRecordMapSnapshot();
     }});
 
-    document.getElementById('save-map-button').addEventListener('click', async () => {{
-      const defaultName = selectedMapDisplayName();
-      const promptedName = window.prompt('Save map as', defaultName);
-      if (promptedName === null) {{
-        return;
+    mapComboButton.addEventListener('click', () => {{
+      mapCombo.classList.toggle('open');
+      renderMapComboOptions();
+    }});
+
+    document.addEventListener('click', (event) => {{
+      if (!mapCombo.contains(event.target)) {{
+        mapCombo.classList.remove('open');
       }}
-      const mapName = promptedName.trim();
+    }});
+
+    document.getElementById('save-map-button').addEventListener('click', async () => {{
+      const typedName = mapNameInput.value.trim();
+      const mapName = typedName === 'Latest recording' ? '' : typedName;
       if (!mapName) {{
         setBanner('error', 'Enter a map name before saving.');
         return;
       }}
+      const sourceEntry = selectedMap();
       const data = await postJson('/api/v1/maps/save', {{
         map_id: mapName,
         name: mapName,
-        source: selectedMapId ? 'saved_map' : 'latest_recorded_map',
-        source_map_id: selectedMapId || '',
+        source: sourceEntry ? 'saved_map' : 'latest_recorded_map',
+        source_map_id: sourceEntry?.map_id || '',
         sweep_pattern: selectedPattern(),
         start_position: {{ percent: Number(startPositionInput.value) }},
         end_position: useEndPositionInput.checked ? {{ percent: Number(endPositionInput.value) }} : null,
@@ -2592,10 +2713,8 @@ class MissionFrontendRenderer:
       }});
       setBanner(data.success ? 'ok' : 'error', data.message || 'Save map request completed');
       if (data.success) {{
-        selectedMapId = data.map?.map_id || '';
-        if (selectedMapId) {{
-          window.localStorage.setItem(selectedMapStorageKey, selectedMapId);
-        }}
+        setSelectedMapId(data.map?.map_id || '');
+        mapNameInput.value = data.map?.name || data.map?.map_id || mapName;
       }}
       await loadRecordMapSnapshot();
     }});
@@ -2608,8 +2727,8 @@ class MissionFrontendRenderer:
       const data = await postJson('/api/v1/maps/delete', {{ map_id: selectedMapId }});
       setBanner(data.success ? 'ok' : 'error', data.message || 'Delete map request completed');
       if (data.success) {{
-        selectedMapId = '';
-        window.localStorage.removeItem(selectedMapStorageKey);
+        setSelectedMapId('');
+        mapNameInput.value = 'Latest recording';
       }}
       await loadRecordMapSnapshot();
     }});
@@ -2750,7 +2869,8 @@ class MissionFrontendRenderer:
       updateGaussianControls(latestGaussianStatus);
     }});
     loadRecordMapSnapshot().catch((error) => {{
-      mapSelect.innerHTML = '<option value="">Latest recording</option>';
+      mapComboList.innerHTML = '<button class="map-combo-option" type="button">Latest recording</button>';
+      mapNameInput.value = 'Latest recording';
       latestMapMessage.textContent = error.message || 'Failed to load saved maps.';
       setBanner('error', error.message || 'Failed to load record map page state');
     }});
