@@ -1800,12 +1800,12 @@ class MissionFrontendRenderer:
         <div id="map-layer-control" class="map-layer-control">
           <button id="map-layer-button" class="map-layer-button" type="button" aria-label="Layer settings" title="Layer settings">&#9881;</button>
           <div class="map-layer-panel">
-            <label><input class="layer-toggle" data-layer="background" type="checkbox" checked> Background</label>
+            <label><input class="layer-toggle" data-layer="background" type="checkbox" checked> Satellite background</label>
             <label><input class="layer-toggle" data-layer="boundary" type="checkbox" checked> Boundary</label>
             <label><input class="layer-toggle" data-layer="recorded" type="checkbox" checked> Recorded trace</label>
             <label><input class="layer-toggle" data-layer="planned" type="checkbox" checked> Planned path</label>
-            <label><input class="layer-toggle" data-layer="zones" type="checkbox" checked> VDA5050 zones</label>
-            <label><input class="layer-toggle" data-layer="gaussian" type="checkbox" checked> Gaussian</label>
+            <label><input class="layer-toggle" data-layer="zones" type="checkbox" checked> Zones</label>
+            <label><input class="layer-toggle" data-layer="gaussian" type="checkbox" checked> 3D Tiles</label>
           </div>
         </div>
         <div class="map-view-control">
@@ -1930,15 +1930,21 @@ class MissionFrontendRenderer:
     let gaussianRequestInFlight = false;
     let lastMapSnapshot = {{}};
     let appliedEditorStateKey = '';
+    let lastFittedMapKey = '';
 
     mapSelect.innerHTML = '<option value="">Loading saved maps...</option>';
     gaussianOverlaySummary.style.display = 'none';
 
     const map = L.map('record-map', {{ zoomControl: true }}).setView([55.6761, 12.5683], 18);
-    L.tileLayer(
+    const satelliteTileLayer = L.tileLayer(
       'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{{z}}/{{y}}/{{x}}',
       {{ maxZoom: 20, attribution: '&copy; Esri' }}
-    ).addTo(map);
+    );
+    const streetTileLayer = L.tileLayer(
+      'https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png',
+      {{ maxZoom: 20, attribution: '&copy; OpenStreetMap contributors' }}
+    );
+    satelliteTileLayer.addTo(map);
 
     function setBanner(kind, message) {{
       banner.className = `banner show ${{kind}}`;
@@ -1957,6 +1963,18 @@ class MissionFrontendRenderer:
     function layerEnabled(layer) {{
       const input = layerToggles.find((toggle) => toggle.dataset.layer === layer);
       return !input || input.checked;
+    }}
+
+    function updateBaseLayer() {{
+      const useSatellite = layerEnabled('background');
+      const activeLayer = useSatellite ? satelliteTileLayer : streetTileLayer;
+      const inactiveLayer = useSatellite ? streetTileLayer : satelliteTileLayer;
+      if (map.hasLayer(inactiveLayer)) {{
+        map.removeLayer(inactiveLayer);
+      }}
+      if (!map.hasLayer(activeLayer)) {{
+        activeLayer.addTo(map);
+      }}
     }}
 
     function layerVisibility() {{
@@ -2036,7 +2054,11 @@ class MissionFrontendRenderer:
         }}
         for (const coordinate of feature.geometry.coordinates || []) {{
           if (Array.isArray(coordinate) && coordinate.length >= 2) {{
-            latlngs.push([Number(coordinate[1]), Number(coordinate[0])]);
+            const latitude = Number(coordinate[1]);
+            const longitude = Number(coordinate[0]);
+            if (Number.isFinite(latitude) && Number.isFinite(longitude)) {{
+              latlngs.push([latitude, longitude]);
+            }}
           }}
         }}
       }}
@@ -2065,7 +2087,17 @@ class MissionFrontendRenderer:
       return latlngs.slice(startIndex, Math.min(lastIndex, endIndex) + 1);
     }}
 
+    function fitMapToDefaultBounds(data, latlngs) {{
+      const key = `${{editorStateKey(data)}}:${{latlngs.length}}`;
+      if (key === lastFittedMapKey || latlngs.length === 0) {{
+        return;
+      }}
+      map.fitBounds(latlngs, {{ padding: [34, 34], maxZoom: 19 }});
+      lastFittedMapKey = key;
+    }}
+
     function updateMap(data) {{
+      updateBaseLayer();
       if (activePolyline) {{
         map.removeLayer(activePolyline);
         activePolyline = null;
@@ -2096,6 +2128,7 @@ class MissionFrontendRenderer:
       }}
 
       const bounds = [];
+      const defaultBounds = [];
       const mapEntry = selectedMap();
       const selectedNavsat = mapEntry?.navsat_geojson || null;
       const selectedRoute = mapEntry?.route_geojson || null;
@@ -2106,19 +2139,21 @@ class MissionFrontendRenderer:
       }}
 
       const latestLatLngs = lineStringLatLngs(selectedNavsat || data.latest_navsat_geojson);
+      defaultBounds.push(...latestLatLngs);
       if (layerEnabled('recorded') && latestLatLngs.length > 1) {{
         latestPolyline = L.polyline(latestLatLngs, {{ color: '#0f766e', weight: 4 }}).addTo(map);
         bounds.push(...latestLatLngs);
       }}
 
       const perimeterLatLngs = lineStringLatLngs(selectedRoute || data.latest_route_geojson);
+      defaultBounds.push(...perimeterLatLngs);
       if (layerEnabled('boundary') && perimeterLatLngs.length > 1) {{
         perimeterPolyline = L.polyline(perimeterLatLngs, {{ color: '#f59e0b', weight: 3, dashArray: '8 8' }}).addTo(map);
         boundaryMaskLayer = L.polygon(perimeterLatLngs, {{
           color: '#fdca0f',
           weight: 1,
           fillColor: '#020617',
-          fillOpacity: layerEnabled('background') ? 0.04 : 0.26,
+          fillOpacity: 0.04,
         }}).addTo(map);
         boundaryMaskLayer.bringToBack();
       }}
@@ -2159,11 +2194,12 @@ class MissionFrontendRenderer:
           {{ radius: 6, color: '#ffffff', weight: 2, fillColor: '#1d4ed8', fillOpacity: 1 }}
         ).addTo(map);
         bounds.push([Number(position.latitude), Number(position.longitude)]);
+        if (defaultBounds.length === 0) {{
+          defaultBounds.push([Number(position.latitude), Number(position.longitude)]);
+        }}
       }}
 
-      if (bounds.length > 0) {{
-        map.fitBounds(bounds, {{ padding: [30, 30], maxZoom: 19 }});
-      }}
+      fitMapToDefaultBounds(data, defaultBounds.length > 0 ? defaultBounds : bounds);
       renderSplatPreview(data);
     }}
 
