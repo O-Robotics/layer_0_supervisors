@@ -1837,8 +1837,9 @@ class MissionFrontendRenderer:
     const recordMapElement = document.getElementById('record-map');
     const splatViewElement = document.getElementById('splat-view');
     const splatCanvas = document.getElementById('splat-canvas');
+    const selectedMapStorageKey = 'amr_sweeper.selected_map_id';
     let mapsCache = [];
-    let selectedMapId = '';
+    let selectedMapId = window.localStorage.getItem(selectedMapStorageKey) || '';
     let currentView = '2d';
     let patternTouched = false;
     let countdownTimer = null;
@@ -2109,6 +2110,7 @@ class MissionFrontendRenderer:
       mapsCache = data.maps || [];
       if (selectedMapId && !mapsCache.some((entry) => entry.map_id === selectedMapId)) {{
         selectedMapId = '';
+        window.localStorage.removeItem(selectedMapStorageKey);
       }}
       populateMapSelect();
       applySelectedMapToEditor();
@@ -2160,6 +2162,11 @@ class MissionFrontendRenderer:
 
     mapSelect.addEventListener('change', async () => {{
       selectedMapId = mapSelect.value;
+      if (selectedMapId) {{
+        window.localStorage.setItem(selectedMapStorageKey, selectedMapId);
+      }} else {{
+        window.localStorage.removeItem(selectedMapStorageKey);
+      }}
       await loadRecordMapSnapshot();
     }});
 
@@ -2182,6 +2189,9 @@ class MissionFrontendRenderer:
       setBanner(data.success ? 'ok' : 'error', data.message || 'Save map request completed');
       if (data.success) {{
         selectedMapId = data.map?.map_id || '';
+        if (selectedMapId) {{
+          window.localStorage.setItem(selectedMapStorageKey, selectedMapId);
+        }}
       }}
       await loadRecordMapSnapshot();
     }});
@@ -2195,6 +2205,7 @@ class MissionFrontendRenderer:
       setBanner(data.success ? 'ok' : 'error', data.message || 'Delete map request completed');
       if (data.success) {{
         selectedMapId = '';
+        window.localStorage.removeItem(selectedMapStorageKey);
       }}
       await loadRecordMapSnapshot();
     }});
@@ -2253,6 +2264,9 @@ class MissionFrontendRenderer:
       setBanner(data.success ? 'ok' : 'error', data.message || 'Save map request completed');
       if (data.success) {{
         selectedMapId = data.map?.map_id || selectedMapId;
+        if (selectedMapId) {{
+          window.localStorage.setItem(selectedMapStorageKey, selectedMapId);
+        }}
       }}
       await loadRecordMapSnapshot();
     }});

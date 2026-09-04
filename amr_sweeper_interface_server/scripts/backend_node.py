@@ -2445,17 +2445,21 @@ class MissionBackendNode(Node):
                 latest_metadata = json.loads(latest_metadata_file.read_text(encoding="utf-8"))
                 route_path = Path(latest_metadata.get("recorded_work_area_route_file", ""))
                 navsat_path = Path(latest_metadata.get("recorded_work_area_navsat_file", ""))
-                gaussian_manifest_path = Path(str(latest_metadata.get("gaussian_manifest_file", "")))
-                gaussian_splat_manifest_path = Path(str(latest_metadata.get("gaussian_splat_manifest_file", "")))
+                gaussian_manifest_file = str(latest_metadata.get("gaussian_manifest_file", ""))
+                gaussian_splat_manifest_file = str(
+                    latest_metadata.get("gaussian_splat_manifest_file", "")
+                )
+                gaussian_manifest_path = Path(gaussian_manifest_file)
+                gaussian_splat_manifest_path = Path(gaussian_splat_manifest_file)
                 if route_path:
                     latest_route_geojson = self._load_geojson_feature_collection(route_path)
                 if navsat_path:
                     latest_navsat_geojson = self._load_geojson_feature_collection(navsat_path)
-                if gaussian_manifest_path.exists():
+                if gaussian_manifest_file and gaussian_manifest_path.is_file():
                     latest_metadata["gaussian_manifest"] = json.loads(
                         gaussian_manifest_path.read_text(encoding="utf-8")
                     )
-                if gaussian_splat_manifest_path.exists():
+                if gaussian_splat_manifest_file and gaussian_splat_manifest_path.is_file():
                     latest_metadata["gaussian_splat_manifest"] = json.loads(
                         gaussian_splat_manifest_path.read_text(encoding="utf-8")
                     )
@@ -2767,8 +2771,10 @@ class MissionBackendNode(Node):
         route_path = Path(str(payload.get("recorded_work_area_route_file", "")))
         navsat_path = Path(str(payload.get("recorded_work_area_navsat_file", "")))
         zone_set_path = map_directory / "zoneSet.json"
-        gaussian_manifest_path = Path(str(payload.get("gaussian_manifest_file", "")))
-        gaussian_splat_manifest_path = Path(str(payload.get("gaussian_splat_manifest_file", "")))
+        gaussian_manifest_file = str(payload.get("gaussian_manifest_file", ""))
+        gaussian_splat_manifest_file = str(payload.get("gaussian_splat_manifest_file", ""))
+        gaussian_manifest_path = Path(gaussian_manifest_file)
+        gaussian_splat_manifest_path = Path(gaussian_splat_manifest_file)
         if route_path.exists():
             payload["route_geojson"] = self._load_geojson_feature_collection(route_path)
         if navsat_path.exists():
@@ -2778,14 +2784,14 @@ class MissionBackendNode(Node):
                 payload["zoneSet"] = json.loads(zone_set_path.read_text(encoding="utf-8"))
             except Exception as exc:  # noqa: BLE001
                 payload["zoneSet_error"] = str(exc)
-        if gaussian_manifest_path.exists():
+        if gaussian_manifest_file and gaussian_manifest_path.is_file():
             try:
                 payload["gaussian_manifest"] = json.loads(
                     gaussian_manifest_path.read_text(encoding="utf-8")
                 )
             except Exception as exc:  # noqa: BLE001
                 payload["gaussian_error"] = str(exc)
-        if gaussian_splat_manifest_path.exists():
+        if gaussian_splat_manifest_file and gaussian_splat_manifest_path.is_file():
             try:
                 payload["gaussian_splat_manifest"] = json.loads(
                     gaussian_splat_manifest_path.read_text(encoding="utf-8")

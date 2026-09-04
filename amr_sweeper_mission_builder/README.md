@@ -63,5 +63,7 @@ YAML style guide for package config:
 - `launch_gaussian_splat_builder_node`: launch the separate Gaussian splat builder node; default is `false`
 - `default_tile_size_meters`: default Gaussian splat tile size when a request omits it
 - `max_training_image_dimension`: downscale limit used by the CUDA training worker
-- `worker_python_executable`: optional Python interpreter for the CUDA training worker
-- `worker_cuda_home`: optional CUDA toolkit root for Python wheel-provided `nvcc`
+- `worker_python_executable`: Python interpreter for the CUDA training worker; robot default is
+  `/home/dev/.python/bin/python`
+- `worker_cuda_home`: CUDA toolkit root for Python wheel-provided `nvcc`; robot default is
+  `/home/dev/.python/lib/python3.12/site-packages/nvidia/cu13`

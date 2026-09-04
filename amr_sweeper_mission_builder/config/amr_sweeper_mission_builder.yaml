@@ -35,8 +35,8 @@
     min_iterations_before_plateau:      300
     plateau_patience_windows:           3
     min_relative_loss_improvement:      0.0025
-    worker_python_executable:           .venv-gsplat/bin/python
-    worker_cuda_home:                   .venv-gsplat/lib/python3.12/site-packages/nvidia/cu13
+    worker_python_executable:           /home/dev/.python/bin/python
+    worker_cuda_home:                   /home/dev/.python/lib/python3.12/site-packages/nvidia/cu13
     allow_unknown_fsm_state:            false
 
     # -- State gating ---------------------------------------------------------
