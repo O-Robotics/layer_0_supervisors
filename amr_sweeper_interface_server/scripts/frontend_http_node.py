@@ -1249,53 +1249,6 @@ class MissionFrontendRenderer:
       return response.json();
     }}
 
-    function updateGaussianControls(status) {{
-      currentGaussianBuildId = status?.build_id || currentGaussianBuildId || '';
-      latestGaussianStatus = status || {{}};
-      const state = status?.state || 'idle';
-      if (state === 'running' || state === 'pause_requested') {{
-        buildGaussianButton.textContent = 'Stop build';
-        buildGaussianButton.classList.add('stop');
-        buildGaussianButton.classList.remove('secondary');
-      }} else if (status?.can_resume || ['paused', 'partial', 'failed'].includes(state)) {{
-        buildGaussianButton.textContent = 'Resume building 3D map';
-        buildGaussianButton.classList.remove('stop');
-        buildGaussianButton.classList.add('secondary');
-      }} else {{
-        buildGaussianButton.textContent = 'Build 3D map';
-        buildGaussianButton.classList.remove('stop');
-        buildGaussianButton.classList.add('secondary');
-      }}
-    }}
-
-    function formatGaussianStatus(status) {{
-      if (!status || !status.state) {{
-        return 'Gaussian splat idle.';
-      }}
-      const state = status.state;
-      const tile = status.current_tile_id ? ` | tile ${{status.current_tile_id}}` : '';
-      const iter = status.current_iteration || status.latest_checkpoint_iteration
-        ? ` | iteration ${{status.current_iteration || 0}}/${{status.target_iterations_per_tile || '-'}}`
-        : '';
-      const quality = Number(status.quality_progress_percent || 0);
-      const qualityText = quality > 0 ? ` | quality ~${{quality.toFixed(1)}}%` : '';
-      return `Gaussian ${{state}}${{tile}}${{iter}}${{qualityText}}`;
-    }}
-
-    async function refreshGaussianStatus() {{
-      const response = await fetch('/api/v1/gaussian-splats/status', {{ cache: 'no-store' }});
-      const data = await response.json();
-      const status = data.status || {{}};
-      updateGaussianControls(status);
-      if (status.state && status.state !== 'idle') {{
-        gaussianBuildStatus.textContent = formatGaussianStatus(status);
-      }}
-      if (currentView === '3d') {{
-        await loadRecordMapSnapshot();
-      }}
-      return status;
-    }}
-
     function renderPlannedEntries(entries) {{
       const list = document.getElementById('planned-entry-list');
       list.innerHTML = '';
@@ -1586,6 +1539,7 @@ class MissionFrontendRenderer:
       margin-top: 18px;
     }}
     .map-shell {{
+      position: relative;
       min-height: 620px;
       overflow: hidden;
       padding: 0;
@@ -1606,6 +1560,30 @@ class MissionFrontendRenderer:
       display: block;
       width: 100%;
       height: 620px;
+    }}
+    .gaussian-overlay-summary {{
+      position: absolute;
+      left: 14px;
+      top: 14px;
+      z-index: 500;
+      max-width: min(460px, calc(100% - 28px));
+      padding: 12px 14px;
+      border: 1px solid rgba(253, 202, 15, 0.35);
+      border-radius: 14px;
+      background: rgba(7, 9, 10, 0.84);
+      color: var(--ink);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+      pointer-events: none;
+    }}
+    .gaussian-overlay-summary strong {{
+      display: block;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 4px;
+    }}
+    .gaussian-overlay-summary.failed strong {{
+      color: var(--danger);
     }}
     .stack {{
       display: grid;
@@ -1701,6 +1679,7 @@ class MissionFrontendRenderer:
     .banner.show {{ display: block; }}
     .banner.ok {{ background: rgba(15, 118, 110, 0.12); color: var(--accent-strong); }}
     .banner.error {{ background: rgba(185, 28, 28, 0.12); color: var(--danger); }}
+    .banner.warn {{ background: rgba(180, 83, 9, 0.12); color: var(--gold); }}
     .countdown {{
       font-size: 0.88rem;
       color: var(--gold);
@@ -1733,6 +1712,10 @@ class MissionFrontendRenderer:
       <section class="card map-shell">
         <div id="record-map"></div>
         <div id="splat-view"><canvas id="splat-canvas"></canvas></div>
+        <div id="gaussian-overlay-summary" class="gaussian-overlay-summary">
+          <strong>3D map</strong>
+          <span>No Gaussian build started.</span>
+        </div>
       </section>
       <section class="stack">
         <section class="card">
@@ -1837,6 +1820,7 @@ class MissionFrontendRenderer:
     const recordMapElement = document.getElementById('record-map');
     const splatViewElement = document.getElementById('splat-view');
     const splatCanvas = document.getElementById('splat-canvas');
+    const gaussianOverlaySummary = document.getElementById('gaussian-overlay-summary');
     const selectedMapStorageKey = 'amr_sweeper.selected_map_id';
     let mapsCache = [];
     let selectedMapId = window.localStorage.getItem(selectedMapStorageKey) || '';
@@ -1853,6 +1837,11 @@ class MissionFrontendRenderer:
     let boundaryMaskLayer = null;
     let gaussianLayer = null;
     let currentGaussianBuildId = '';
+    let gaussianRequestInFlight = false;
+    let lastMapSnapshot = {{}};
+
+    mapSelect.innerHTML = '<option value="">Loading saved maps...</option>';
+    gaussianOverlaySummary.style.display = 'none';
 
     const map = L.map('record-map', {{ zoomControl: true }}).setView([55.6761, 12.5683], 18);
     L.tileLayer(
@@ -2027,6 +2016,70 @@ class MissionFrontendRenderer:
       return selectedMap()?.gaussian_splat_manifest || data.latest_recorded_map?.gaussian_splat_manifest || null;
     }}
 
+    function gaussianTileState(tile) {{
+      return String(tile?.state || tile?.status || 'pending');
+    }}
+
+    function gaussianTilePercent(tile) {{
+      const quality = Number(tile?.quality_progress_percent);
+      if (Number.isFinite(quality) && quality > 0) {{
+        return Math.max(0, Math.min(100, quality));
+      }}
+      const iterations = Number(tile?.latest_checkpoint_iteration || tile?.iterations || 0);
+      const target = Number(tile?.target_iterations || latestGaussianStatus?.target_iterations_per_tile || 0);
+      if (target > 0) {{
+        return Math.max(0, Math.min(100, (iterations / target) * 100));
+      }}
+      return gaussianTileState(tile) === 'completed' ? 100 : 0;
+    }}
+
+    function gaussianStatusTiles(data) {{
+      const statusTiles = latestGaussianStatus?.tiles || [];
+      if (statusTiles.length) {{
+        return statusTiles;
+      }}
+      const manifest = gaussianSplatManifest(data);
+      return manifest?.tiles || [];
+    }}
+
+    function gaussianStateColor(state) {{
+      if (state === 'completed') {{
+        return {{ fill: 'rgba(34, 197, 94, 0.58)', stroke: 'rgba(134, 239, 172, 0.95)' }};
+      }}
+      if (state === 'running' || state === 'starting') {{
+        return {{ fill: 'rgba(56, 189, 248, 0.52)', stroke: 'rgba(125, 211, 252, 0.96)' }};
+      }}
+      if (state === 'paused' || state === 'pause_requested' || state === 'partial') {{
+        return {{ fill: 'rgba(253, 202, 15, 0.50)', stroke: 'rgba(254, 240, 138, 0.96)' }};
+      }}
+      if (state === 'failed' || state === 'rejected') {{
+        return {{ fill: 'rgba(248, 113, 113, 0.54)', stroke: 'rgba(252, 165, 165, 0.98)' }};
+      }}
+      return {{ fill: 'rgba(148, 163, 184, 0.40)', stroke: 'rgba(203, 213, 225, 0.82)' }};
+    }}
+
+    function updateGaussianOverlaySummary(status, tiles) {{
+      const state = status?.state || (tiles.length ? 'available' : 'idle');
+      const overall = Number(status?.overall_progress_percent || 0);
+      const tileCount = Number(status?.tile_count || tiles.length || 0);
+      const completed = Number(
+        status?.completed_tile_count ||
+        tiles.filter((tile) => gaussianTileState(tile) === 'completed').length
+      );
+      const currentTile = status?.current_tile_id ? ` | current ${{status.current_tile_id}}` : '';
+      const checkpoint = status?.latest_checkpoint_iteration
+        ? ` | checkpoint ${{status.latest_checkpoint_iteration}}/${{status.target_iterations_per_tile || '-'}}`
+        : '';
+      const updated = status?.manifest_updated_at || status?.updated_at || '';
+      const message = status?.message ? ` | ${{status.message}}` : '';
+      gaussianOverlaySummary.classList.toggle('failed', state === 'failed' || state === 'rejected');
+      gaussianOverlaySummary.innerHTML = `
+        <strong>3D map ${{state}}</strong>
+        <span>${{completed}}/${{tileCount}} tiles · ${{overall.toFixed(1)}}%${{currentTile}}${{checkpoint}}</span>
+        <span style="display:block; margin-top: 4px;">${{updated ? `Updated ${{updated}}` : 'Waiting for first checkpoint.'}}${{message}}</span>
+      `;
+    }}
+
     function renderSplatPreview(data) {{
       const context = splatCanvas.getContext('2d');
       const rect = splatViewElement.getBoundingClientRect();
@@ -2039,12 +2092,12 @@ class MissionFrontendRenderer:
       context.clearRect(0, 0, width, height);
       context.fillStyle = '#07090a';
       context.fillRect(0, 0, width, height);
-      const manifest = gaussianSplatManifest(data);
-      const tiles = manifest?.tiles || [];
+      const tiles = gaussianStatusTiles(data);
+      updateGaussianOverlaySummary(latestGaussianStatus, tiles);
       if (!tiles.length) {{
         context.fillStyle = '#c4bb98';
         context.font = '16px Avenir Next, Segoe UI, sans-serif';
-        context.fillText('No Gaussian splat tiles available yet.', 24, 40);
+        context.fillText(latestGaussianStatus?.message || 'No Gaussian splat tiles available yet.', 24, 40);
         return;
       }}
       const bounds = tiles.reduce((acc, tile) => {{
@@ -2061,20 +2114,77 @@ class MissionFrontendRenderer:
       const margin = 42;
       for (const tile of tiles) {{
         const b = tile.bounds || {{}};
+        const state = gaussianTileState(tile);
+        const colors = gaussianStateColor(state);
+        const percent = gaussianTilePercent(tile);
         const x0 = margin + ((Number(b.min_x ?? 0) - bounds.minX) / spanX) * (width - margin * 2);
         const x1 = margin + ((Number(b.max_x ?? 0) - bounds.minX) / spanX) * (width - margin * 2);
         const y0 = height - margin - ((Number(b.min_y ?? 0) - bounds.minY) / spanY) * (height - margin * 2);
         const y1 = height - margin - ((Number(b.max_y ?? 0) - bounds.minY) / spanY) * (height - margin * 2);
-        const count = Number(tile.gaussian_count || tile.capture_count || 1);
-        context.fillStyle = `rgba(56, 189, 248, ${{Math.min(0.82, 0.18 + count / 40)}})`;
-        context.strokeStyle = 'rgba(253, 202, 15, 0.75)';
-        context.lineWidth = 1;
-        context.fillRect(x0, y1, Math.max(6, x1 - x0), Math.max(6, y0 - y1));
-        context.strokeRect(x0, y1, Math.max(6, x1 - x0), Math.max(6, y0 - y1));
+        const tileWidth = Math.max(46, x1 - x0);
+        const tileHeight = Math.max(34, y0 - y1);
+        context.fillStyle = colors.fill;
+        context.strokeStyle = colors.stroke;
+        context.lineWidth = state === 'running' ? 3 : 1.5;
+        context.fillRect(x0, y1, tileWidth, tileHeight);
+        context.strokeRect(x0, y1, tileWidth, tileHeight);
+        context.fillStyle = '#f8fafc';
+        context.font = '12px Avenir Next, Segoe UI, sans-serif';
+        const iteration = Number(tile.latest_checkpoint_iteration || tile.iterations || 0);
+        const target = Number(tile.target_iterations || latestGaussianStatus?.target_iterations_per_tile || 0);
+        context.fillText(`${{Math.round(percent)}}%`, x0 + 6, y1 + 16);
+        context.fillText(`${{iteration}}/${{target || '-'}}`, x0 + 6, y1 + 31);
       }}
       context.fillStyle = '#f5f1df';
       context.font = '15px Avenir Next, Segoe UI, sans-serif';
       context.fillText(`${{tiles.length}} Gaussian tile${{tiles.length === 1 ? '' : 's'}}`, 24, 32);
+    }}
+
+    function formatGaussianStatus(status) {{
+      if (!status || Object.keys(status).length === 0) {{
+        return 'Gaussian splat idle.';
+      }}
+      const state = status.state || 'idle';
+      const message = status.message || '';
+      const tiles = Number(status.tile_count || 0);
+      const completed = Number(status.completed_tile_count || 0);
+      const progress = Number(status.overall_progress_percent || 0);
+      const currentTile = status.current_tile_id ? ` · tile ${{status.current_tile_id}}` : '';
+      const checkpoint = status.latest_checkpoint_iteration
+        ? ` · checkpoint ${{status.latest_checkpoint_iteration}}/${{status.target_iterations_per_tile || '-'}}`
+        : '';
+      return `${{state}} · ${{completed}}/${{tiles}} tiles · ${{progress.toFixed(1)}}%${{currentTile}}${{checkpoint}}${{message ? ` · ${{message}}` : ''}}`;
+    }}
+
+    function updateGaussianControls(status) {{
+      latestGaussianStatus = status || latestGaussianStatus || {{}};
+      currentGaussianBuildId = latestGaussianStatus.build_id || currentGaussianBuildId || '';
+      const state = latestGaussianStatus.state || 'idle';
+      const canResume = Boolean(latestGaussianStatus.can_resume) || ['paused', 'partial', 'failed'].includes(state);
+      buildGaussianButton.disabled = gaussianRequestInFlight;
+      buildGaussianButton.classList.toggle('stop', state === 'running' || state === 'pause_requested');
+      buildGaussianButton.classList.toggle('secondary', !(state === 'running' || state === 'pause_requested'));
+      if (gaussianRequestInFlight) {{
+        buildGaussianButton.textContent = 'Working...';
+      }} else if (state === 'running' || state === 'pause_requested') {{
+        buildGaussianButton.textContent = 'Stop build';
+      }} else if (canResume) {{
+        buildGaussianButton.textContent = 'Resume building 3D map';
+      }} else {{
+        buildGaussianButton.textContent = 'Build 3D map';
+      }}
+      gaussianBuildStatus.textContent = formatGaussianStatus(latestGaussianStatus);
+      renderSplatPreview(lastMapSnapshot);
+    }}
+
+    async function refreshGaussianStatus() {{
+      const response = await fetch('/api/v1/gaussian-splats/status', {{ cache: 'no-store' }});
+      const data = await response.json();
+      if (!response.ok || data.success === false) {{
+        throw new Error(data.message || `Gaussian status failed with HTTP ${{response.status}}`);
+      }}
+      updateGaussianControls(data.status || {{}});
+      return latestGaussianStatus;
     }}
 
     function populateMapSelect() {{
@@ -2086,6 +2196,9 @@ class MissionFrontendRenderer:
         mapSelect.appendChild(option);
       }}
       mapSelect.value = selectedMapId;
+      if (mapsCache.length === 0 && !selectedMapId) {{
+        latestMapMessage.textContent = 'No saved maps yet. Latest recording remains available when captured.';
+      }}
     }}
 
     function applySelectedMapToEditor() {{
@@ -2107,10 +2220,15 @@ class MissionFrontendRenderer:
     async function loadRecordMapSnapshot() {{
       const response = await fetch('/api/v1/maps', {{ cache: 'no-store' }});
       const data = await response.json();
+      if (!response.ok || data.success === false) {{
+        throw new Error(data.message || `Map load failed with HTTP ${{response.status}}`);
+      }}
+      lastMapSnapshot = data;
       mapsCache = data.maps || [];
       if (selectedMapId && !mapsCache.some((entry) => entry.map_id === selectedMapId)) {{
         selectedMapId = '';
         window.localStorage.removeItem(selectedMapStorageKey);
+        setBanner('warn', 'Previously selected saved map is no longer available.');
       }}
       populateMapSelect();
       applySelectedMapToEditor();
@@ -2211,37 +2329,53 @@ class MissionFrontendRenderer:
     }});
 
     buildGaussianButton.addEventListener('click', async () => {{
-      const state = latestGaussianStatus?.state || 'idle';
-      let data;
-      if (state === 'running' || state === 'pause_requested') {{
-        gaussianBuildStatus.textContent = 'Stopping 3D map build...';
-        data = await postJson('/api/v1/gaussian-splats/pause', {{
-          build_id: currentGaussianBuildId,
-          mode: 'user_pause'
-        }});
-      }} else if (latestGaussianStatus?.can_resume || ['paused', 'partial', 'failed'].includes(state)) {{
-        gaussianBuildStatus.textContent = 'Resuming 3D map build...';
-        data = await postJson('/api/v1/gaussian-splats/resume', {{
-          build_id: currentGaussianBuildId,
-          additional_iterations_per_tile: 0,
-          auto_stop_enabled: false
-        }});
-      }} else {{
-        gaussianBuildStatus.textContent = 'Starting 3D map build...';
-        const snapshot = await loadRecordMapSnapshot();
-        const latest = snapshot.latest_recorded_map || {{}};
-        const mapEntry = selectedMap();
-        data = await postJson('/api/v1/gaussian-splats/build', {{
-          map_id: selectedMapId || '',
-          mission_id: mapEntry?.map_id || latest.mission_id || 'RecordMap',
-          mission_execution_directory: mapEntry?.directory || '',
-          gaussian_manifest_file: mapEntry?.gaussian_manifest_file || latest.gaussian_manifest_file || '',
-          force: true
-        }});
+      if (gaussianRequestInFlight) {{
+        return;
       }}
-      setBanner(data.success ? 'ok' : 'error', data.message || '3D map build request completed');
-      gaussianBuildStatus.textContent = data.message || '3D map build request completed';
-      await refreshGaussianStatus();
+      gaussianRequestInFlight = true;
+      updateGaussianControls(latestGaussianStatus);
+      const state = latestGaussianStatus?.state || 'idle';
+      try {{
+        let data;
+        if (state === 'running' || state === 'pause_requested') {{
+          gaussianBuildStatus.textContent = 'Stopping 3D map build...';
+          data = await postJson('/api/v1/gaussian-splats/pause', {{
+            build_id: currentGaussianBuildId,
+            mode: 'user_pause'
+          }});
+        }} else if (latestGaussianStatus?.can_resume || ['paused', 'partial', 'failed'].includes(state)) {{
+          gaussianBuildStatus.textContent = 'Resuming 3D map build...';
+          data = await postJson('/api/v1/gaussian-splats/resume', {{
+            build_id: currentGaussianBuildId,
+            additional_iterations_per_tile: 0,
+            auto_stop_enabled: false
+          }});
+        }} else {{
+          gaussianBuildStatus.textContent = 'Starting 3D map build...';
+          const snapshot = await loadRecordMapSnapshot();
+          const latest = snapshot.latest_recorded_map || {{}};
+          const mapEntry = selectedMap();
+          data = await postJson('/api/v1/gaussian-splats/build', {{
+            map_id: selectedMapId || '',
+            mission_id: mapEntry?.map_id || latest.mission_id || 'RecordMap',
+            mission_execution_directory: mapEntry?.directory || '',
+            gaussian_manifest_file: mapEntry?.gaussian_manifest_file || latest.gaussian_manifest_file || '',
+            force: true
+          }});
+        }}
+        if (data.status) {{
+          updateGaussianControls(data.status);
+        }}
+        setBanner(data.success ? 'ok' : 'error', data.message || '3D map build request completed');
+        gaussianBuildStatus.textContent = data.status ? formatGaussianStatus(data.status) : (data.message || '3D map build request completed');
+        await refreshGaussianStatus();
+      }} catch (error) {{
+        setBanner('error', error.message || '3D map build request failed');
+        gaussianBuildStatus.textContent = error.message || '3D map build request failed';
+      }} finally {{
+        gaussianRequestInFlight = false;
+        updateGaussianControls(latestGaussianStatus);
+      }}
     }});
 
     document.getElementById('save-button').addEventListener('click', async () => {{
@@ -2285,6 +2419,7 @@ class MissionFrontendRenderer:
       view3dButton.classList.add('secondary');
       recordMapElement.style.display = '';
       splatViewElement.style.display = 'none';
+      gaussianOverlaySummary.style.display = 'none';
       window.setTimeout(() => map.invalidateSize(), 0);
     }});
     view3dButton.addEventListener('click', () => {{
@@ -2293,20 +2428,36 @@ class MissionFrontendRenderer:
       view2dButton.classList.add('secondary');
       recordMapElement.style.display = 'none';
       splatViewElement.style.display = 'block';
-      renderSplatPreview({{ latest_recorded_map: selectedMap() || {{}} }});
+      gaussianOverlaySummary.style.display = '';
+      renderSplatPreview(lastMapSnapshot);
       setBanner('ok', '3D view uses the saved tiled Gaussian splat manifest when available.');
     }});
 
     ensureDefaultPatternSelection();
-    refreshGaussianStatus().catch(() => null);
+    refreshGaussianStatus().catch((error) => {{
+      latestGaussianStatus = {{
+        state: 'unknown',
+        message: error.message || 'Failed to load Gaussian build status',
+      }};
+      updateGaussianControls(latestGaussianStatus);
+    }});
     loadRecordMapSnapshot().catch((error) => {{
+      mapSelect.innerHTML = '<option value="">Latest recording</option>';
+      latestMapMessage.textContent = error.message || 'Failed to load saved maps.';
       setBanner('error', error.message || 'Failed to load record map page state');
     }});
     window.setInterval(() => {{
       loadRecordMapSnapshot().catch(() => null);
     }}, 4000);
     window.setInterval(() => {{
-      refreshGaussianStatus().catch(() => null);
+      refreshGaussianStatus().catch((error) => {{
+        latestGaussianStatus = {{
+          ...latestGaussianStatus,
+          state: latestGaussianStatus.state || 'unknown',
+          message: error.message || 'Failed to refresh Gaussian build status',
+        }};
+        updateGaussianControls(latestGaussianStatus);
+      }});
     }}, 2000);
   </script>
 </body>

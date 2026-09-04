@@ -928,6 +928,7 @@ def main() -> int:
     parser.add_argument("--min-relative-loss-improvement", type=float, default=0.0025)
     parser.add_argument("--result-file", required=True)
     args = parser.parse_args()
+    output_directory = Path(args.output_directory).expanduser().resolve()
 
     try:
         if args.tile_size_meters <= 0.0:
@@ -938,7 +939,6 @@ def main() -> int:
             raise RuntimeError("max_image_dimension must be positive")
         if args.checkpoint_interval <= 0:
             raise RuntimeError("checkpoint_interval must be positive")
-        output_directory = Path(args.output_directory).expanduser().resolve()
         manifest = build_splat(
             Path(args.capture_manifest).expanduser().resolve(),
             output_directory,
@@ -970,7 +970,21 @@ def main() -> int:
             "artifact_manifest_file": "",
             "tile_count": 0,
             "completed_tile_count": 0,
+            "status": "failed",
         }
+        try:
+            _write_json_atomic(output_directory / "progress.json", {
+                "state": "failed",
+                "message": str(exc),
+                "artifact_manifest_file": str(output_directory / "gaussian_splat_manifest.json"),
+                "tile_count": 0,
+                "completed_tile_count": 0,
+                "overall_progress_percent": 0.0,
+                "tiles": [],
+                "updated_at": _utc_now(),
+            })
+        except Exception:
+            pass
     Path(args.result_file).write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     return 0 if result["success"] else 1
 

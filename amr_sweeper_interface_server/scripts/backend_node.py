@@ -1338,12 +1338,14 @@ class MissionBackendNode(Node):
                 self._link_map_gaussian_splat_manifest(map_id, response.artifact_manifest_file)
             else:
                 self._link_latest_gaussian_splat_manifest(response.artifact_manifest_file)
+        status = self._safe_gaussian_splat_status()
         return {
             "success": bool(response.success),
             "message": response.message,
             "artifact_manifest_file": response.artifact_manifest_file,
             "tile_count": int(response.tile_count),
             "completed_tile_count": int(response.completed_tile_count),
+            "status": status,
         }
 
     def _gaussian_splat_build_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -1357,14 +1359,15 @@ class MissionBackendNode(Node):
                 raise RuntimeError(f"Map '{map_id}' was not found")
             metadata_file = map_directory / "map.json"
             metadata = json.loads(metadata_file.read_text(encoding="utf-8")) if metadata_file.exists() else {}
-            manifest = Path(str(metadata.get("gaussian_manifest_file", "")))
-            if not manifest.exists():
+            manifest_value = str(metadata.get("gaussian_manifest_file", "") or "")
+            manifest = Path(manifest_value) if manifest_value else None
+            if not manifest or not manifest.exists():
                 fallback = map_directory / "gaussian" / "manifest.json"
-                manifest = fallback if fallback.exists() else manifest
+                manifest = fallback if fallback.exists() else None
             request_payload["map_id"] = map_id
             request_payload["mission_id"] = str(request_payload.get("mission_id") or map_id)
             request_payload["mission_execution_directory"] = str(map_directory)
-            request_payload["gaussian_manifest_file"] = str(manifest)
+            request_payload["gaussian_manifest_file"] = str(manifest) if manifest else ""
             return request_payload
 
         if not request_payload.get("gaussian_manifest_file"):
@@ -1381,7 +1384,11 @@ class MissionBackendNode(Node):
             timeout_sec=65.0,
             service_name=self._pause_gaussian_splat_build_service,
         )
-        return {"success": bool(response.success), "message": response.message}
+        return {
+            "success": bool(response.success),
+            "message": response.message,
+            "status": self._safe_gaussian_splat_status(),
+        }
 
     def resume_gaussian_splat(self, payload: dict[str, Any]) -> dict[str, Any]:
         request = ResumeGaussianSplatBuild.Request()
@@ -1399,7 +1406,11 @@ class MissionBackendNode(Node):
             timeout_sec=20.0,
             service_name=self._resume_gaussian_splat_build_service,
         )
-        return {"success": bool(response.success), "message": response.message}
+        return {
+            "success": bool(response.success),
+            "message": response.message,
+            "status": self._safe_gaussian_splat_status(),
+        }
 
     def gaussian_splat_status(self) -> dict[str, Any]:
         response = self._call_service(
@@ -1416,6 +1427,12 @@ class MissionBackendNode(Node):
             "success": bool(response.success),
             "status": status,
         }
+
+    def _safe_gaussian_splat_status(self) -> dict[str, Any]:
+        try:
+            return self.gaussian_splat_status().get("status", {})
+        except Exception as exc:  # noqa: BLE001
+            return {"state": "unknown", "message": str(exc)}
 
     def stop_active_mission(self, payload: dict[str, Any]) -> dict[str, Any]:
         request = EndMission.Request()
