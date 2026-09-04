@@ -2279,7 +2279,11 @@ class MissionFrontendRenderer:
         headers: {{ 'Content-Type': 'application/json' }},
         body: JSON.stringify(body || {{}})
       }});
-      return response.json();
+      const data = await response.json();
+      if (!response.ok) {{
+        throw new Error(data.message || `${{path}} failed with HTTP ${{response.status}}`);
+      }}
+      return data;
     }}
 
     mapSelect.addEventListener('change', async () => {{

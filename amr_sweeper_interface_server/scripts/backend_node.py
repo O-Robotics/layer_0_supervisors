@@ -2422,12 +2422,17 @@ class MissionBackendNode(Node):
 
     @staticmethod
     def _load_geojson_feature_collection(path: Path) -> dict[str, Any] | None:
-        if not path.exists():
+        if not path or not path.exists() or not path.is_file():
             return None
         try:
             return json.loads(path.read_text(encoding="utf-8"))
         except Exception:
             return None
+
+    @staticmethod
+    def _optional_path(value: Any) -> Path | None:
+        path_text = str(value or "").strip()
+        return Path(path_text) if path_text else None
 
     @staticmethod
     def _load_optional_json_object(path: Path) -> dict[str, Any]:
@@ -2477,26 +2482,26 @@ class MissionBackendNode(Node):
         if latest_metadata_file.exists():
             try:
                 latest_metadata = json.loads(latest_metadata_file.read_text(encoding="utf-8"))
-                route_path = Path(latest_metadata.get("recorded_work_area_route_file", ""))
-                navsat_path = Path(latest_metadata.get("recorded_work_area_navsat_file", ""))
+                route_path = self._optional_path(latest_metadata.get("recorded_work_area_route_file"))
+                navsat_path = self._optional_path(latest_metadata.get("recorded_work_area_navsat_file"))
                 gaussian_manifest_file = str(latest_metadata.get("gaussian_manifest_file", ""))
                 gaussian_splat_manifest_file = str(
                     latest_metadata.get("gaussian_splat_manifest_file", "")
                 )
-                gaussian_manifest_path = Path(gaussian_manifest_file)
-                gaussian_splat_manifest_path = Path(gaussian_splat_manifest_file)
+                gaussian_manifest_path = self._optional_path(gaussian_manifest_file)
+                gaussian_splat_manifest_path = self._optional_path(gaussian_splat_manifest_file)
                 if route_path:
                     latest_route_geojson = self._load_geojson_feature_collection(route_path)
                 if navsat_path:
                     latest_navsat_geojson = self._load_geojson_feature_collection(navsat_path)
-                if gaussian_manifest_file and gaussian_manifest_path.is_file():
+                if gaussian_manifest_path and gaussian_manifest_path.is_file():
                     try:
                         latest_metadata["gaussian_manifest"] = self._load_optional_json_object(
                             gaussian_manifest_path
                         )
                     except Exception as exc:  # noqa: BLE001
                         latest_metadata["gaussian_error"] = str(exc)
-                if gaussian_splat_manifest_file and gaussian_splat_manifest_path.is_file():
+                if gaussian_splat_manifest_path and gaussian_splat_manifest_path.is_file():
                     try:
                         latest_metadata["gaussian_splat_manifest"] = self._load_optional_json_object(
                             gaussian_splat_manifest_path
@@ -2525,8 +2530,8 @@ class MissionBackendNode(Node):
         if latest_metadata_file.exists():
             try:
                 latest_metadata = json.loads(latest_metadata_file.read_text(encoding="utf-8"))
-                manifest = Path(str(latest_metadata.get("gaussian_manifest_file", "")))
-                if manifest.exists():
+                manifest = self._optional_path(latest_metadata.get("gaussian_manifest_file"))
+                if manifest and manifest.exists() and manifest.is_file():
                     return str(manifest)
             except Exception:
                 pass
@@ -2680,7 +2685,15 @@ class MissionBackendNode(Node):
                     "name": metadata_file.parent.name,
                     "error": str(exc),
                 }
-            maps.append(self._map_payload_from_metadata(metadata_file.parent, metadata))
+            try:
+                maps.append(self._map_payload_from_metadata(metadata_file.parent, metadata))
+            except Exception as exc:  # noqa: BLE001
+                maps.append({
+                    "map_id": metadata_file.parent.name,
+                    "name": metadata_file.parent.name,
+                    "directory": str(metadata_file.parent),
+                    "error": str(exc),
+                })
 
         latest_snapshot = self.record_map_snapshot()
         return {
@@ -2775,15 +2788,17 @@ class MissionBackendNode(Node):
                 destination = map_directory / filename
                 shutil.copyfile(source_path, destination)
                 metadata[key] = str(destination)
-        gaussian_manifest = Path(str(latest_metadata.get("gaussian_manifest_file", "")))
-        if gaussian_manifest.exists() and gaussian_manifest.is_file():
+        gaussian_manifest = self._optional_path(latest_metadata.get("gaussian_manifest_file"))
+        if gaussian_manifest and gaussian_manifest.exists() and gaussian_manifest.is_file():
             gaussian_directory = map_directory / "gaussian"
             if gaussian_directory.exists():
                 shutil.rmtree(gaussian_directory)
             shutil.copytree(gaussian_manifest.parent, gaussian_directory)
             metadata["gaussian_manifest_file"] = str(gaussian_directory / "manifest.json")
-        gaussian_splat_manifest = Path(str(latest_metadata.get("gaussian_splat_manifest_file", "")))
-        if gaussian_splat_manifest.exists() and gaussian_splat_manifest.is_file():
+        gaussian_splat_manifest = self._optional_path(
+            latest_metadata.get("gaussian_splat_manifest_file")
+        )
+        if gaussian_splat_manifest and gaussian_splat_manifest.exists() and gaussian_splat_manifest.is_file():
             gaussian_splat_directory = map_directory / "gaussian_splat"
             if gaussian_splat_directory.exists():
                 shutil.rmtree(gaussian_splat_directory)
@@ -2808,28 +2823,28 @@ class MissionBackendNode(Node):
         payload.setdefault("map_id", map_directory.name)
         payload.setdefault("name", payload["map_id"])
         payload["directory"] = str(map_directory)
-        route_path = Path(str(payload.get("recorded_work_area_route_file", "")))
-        navsat_path = Path(str(payload.get("recorded_work_area_navsat_file", "")))
+        route_path = self._optional_path(payload.get("recorded_work_area_route_file"))
+        navsat_path = self._optional_path(payload.get("recorded_work_area_navsat_file"))
         zone_set_path = map_directory / "zoneSet.json"
         gaussian_manifest_file = str(payload.get("gaussian_manifest_file", ""))
         gaussian_splat_manifest_file = str(payload.get("gaussian_splat_manifest_file", ""))
-        gaussian_manifest_path = Path(gaussian_manifest_file)
-        gaussian_splat_manifest_path = Path(gaussian_splat_manifest_file)
-        if route_path.exists():
+        gaussian_manifest_path = self._optional_path(gaussian_manifest_file)
+        gaussian_splat_manifest_path = self._optional_path(gaussian_splat_manifest_file)
+        if route_path and route_path.exists():
             payload["route_geojson"] = self._load_geojson_feature_collection(route_path)
-        if navsat_path.exists():
+        if navsat_path and navsat_path.exists():
             payload["navsat_geojson"] = self._load_geojson_feature_collection(navsat_path)
         if zone_set_path.exists():
             try:
                 payload["zoneSet"] = json.loads(zone_set_path.read_text(encoding="utf-8"))
             except Exception as exc:  # noqa: BLE001
                 payload["zoneSet_error"] = str(exc)
-        if gaussian_manifest_file and gaussian_manifest_path.is_file():
+        if gaussian_manifest_path and gaussian_manifest_path.is_file():
             try:
                 payload["gaussian_manifest"] = self._load_optional_json_object(gaussian_manifest_path)
             except Exception as exc:  # noqa: BLE001
                 payload["gaussian_error"] = str(exc)
-        if gaussian_splat_manifest_file and gaussian_splat_manifest_path.is_file():
+        if gaussian_splat_manifest_path and gaussian_splat_manifest_path.is_file():
             try:
                 payload["gaussian_splat_manifest"] = self._load_optional_json_object(
                     gaussian_splat_manifest_path
