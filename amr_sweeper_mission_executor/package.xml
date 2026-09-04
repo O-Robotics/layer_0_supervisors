@@ -19,7 +19,7 @@
   <exec_depend>launch_ros</exec_depend>
   <depend>amr_sweeper_fsm</depend>
   <depend>amr_sweeper_safety_msgs</depend>
-  <depend>amr_sweeper_vda5050_parser</depend>
+  <depend>amr_sweeper_mission_builder</depend>
   <depend>geometry_msgs</depend>
   <depend>nav_msgs</depend>
   <depend>rclcpp</depend>

@@ -32,22 +32,27 @@ profiles:
         fault_transition_profile: 400
 
       processes:
-        - name: "amr_sweeper_vda5050_parser"
+        - name: "amr_sweeper_mission_builder"
           importance: "degraded"
           startup:
-            exec: "ros2 launch amr_sweeper_vda5050_parser amr_sweeper_vda5050_parser.launch.py"
+            exec: "ros2 launch amr_sweeper_mission_builder amr_sweeper_mission_builder.launch.py"
             args:
               - "namespace:={ns}"
               - "missions_directory:=missions/database"
               - "auto_build_on_start:=true"
               - "watch_for_updates:=true"
+              - "launch_gaussian_splat_builder_node:=true"
             ready:
               - type: "service"
                 target: "vda5050_parser_node/get_parameters"
                 required: true
+              - type: "service"
+                target: "gaussian_splat_builder_node/get_parameters"
+                required: true
             window_ms: 6000
           rosout_triggers:
             - "node=vda5050_parser_node;level>=ERROR;action=DEGRADED"
+            - "node=gaussian_splat_builder_node;level>=ERROR;action=DEGRADED"
           errors:
             on_readiness_fail: "DEGRADED"
             on_unexpected_exit: "DEGRADED"
@@ -158,22 +163,27 @@ profiles:
         fault_transition_profile: 400
 
       processes:
-        - name: "amr_sweeper_vda5050_parser"
+        - name: "amr_sweeper_mission_builder"
           importance: "degraded"
           startup:
-            exec: "ros2 launch amr_sweeper_vda5050_parser amr_sweeper_vda5050_parser.launch.py"
+            exec: "ros2 launch amr_sweeper_mission_builder amr_sweeper_mission_builder.launch.py"
             args:
               - "namespace:={ns}"
               - "missions_directory:=missions/database"
               - "auto_build_on_start:=true"
               - "watch_for_updates:=true"
+              - "launch_gaussian_splat_builder_node:=true"
             ready:
               - type: "service"
                 target: "vda5050_parser_node/get_parameters"
                 required: true
+              - type: "service"
+                target: "gaussian_splat_builder_node/get_parameters"
+                required: true
             window_ms: 6000
           rosout_triggers:
             - "node=vda5050_parser_node;level>=ERROR;action=DEGRADED"
+            - "node=gaussian_splat_builder_node;level>=ERROR;action=DEGRADED"
           errors:
             on_readiness_fail: "DEGRADED"
             on_unexpected_exit: "DEGRADED"
@@ -320,19 +330,23 @@ profiles:
         fault_transition_profile: 400
 
       processes:
-        - name: "amr_sweeper_vda5050_parser"
+        - name: "amr_sweeper_mission_builder"
           importance: "degraded"
           startup:
-            exec: "ros2 launch amr_sweeper_vda5050_parser amr_sweeper_vda5050_parser.launch.py"
+            exec: "ros2 launch amr_sweeper_mission_builder amr_sweeper_mission_builder.launch.py"
             args:
               - "namespace:={ns}"
               - "use_sim_time:=true"
               - "missions_directory:=missions/database"
               - "auto_build_on_start:=true"
               - "watch_for_updates:=true"
+              - "launch_gaussian_splat_builder_node:=true"
             ready:
               - type: "service"
                 target: "vda5050_parser_node/get_parameters"
+                required: true
+              - type: "service"
+                target: "gaussian_splat_builder_node/get_parameters"
                 required: true
             window_ms: 6000
           errors:

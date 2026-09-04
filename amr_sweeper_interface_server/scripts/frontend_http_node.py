@@ -1,17 +1,32 @@
 #!/usr/bin/env python3
+#
+# Copyright 2026 O-Robotics
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 from __future__ import annotations
 
 import errno
-import json
-import socket
-import threading
-import time
-import urllib.parse
 from html import escape
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import json
+from pathlib import Path
+import socket
+import threading
+import time
 from typing import Any
+import urllib.parse
 
 import cv2
 import numpy as np
@@ -26,14 +41,15 @@ DEFAULT_BACKEND_SOCKET_PATH = "/tmp/amr_sweeper_interface_backend.sock"
 
 
 class MissionThreadingHTTPServer(ThreadingHTTPServer):
+
     allow_reuse_address = True
     daemon_threads = True
 
 
 class MissionFrontendRenderer:
+
     def render_index_html(self) -> str:
         title = escape(self._site_title)
-        public_base_url = escape(self._public_base_url)
         return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -700,6 +716,7 @@ class MissionFrontendRenderer:
 </body>
 </html>
 """
+
     def render_calendar_html(self) -> str:
         title = escape(self._site_title)
         return f"""<!DOCTYPE html>
@@ -1232,6 +1249,53 @@ class MissionFrontendRenderer:
       return response.json();
     }}
 
+    function updateGaussianControls(status) {{
+      currentGaussianBuildId = status?.build_id || currentGaussianBuildId || '';
+      latestGaussianStatus = status || {{}};
+      const state = status?.state || 'idle';
+      if (state === 'running' || state === 'pause_requested') {{
+        buildGaussianButton.textContent = 'Stop build';
+        buildGaussianButton.classList.add('stop');
+        buildGaussianButton.classList.remove('secondary');
+      }} else if (status?.can_resume || ['paused', 'partial', 'failed'].includes(state)) {{
+        buildGaussianButton.textContent = 'Resume building 3D map';
+        buildGaussianButton.classList.remove('stop');
+        buildGaussianButton.classList.add('secondary');
+      }} else {{
+        buildGaussianButton.textContent = 'Build 3D map';
+        buildGaussianButton.classList.remove('stop');
+        buildGaussianButton.classList.add('secondary');
+      }}
+    }}
+
+    function formatGaussianStatus(status) {{
+      if (!status || !status.state) {{
+        return 'Gaussian splat idle.';
+      }}
+      const state = status.state;
+      const tile = status.current_tile_id ? ` | tile ${{status.current_tile_id}}` : '';
+      const iter = status.current_iteration || status.latest_checkpoint_iteration
+        ? ` | iteration ${{status.current_iteration || 0}}/${{status.target_iterations_per_tile || '-'}}`
+        : '';
+      const quality = Number(status.quality_progress_percent || 0);
+      const qualityText = quality > 0 ? ` | quality ~${{quality.toFixed(1)}}%` : '';
+      return `Gaussian ${{state}}${{tile}}${{iter}}${{qualityText}}`;
+    }}
+
+    async function refreshGaussianStatus() {{
+      const response = await fetch('/api/v1/gaussian-splats/status', {{ cache: 'no-store' }});
+      const data = await response.json();
+      const status = data.status || {{}};
+      updateGaussianControls(status);
+      if (status.state && status.state !== 'idle') {{
+        gaussianBuildStatus.textContent = formatGaussianStatus(status);
+      }}
+      if (currentView === '3d') {{
+        await loadRecordMapSnapshot();
+      }}
+      return status;
+    }}
+
     function renderPlannedEntries(entries) {{
       const list = document.getElementById('planned-entry-list');
       list.innerHTML = '';
@@ -1531,6 +1595,18 @@ class MissionFrontendRenderer:
       min-height: 620px;
       border-radius: 20px;
     }}
+    #splat-view {{
+      display: none;
+      width: 100%;
+      min-height: 620px;
+      border-radius: 20px;
+      background: #07090a;
+    }}
+    #splat-canvas {{
+      display: block;
+      width: 100%;
+      height: 620px;
+    }}
     .stack {{
       display: grid;
       gap: 16px;
@@ -1656,14 +1732,17 @@ class MissionFrontendRenderer:
     <section class="layout">
       <section class="card map-shell">
         <div id="record-map"></div>
+        <div id="splat-view"><canvas id="splat-canvas"></canvas></div>
       </section>
       <section class="stack">
         <section class="card">
           <div class="toolbar">
             <div id="recording-chip" class="status-chip idle">RecordMap idle</div>
             <button id="save-map-button">Save As Map</button>
+            <button id="build-gaussian-button" class="secondary">Build 3D map</button>
             <button id="delete-map-button" class="stop">Delete Map</button>
           </div>
+          <div id="gaussian-build-status" class="muted" style="margin-top: 12px;">Gaussian splat idle.</div>
           <div class="muted" style="margin-top: 12px;">New recordings are started from Teleop. Saved maps persist here after later recordings replace the latest capture.</div>
         </section>
 
@@ -1743,6 +1822,7 @@ class MissionFrontendRenderer:
     const latestRun = document.getElementById('latest-run');
     const latestObstacles = document.getElementById('latest-obstacles');
     const latestMapMessage = document.getElementById('latest-map-message');
+    const gaussianBuildStatus = document.getElementById('gaussian-build-status');
     const patternCountdown = document.getElementById('pattern-countdown');
     const patternInputs = [...document.querySelectorAll('input[name="pattern"]')];
     const mapSelect = document.getElementById('map-select');
@@ -1753,6 +1833,10 @@ class MissionFrontendRenderer:
     const layerToggles = [...document.querySelectorAll('.layer-toggle')];
     const view2dButton = document.getElementById('view-2d-button');
     const view3dButton = document.getElementById('view-3d-button');
+    const buildGaussianButton = document.getElementById('build-gaussian-button');
+    const recordMapElement = document.getElementById('record-map');
+    const splatViewElement = document.getElementById('splat-view');
+    const splatCanvas = document.getElementById('splat-canvas');
     let mapsCache = [];
     let selectedMapId = '';
     let currentView = '2d';
@@ -1760,12 +1844,14 @@ class MissionFrontendRenderer:
     let countdownTimer = null;
     let countdownSeconds = 20;
     let lastLatestRunId = '';
+    let latestGaussianStatus = {{}};
     let activePolyline = null;
     let latestPolyline = null;
     let perimeterPolyline = null;
     let currentMarker = null;
     let boundaryMaskLayer = null;
     let gaussianLayer = null;
+    let currentGaussianBuildId = '';
 
     const map = L.map('record-map', {{ zoomControl: true }}).setView([55.6761, 12.5683], 18);
     L.tileLayer(
@@ -1933,6 +2019,61 @@ class MissionFrontendRenderer:
       if (bounds.length > 0) {{
         map.fitBounds(bounds, {{ padding: [30, 30], maxZoom: 19 }});
       }}
+      renderSplatPreview(data);
+    }}
+
+    function gaussianSplatManifest(data) {{
+      return selectedMap()?.gaussian_splat_manifest || data.latest_recorded_map?.gaussian_splat_manifest || null;
+    }}
+
+    function renderSplatPreview(data) {{
+      const context = splatCanvas.getContext('2d');
+      const rect = splatViewElement.getBoundingClientRect();
+      const width = Math.max(320, Math.floor(rect.width || splatViewElement.clientWidth || 640));
+      const height = Math.max(320, Math.floor(rect.height || 620));
+      if (splatCanvas.width !== width || splatCanvas.height !== height) {{
+        splatCanvas.width = width;
+        splatCanvas.height = height;
+      }}
+      context.clearRect(0, 0, width, height);
+      context.fillStyle = '#07090a';
+      context.fillRect(0, 0, width, height);
+      const manifest = gaussianSplatManifest(data);
+      const tiles = manifest?.tiles || [];
+      if (!tiles.length) {{
+        context.fillStyle = '#c4bb98';
+        context.font = '16px Avenir Next, Segoe UI, sans-serif';
+        context.fillText('No Gaussian splat tiles available yet.', 24, 40);
+        return;
+      }}
+      const bounds = tiles.reduce((acc, tile) => {{
+        const b = tile.bounds || {{}};
+        return {{
+          minX: Math.min(acc.minX, Number(b.min_x ?? 0)),
+          minY: Math.min(acc.minY, Number(b.min_y ?? 0)),
+          maxX: Math.max(acc.maxX, Number(b.max_x ?? 0)),
+          maxY: Math.max(acc.maxY, Number(b.max_y ?? 0)),
+        }};
+      }}, {{ minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity }});
+      const spanX = Math.max(1, bounds.maxX - bounds.minX);
+      const spanY = Math.max(1, bounds.maxY - bounds.minY);
+      const margin = 42;
+      for (const tile of tiles) {{
+        const b = tile.bounds || {{}};
+        const x0 = margin + ((Number(b.min_x ?? 0) - bounds.minX) / spanX) * (width - margin * 2);
+        const x1 = margin + ((Number(b.max_x ?? 0) - bounds.minX) / spanX) * (width - margin * 2);
+        const y0 = height - margin - ((Number(b.min_y ?? 0) - bounds.minY) / spanY) * (height - margin * 2);
+        const y1 = height - margin - ((Number(b.max_y ?? 0) - bounds.minY) / spanY) * (height - margin * 2);
+        const count = Number(tile.gaussian_count || tile.capture_count || 1);
+        context.fillStyle = `rgba(56, 189, 248, ${{Math.min(0.82, 0.18 + count / 40)}})`;
+        context.strokeStyle = 'rgba(253, 202, 15, 0.75)';
+        context.lineWidth = 1;
+        context.fillRect(x0, y1, Math.max(6, x1 - x0), Math.max(6, y0 - y1));
+        context.strokeRect(x0, y1, Math.max(6, x1 - x0), Math.max(6, y0 - y1));
+      }}
+      context.fillStyle = '#f5f1df';
+      context.font = '15px Avenir Next, Segoe UI, sans-serif';
+      context.fillText(`${{tiles.length}} Gaussian tile${{tiles.length === 1 ? '' : 's'}}`, 24, 32);
     }}
 
     function populateMapSelect() {{
@@ -1978,6 +2119,12 @@ class MissionFrontendRenderer:
       if (latest && !latest.error) {{
         latestRun.textContent = latest.run_started_at || 'Latest recording available';
         latestObstacles.textContent = String(latest.recorded_obstacle_count ?? '-');
+        if (!latestGaussianStatus?.state || latestGaussianStatus.state === 'idle') {{
+          const splat = selectedMap()?.gaussian_splat_manifest || latest.gaussian_splat_manifest;
+          gaussianBuildStatus.textContent = splat
+            ? `3D map ready: ${{splat.tile_count || 0}} tile(s).`
+            : 'Gaussian capture ready for manual 3D map build.';
+        }}
         latestMapMessage.textContent = selectedMapId
           ? 'Editing saved map metadata and display preferences.'
           : 'Latest recording is ready to save as a named map.';
@@ -1989,6 +2136,7 @@ class MissionFrontendRenderer:
       }} else {{
         latestRun.textContent = 'No recording captured yet.';
         latestObstacles.textContent = '-';
+        gaussianBuildStatus.textContent = 'Gaussian splat idle.';
         latestMapMessage.textContent = selectedMapId
           ? 'Editing saved map metadata and display preferences.'
           : 'Record from Teleop to create a new latest map.';
@@ -2051,6 +2199,40 @@ class MissionFrontendRenderer:
       await loadRecordMapSnapshot();
     }});
 
+    buildGaussianButton.addEventListener('click', async () => {{
+      const state = latestGaussianStatus?.state || 'idle';
+      let data;
+      if (state === 'running' || state === 'pause_requested') {{
+        gaussianBuildStatus.textContent = 'Stopping 3D map build...';
+        data = await postJson('/api/v1/gaussian-splats/pause', {{
+          build_id: currentGaussianBuildId,
+          mode: 'user_pause'
+        }});
+      }} else if (latestGaussianStatus?.can_resume || ['paused', 'partial', 'failed'].includes(state)) {{
+        gaussianBuildStatus.textContent = 'Resuming 3D map build...';
+        data = await postJson('/api/v1/gaussian-splats/resume', {{
+          build_id: currentGaussianBuildId,
+          additional_iterations_per_tile: 0,
+          auto_stop_enabled: false
+        }});
+      }} else {{
+        gaussianBuildStatus.textContent = 'Starting 3D map build...';
+        const snapshot = await loadRecordMapSnapshot();
+        const latest = snapshot.latest_recorded_map || {{}};
+        const mapEntry = selectedMap();
+        data = await postJson('/api/v1/gaussian-splats/build', {{
+          map_id: selectedMapId || '',
+          mission_id: mapEntry?.map_id || latest.mission_id || 'RecordMap',
+          mission_execution_directory: mapEntry?.directory || '',
+          gaussian_manifest_file: mapEntry?.gaussian_manifest_file || latest.gaussian_manifest_file || '',
+          force: true
+        }});
+      }}
+      setBanner(data.success ? 'ok' : 'error', data.message || '3D map build request completed');
+      gaussianBuildStatus.textContent = data.message || '3D map build request completed';
+      await refreshGaussianStatus();
+    }});
+
     document.getElementById('save-button').addEventListener('click', async () => {{
       ensureDefaultPatternSelection();
       const mapName = mapNameInput.value.trim();
@@ -2087,23 +2269,31 @@ class MissionFrontendRenderer:
       currentView = '2d';
       view2dButton.classList.remove('secondary');
       view3dButton.classList.add('secondary');
-      document.getElementById('record-map').style.filter = '';
+      recordMapElement.style.display = '';
+      splatViewElement.style.display = 'none';
+      window.setTimeout(() => map.invalidateSize(), 0);
     }});
     view3dButton.addEventListener('click', () => {{
       currentView = '3d';
       view3dButton.classList.remove('secondary');
       view2dButton.classList.add('secondary');
-      document.getElementById('record-map').style.filter = 'contrast(1.15) saturate(0.72)';
-      setBanner('ok', '3D Gaussian view uses the saved Gaussian artifact preview when available.');
+      recordMapElement.style.display = 'none';
+      splatViewElement.style.display = 'block';
+      renderSplatPreview({{ latest_recorded_map: selectedMap() || {{}} }});
+      setBanner('ok', '3D view uses the saved tiled Gaussian splat manifest when available.');
     }});
 
     ensureDefaultPatternSelection();
+    refreshGaussianStatus().catch(() => null);
     loadRecordMapSnapshot().catch((error) => {{
       setBanner('error', error.message || 'Failed to load record map page state');
     }});
     window.setInterval(() => {{
       loadRecordMapSnapshot().catch(() => null);
     }}, 4000);
+    window.setInterval(() => {{
+      refreshGaussianStatus().catch(() => null);
+    }}, 2000);
   </script>
 </body>
 </html>
@@ -4075,6 +4265,7 @@ class MissionFrontendRenderer:
 
 
 class MissionFrontendHttpNode(Node, MissionFrontendRenderer):
+
     def __init__(self) -> None:
         super().__init__("frontend_http_node")
         self._http_host = self.declare_parameter("http_host", "0.0.0.0").value
@@ -4204,6 +4395,7 @@ class MissionFrontendHttpNode(Node, MissionFrontendRenderer):
         node = self
 
         class MissionFrontendRequestHandler(BaseHTTPRequestHandler):
+
             def do_GET(self) -> None:  # noqa: N802
                 parsed = urllib.parse.urlparse(self.path)
                 if parsed.path == "/":
@@ -4230,6 +4422,9 @@ class MissionFrontendHttpNode(Node, MissionFrontendRenderer):
                 if parsed.path == "/api/v1/teleop/camera/stream":
                     self._send_teleop_camera_stream()
                     return
+                if parsed.path.startswith("/api/v1/gaussian-splats/artifacts/"):
+                    self._send_gaussian_splat_artifact(parsed)
+                    return
                 if parsed.path.startswith("/api/v1/"):
                     self._proxy_to_backend()
                     return
@@ -4242,8 +4437,8 @@ class MissionFrontendHttpNode(Node, MissionFrontendRenderer):
                     return
                 self._send_json(HTTPStatus.NOT_FOUND, {"success": False, "message": "Not found"})
 
-            def log_message(self, format: str, *args: Any) -> None:
-                node.get_logger().debug(f"HTTP {self.address_string()} - {format % args}")
+            def log_message(self, message_format: str, *args: Any) -> None:
+                node.get_logger().debug(f"HTTP {self.address_string()} - {message_format % args}")
 
             def _proxy_to_backend(self) -> None:
                 try:
@@ -4306,6 +4501,8 @@ class MissionFrontendHttpNode(Node, MissionFrontendRenderer):
                     return {"action": "LIST_MAPS", "payload": {}}
                 if self.command == "GET" and parsed.path == "/api/v1/record-map":
                     return {"action": "GET_RECORD_MAP", "payload": {}}
+                if self.command == "GET" and parsed.path == "/api/v1/gaussian-splats/status":
+                    return {"action": "GET_GAUSSIAN_SPLAT_STATUS", "payload": {}}
 
                 if (
                     self.command == "POST"
@@ -4332,6 +4529,9 @@ class MissionFrontendHttpNode(Node, MissionFrontendRenderer):
                     "/api/v1/teleop/lights": "SET_TELEOP_LIGHTS",
                     "/api/v1/maps/save": "SAVE_MAP",
                     "/api/v1/maps/delete": "DELETE_MAP",
+                    "/api/v1/gaussian-splats/build": "BUILD_GAUSSIAN_SPLAT",
+                    "/api/v1/gaussian-splats/pause": "PAUSE_GAUSSIAN_SPLAT",
+                    "/api/v1/gaussian-splats/resume": "RESUME_GAUSSIAN_SPLAT",
                     "/api/v1/record-map/start": "START_RECORD_MAP",
                     "/api/v1/record-map/stop": "STOP_RECORD_MAP",
                     "/api/v1/record-map/save-mission": "SAVE_RECORDED_MISSION",
@@ -4417,6 +4617,40 @@ class MissionFrontendHttpNode(Node, MissionFrontendRenderer):
                         "Content-Disposition": f'attachment; filename="{filename}"',
                     },
                 )
+
+            def _send_gaussian_splat_artifact(self, parsed: urllib.parse.ParseResult) -> None:
+                relative = parsed.path[len("/api/v1/gaussian-splats/artifacts/"):]
+                artifact_path = Path(urllib.parse.unquote(relative)).expanduser()
+                if not artifact_path.is_absolute():
+                    artifact_path = Path.cwd() / artifact_path
+                try:
+                    resolved = artifact_path.resolve()
+                    allowed_roots = [
+                        (Path.cwd() / "missions" / "logs").resolve(),
+                        (Path.cwd() / "missions" / "maps").resolve(),
+                        Path("/tmp").resolve(),
+                    ]
+                    if not any(resolved == root or root in resolved.parents for root in allowed_roots):
+                        raise ValueError("Artifact path is outside allowed roots")
+                    if not resolved.exists() or not resolved.is_file():
+                        raise FileNotFoundError("Gaussian artifact not found")
+                    content_type = "application/json; charset=utf-8" if resolved.suffix == ".json" else "application/octet-stream"
+                    if resolved.suffix == ".ply":
+                        content_type = "application/octet-stream"
+                    body = resolved.read_bytes()
+                    self._send_bytes(
+                        HTTPStatus.OK,
+                        body,
+                        {
+                            "Content-Type": content_type,
+                            "Cache-Control": "no-store",
+                            "Content-Length": str(len(body)),
+                        },
+                    )
+                except FileNotFoundError as exc:
+                    self._send_json(HTTPStatus.NOT_FOUND, {"success": False, "message": str(exc)})
+                except ValueError as exc:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"success": False, "message": str(exc)})
 
             def _read_body(self) -> bytes:
                 try:

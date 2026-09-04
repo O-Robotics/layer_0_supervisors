@@ -7,7 +7,7 @@ ros2 launch amr_sweeper_scheduler amr_sweeper_scheduler.launch.py
 Dependencies to other AMR Sweeper packages:
 - `amr_sweeper_fsm`
 - `amr_sweeper_mission_executor`
-- `amr_sweeper_vda5050_parser`
+- `amr_sweeper_mission_builder`
 - `amr_sweeper_navigation`
 
 ## Purpose
@@ -51,7 +51,7 @@ The scheduler is intended to run as a lightweight ROS 2 node launched by FSM sta
 - Overlapping `WORK` windows are handled deterministically by expanded start order.
 - Missed windows are not backfilled by default.
 - A `WORK` window is actionable only when its mission file resolves in `missions_directory`.
-- If mission artifacts are missing or stale, the scheduler asks `amr_sweeper_vda5050_parser` to rebuild the mission before requesting `RUNNING`.
+- If mission artifacts are missing or stale, the scheduler asks `amr_sweeper_mission_builder` to rebuild the mission before requesting `RUNNING`.
 - Scheduled execution requests are forwarded to `amr_sweeper_mission_executor/execute_mission`.
 - Manual preparation remains available through `prepare_mission_execution`, which forwards to `amr_sweeper_mission_executor/prepare_manual_mission`.
 - Planned windows are published on `scheduler_node/planned_windows` as JSON in `std_msgs/String`.

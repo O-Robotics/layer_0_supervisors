@@ -12,6 +12,7 @@
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
   <depend>amr_sweeper_fsm</depend>
+  <exec_depend>amr_sweeper_mission_builder</exec_depend>
   <exec_depend>amr_sweeper_mission_executor</exec_depend>
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>python3-numpy</exec_depend>

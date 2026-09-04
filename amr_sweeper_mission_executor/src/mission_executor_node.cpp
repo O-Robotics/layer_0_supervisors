@@ -33,8 +33,8 @@
 namespace amr_sweeper_mission_executor
 {
 
-using amr_sweeper_vda5050_parser::isZipMissionPackage;
-using amr_sweeper_vda5050_parser::readVda5050MissionPackage;
+using amr_sweeper_mission_builder::isZipMissionPackage;
+using amr_sweeper_mission_builder::readVda5050MissionPackage;
 
 namespace
 {
@@ -2041,6 +2041,9 @@ MissionExecutorNode::MissionExecutorNode(const rclcpp::NodeOptions & options)
   mission_parser_build_service_ = declare_parameter<std::string>(
     "mission_parser_build_service",
     "build_current_mission");
+  gaussian_splat_pause_service_ = declare_parameter<std::string>(
+    "gaussian_splat_pause_service",
+    "pause_gaussian_splat_build");
   mission_parser_build_timeout_seconds_ = declare_parameter<double>(
     "mission_parser_build_timeout_seconds",
     300.0);
@@ -2090,6 +2093,11 @@ MissionExecutorNode::MissionExecutorNode(const rclcpp::NodeOptions & options)
     client_callback_group_);
   mission_parser_build_client_ = create_client<std_srvs::srv::Trigger>(
     mission_parser_build_service_,
+    rclcpp::ServicesQoS(),
+    client_callback_group_);
+  gaussian_splat_pause_client_ =
+    create_client<amr_sweeper_mission_builder::srv::PauseGaussianSplatBuild>(
+    gaussian_splat_pause_service_,
     rclcpp::ServicesQoS(),
     client_callback_group_);
   fsm_request_client_ = create_client<amr_sweeper_fsm::srv::RequestState>(
@@ -2503,6 +2511,15 @@ void MissionExecutorNode::handleExecuteMission(
       request->layer_overrides_json);
     rewriteBuiltinLocalPatternArtifacts(resolved_mission, context);
     std::string message;
+    std::string gaussian_pause_message;
+    if (!pauseGaussianSplatBuildBeforeRunning(*request, gaussian_pause_message)) {
+      RCLCPP_WARN(
+        get_logger(),
+        "Gaussian splat preemption before RUNNING did not complete cleanly: %s",
+        gaussian_pause_message.c_str());
+    } else if (!gaussian_pause_message.empty()) {
+      RCLCPP_INFO(get_logger(), "%s", gaussian_pause_message.c_str());
+    }
     if (!requestRunningState(context, *request, message)) {
       response->success = false;
       response->message = message;
@@ -3928,6 +3945,8 @@ void MissionExecutorNode::writeLatestRecordedMapSnapshot(const nlohmann::json & 
       context_document,
       "recorded_work_area_static_costmap_image",
       "recorded_work_area_costmap_image"));
+  const std::filesystem::path gaussian_manifest_file(
+    context_document.value("gaussian_manifest_file", std::string{}));
   const std::string run_started_at = context_document.value("run_started_at", std::string{});
 
   if (mission_route_file.empty() || !std::filesystem::exists(mission_route_file) ||
@@ -3995,6 +4014,7 @@ void MissionExecutorNode::writeLatestRecordedMapSnapshot(const nlohmann::json & 
     {"recorded_work_area_static_costmap_yaml", latest_static_costmap_yaml_file.string()},
     {"recorded_work_area_static_costmap_image", latest_static_costmap_image_file.string()},
     {"recorded_work_area_navsat_file", std::filesystem::exists(latest_navsat_file) ? latest_navsat_file.string() : std::string{}},
+    {"gaussian_manifest_file", std::filesystem::exists(gaussian_manifest_file) ? gaussian_manifest_file.string() : std::string{}},
     {"recorded_obstacle_count", context_document.value("recorded_obstacle_count", 0)},
     {"recorded_obstacle_points", context_document.value("recorded_obstacle_points", nlohmann::json::array())},
     {"geo_transform", {
@@ -4590,6 +4610,32 @@ bool MissionExecutorNode::ensureMissionArtifactsReady(
       resolveMissionsLogDirectory().string().c_str());
   }
   return false;
+}
+
+bool MissionExecutorNode::pauseGaussianSplatBuildBeforeRunning(
+  const srv::ExecuteMission::Request & request,
+  std::string & message) const
+{
+  if (!gaussian_splat_pause_client_->wait_for_service(std::chrono::milliseconds(500))) {
+    message = "Gaussian splat pause service is unavailable; continuing mission start";
+    return true;
+  }
+
+  auto pause_request =
+    std::make_shared<amr_sweeper_mission_builder::srv::PauseGaussianSplatBuild::Request>();
+  pause_request->build_id = "";
+  pause_request->mode = request.requester == "scheduler_node" ? "scheduled_preempt" : "manual_preempt";
+
+  auto future = gaussian_splat_pause_client_->async_send_request(pause_request);
+  const auto timeout = pause_request->mode == "scheduled_preempt" ?
+    std::chrono::seconds(65) : std::chrono::seconds(10);
+  if (future.wait_for(timeout) != std::future_status::ready) {
+    message = "Timed out waiting for Gaussian splat build pause response; continuing mission start";
+    return false;
+  }
+  const auto response = future.get();
+  message = response->message;
+  return response->success;
 }
 
 bool MissionExecutorNode::requestRunningState(

@@ -128,7 +128,7 @@ The shipped profile catalog is currently:
 - `002`: alternate INITIALIZING validation profile
 - `003`: INITIALIZING debug bringup profile that starts the full stack and stays idle without auto-jumping to `101` or `400`
 - `100`: IDLING bridge profile with no processes; auto-requests `200`
-- `101`: default IDLING profile with layer 1 hardware bringup, `amr_sweeper_vda5050_parser`, and `amr_sweeper_scheduler`
+- `101`: default IDLING profile with layer 1 hardware bringup, `amr_sweeper_mission_builder`, and `amr_sweeper_scheduler`
 - `110`: IDLING test profile for `fsm_tester_node`
 - `200`: RUNNING bridge profile with no processes; auto-requests `300`
 - `201`: default RUNNING mission execution profile

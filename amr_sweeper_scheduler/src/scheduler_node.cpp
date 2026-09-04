@@ -1067,6 +1067,9 @@ SchedulerNode::SchedulerNode(const rclcpp::NodeOptions & options)
   force_record_rosbag_ = declare_parameter<bool>("force_record_rosbag", false);
   force_record_rosbag_ =
     force_record_rosbag_ || environment_flag_enabled("AMR_SWEEPER_FORCE_RECORD_ROSBAG");
+  force_gaussian_capture_ = declare_parameter<bool>("force_gaussian_capture", false);
+  force_gaussian_capture_ =
+    force_gaussian_capture_ || environment_flag_enabled("AMR_SWEEPER_FORCE_GAUSSIAN_CAPTURE");
   use_sim_time_for_schedule_clock_ =
     declare_parameter<bool>("use_sim_time_for_schedule_clock", false);
   schedule_poll_interval_sec_ = declare_parameter<double>("schedule_poll_interval_sec", 60.0);
@@ -1697,7 +1700,8 @@ void SchedulerNode::request_mission_execution(const TimeWindow & window)
   request->priority = 210;
   request->force = false;
   request->record_rosbag = force_record_rosbag_ || window.record_rosbag;
-  if (window.gaussian_capture) {
+  const bool gaussian_capture = force_gaussian_capture_ || window.gaussian_capture;
+  if (gaussian_capture) {
     request->layer_overrides_json =
       "{\"use_gaussian\":true,\"use_amr_sweeper_usb_cameras\":true,"
       "\"use_amr_sweeper_depth_camera\":true,\"use_amr_sweeper_localization\":true,"
@@ -1709,7 +1713,7 @@ void SchedulerNode::request_mission_execution(const TimeWindow & window)
     "; start=" + window.start_local +
     "; end=" + window.end_local +
     "; record_rosbag=" + std::string(request->record_rosbag ? "true" : "false") +
-    "; gaussian_capture=" + std::string(window.gaussian_capture ? "true" : "false");
+    "; gaussian_capture=" + std::string(gaussian_capture ? "true" : "false");
   mission_executor_execute_client_->async_send_request(
     request,
     [this, window](

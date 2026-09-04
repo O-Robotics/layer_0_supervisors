@@ -173,6 +173,7 @@ private:
   double tick_seconds_{1.0};
   bool trigger_running_on_work_window_{true};
   bool force_record_rosbag_{false};
+  bool force_gaussian_capture_{false};
   bool use_sim_time_for_schedule_clock_{false};
   double schedule_poll_interval_sec_{60.0};
   int retry_attempts_before_error_{3};

@@ -116,6 +116,7 @@ namespace {
     "use_sim_time",
     "missions_directory",
     "trigger_running_on_work_window",
+    "use_gaussian",
     "schedule_ics_path",
     "robot_id",
   };
@@ -394,7 +395,7 @@ namespace {
         return launch_arg_enabled(args, "use_amr_sweeper_localization", true);
       }
       if (
-        target_matches_pattern(target, "gaussian_node") ||
+        target_matches_pattern(target, "gaussian_splat_capture_node") ||
         target_matches_pattern(target, "mapping_node"))
       {
         return launch_arg_enabled(args, "use_amr_sweeper_mapping", true);
@@ -2608,7 +2609,7 @@ std::string StateNodeBase::resolve_placeholders(std::string cmd) const
     append_runtime_overrides(kLayer2BringupOverrideKeys);
   } else if (cmd.find("ros2 launch amr_sweeper_layer_3_navigation_bringup ") != std::string::npos) {
     append_runtime_overrides(kLayer3BringupOverrideKeys);
-  } else if (cmd.find("ros2 launch amr_sweeper_vda5050_parser ") != std::string::npos) {
+  } else if (cmd.find("ros2 launch amr_sweeper_mission_builder ") != std::string::npos) {
     append_runtime_overrides(kParserOverrideKeys);
   } else if (cmd.find("ros2 launch amr_sweeper_scheduler ") != std::string::npos) {
     append_runtime_overrides(kSchedulerOverrideKeys);

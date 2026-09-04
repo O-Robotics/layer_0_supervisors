@@ -1,0 +1,6 @@
+string build_id
+int32 additional_iterations_per_tile
+bool auto_stop_enabled
+---
+bool success
+string message

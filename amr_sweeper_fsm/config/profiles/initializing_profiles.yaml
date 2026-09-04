@@ -34,10 +34,10 @@ profiles:
 
       processes:
         # Logic block: mission builder (critical)
-        - name: "amr_sweeper_vda5050_parser"
+        - name: "amr_sweeper_mission_builder"
           importance: "critical"
           startup:
-            exec: "ros2 launch amr_sweeper_vda5050_parser amr_sweeper_vda5050_parser.launch.py"
+            exec: "ros2 launch amr_sweeper_mission_builder amr_sweeper_mission_builder.launch.py"
             args:
               - "namespace:={ns}"
               - "missions_directory:=missions/database"
@@ -299,7 +299,7 @@ profiles:
                 target: "bt_navigator"
                 required: true
               - type: "service"
-                target: "gaussian_node/get_parameters"
+                target: "gaussian_splat_capture_node/get_parameters"
                 required: false
               - type: "service"
                 target: "mapping_node/get_parameters"
@@ -340,10 +340,10 @@ profiles:
 
       processes:
         # Logic block: mission builder (critical)
-        - name: "amr_sweeper_vda5050_parser"
+        - name: "amr_sweeper_mission_builder"
           importance: "critical"
           startup:
-            exec: "ros2 launch amr_sweeper_vda5050_parser amr_sweeper_vda5050_parser.launch.py"
+            exec: "ros2 launch amr_sweeper_mission_builder amr_sweeper_mission_builder.launch.py"
             args:
               - "namespace:={ns}"
               - "missions_directory:=missions/database"
@@ -597,7 +597,7 @@ profiles:
                 target: "bt_navigator"
                 required: true
               - type: "service"
-                target: "gaussian_node/get_parameters"
+                target: "gaussian_splat_capture_node/get_parameters"
                 required: false
               - type: "service"
                 target: "mapping_node/get_parameters"
@@ -639,10 +639,10 @@ profiles:
 
       processes:
         # Logic block: mission builder (critical)
-        - name: "amr_sweeper_vda5050_parser"
+        - name: "amr_sweeper_mission_builder"
           importance: "critical"
           startup:
-            exec: "ros2 launch amr_sweeper_vda5050_parser amr_sweeper_vda5050_parser.launch.py"
+            exec: "ros2 launch amr_sweeper_mission_builder amr_sweeper_mission_builder.launch.py"
             args:
               - "namespace:={ns}"
               - "missions_directory:=missions/database"
@@ -684,10 +684,10 @@ profiles:
         fault_transition_profile: 400
 
       processes:
-        - name: "amr_sweeper_vda5050_parser"
+        - name: "amr_sweeper_mission_builder"
           importance: "critical"
           startup:
-            exec: "ros2 launch amr_sweeper_vda5050_parser amr_sweeper_vda5050_parser.launch.py"
+            exec: "ros2 launch amr_sweeper_mission_builder amr_sweeper_mission_builder.launch.py"
             args:
               - "namespace:={ns}"
               - "use_sim_time:=true"
@@ -922,7 +922,7 @@ profiles:
                 target: "bt_navigator"
                 required: true
               - type: "service"
-                target: "gaussian_node/get_parameters"
+                target: "gaussian_splat_capture_node/get_parameters"
                 required: false
               - type: "service"
                 target: "mapping_node/get_parameters"

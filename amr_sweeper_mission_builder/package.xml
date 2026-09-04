@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>amr_sweeper_mission_builder</name>
+  <version>0.1.0</version>
+  <description>Mission artifact builder nodes for VDA5050 parsing and Gaussian splat generation.</description>
+  <maintainer email="info@O-Robotics.com">O-Robotics</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <build_depend>rosidl_default_generators</build_depend>
+  <exec_depend>rosidl_default_runtime</exec_depend>
+  <member_of_group>rosidl_interface_packages</member_of_group>
+
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <depend>amr_sweeper_fsm</depend>
+  <depend>rclpy</depend>
+  <depend>rclcpp</depend>
+  <depend>std_msgs</depend>
+  <depend>std_srvs</depend>
+  <build_depend>libgeographiclib-dev</build_depend>
+  <build_depend>libzip-dev</build_depend>
+  <exec_depend>libgeographiclib-dev</exec_depend>
+  <exec_depend>libzip-dev</exec_depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

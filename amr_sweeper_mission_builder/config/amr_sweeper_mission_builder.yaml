@@ -1,0 +1,44 @@
+/**/vda5050_parser_node:
+  ros__parameters:
+    # -- Mission sources and outputs ------------------------------------------
+    mission_path:                       ""                   # Optional active mission path. Leave empty for auto-discovery until the scheduler selects a mission.
+    missions_directory:                 missions/database # Folder containing incoming mission JSON files and per-mission VDA5050 subfolders.
+    mission_file_extension:             .json                # Mission file suffix scanned when discovering new VDA5050 missions.
+
+    # -- Build controls -------------------------------------------------------
+    mission_build_resolution:           0.1                  # Costmap raster resolution in meters per cell.
+    mission_build_padding_meters:       2.0                  # Extra padding around the polygon envelope when exporting the costmap.
+    mission_build_coverage_path_clearance_meters: 1.0                 # Keep the declared coverage path corridor free in the generated Nav2 costmap while preserving standard PGM semantics.
+    mission_projection_use_first_polygon_vertex_as_origin: true        # Anchor WGS84 mission projection at the first polygon vertex unless an external map/GNSS origin is supplied.
+    mission_projection_origin_latitude:  0.0                           # Latitude used when mission_projection_use_first_polygon_vertex_as_origin is false.
+    mission_projection_origin_longitude: 0.0                           # Longitude used when mission_projection_use_first_polygon_vertex_as_origin is false.
+    mission_projection_origin_altitude:  0.0                           # Altitude used when mission_projection_use_first_polygon_vertex_as_origin is false.
+    supported_vda5050_versions:        ["3.0.0", "3.0.1", "3.1.0"]    # Accepted VDA5050 major-version-3 message versions.
+    auto_build_on_start:                true                 # Build the active mission immediately when the node starts.
+    watch_for_updates:                  true                 # Keep scanning for new or changed mission files while IDLING.
+    build_discovered_missions:          false                # When false, discovered source missions are built lazily only after a mission is selected/prepared.
+
+/**/gaussian_splat_builder_node:
+  ros__parameters:
+    # -- Mission capture sources and outputs ----------------------------------
+    missions_log_directory:             missions/logs
+    maps_directory:                     missions/maps
+    simulations_directory:              missions/simulations
+    gaussian_splat_artifact_directory_name: gaussian_splat
+
+    # -- Build controls -------------------------------------------------------
+    default_tile_size_meters:           10.0
+    default_max_iterations_per_tile:    3000
+    max_training_image_dimension:       480
+    worker_timeout_seconds:             3600.0
+    checkpoint_interval:                100
+    min_iterations_before_plateau:      300
+    plateau_patience_windows:           3
+    min_relative_loss_improvement:      0.0025
+    worker_python_executable:           .venv-gsplat/bin/python
+    worker_cuda_home:                   .venv-gsplat/lib/python3.12/site-packages/nvidia/cu13
+    allow_unknown_fsm_state:            false
+
+    # -- State gating ---------------------------------------------------------
+    fsm_state_topic:                    fsm/supervisor_node/fsm_state
+    fsm_status_topic:                   fsm/supervisor_node/fsm_status

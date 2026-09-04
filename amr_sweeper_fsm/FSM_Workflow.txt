@@ -71,8 +71,8 @@ INITIALIZING
 
 IDLING
   - Robot is safe and ready.
-  - Default profile 101 launches reduced layer 1 hardware bringup, `amr_sweeper_vda5050_parser`, and `amr_sweeper_scheduler`.
-  - `amr_sweeper_vda5050_parser` watches the missions directory and keeps parsed mission artifacts updated.
+  - Default profile 101 launches reduced layer 1 hardware bringup, `amr_sweeper_mission_builder`, and `amr_sweeper_scheduler`.
+  - `amr_sweeper_mission_builder` watches the missions directory and keeps parsed mission artifacts updated.
   - `amr_sweeper_scheduler` watches the schedule and asks the supervisor to enter RUNNING when a valid
     WORK window becomes active.
   - `amr_sweeper_mission_executor` is not launched by the FSM profile itself, but it remains the component that owns

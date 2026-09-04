@@ -863,7 +863,7 @@ def generate_launch_description():
             condition=IfCondition(launch_scheduler),
         ),
         IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(_launch_file("amr_sweeper_vda5050_parser", "amr_sweeper_vda5050_parser.launch.py")),
+            PythonLaunchDescriptionSource(_launch_file("amr_sweeper_mission_builder", "amr_sweeper_mission_builder.launch.py")),
             launch_arguments={
                 "namespace": namespace,
                 "use_sim_time": use_sim_time,

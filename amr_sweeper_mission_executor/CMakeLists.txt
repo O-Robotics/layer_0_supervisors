@@ -12,7 +12,7 @@ find_package(ament_index_cpp REQUIRED)
 find_package(PkgConfig REQUIRED)
 find_package(amr_sweeper_fsm REQUIRED)
 find_package(amr_sweeper_safety_msgs REQUIRED)
-find_package(amr_sweeper_vda5050_parser REQUIRED)
+find_package(amr_sweeper_mission_builder REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
@@ -43,6 +43,7 @@ add_executable(mission_executor_node
 target_include_directories(mission_executor_node PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
+  ${amr_sweeper_mission_builder_INCLUDE_DIRS}
   ${LIBZIP_INCLUDE_DIRS}
 )
 target_link_directories(mission_executor_node PUBLIC ${LIBZIP_LIBRARY_DIRS})
@@ -50,7 +51,7 @@ ament_target_dependencies(mission_executor_node
   ament_index_cpp
   amr_sweeper_fsm
   amr_sweeper_safety_msgs
-  amr_sweeper_vda5050_parser
+  amr_sweeper_mission_builder
   geometry_msgs
   nav_msgs
   rclcpp

@@ -37,6 +37,7 @@ def generate_launch_description():
         "use_amr_sweeper_localization",
         "use_amr_sweeper_mapping",
         "use_amr_sweeper_navigation",
+        "use_gaussian",
         "auto_start_mission",
         "missions_log_directory",
         "schedule_ics_path",

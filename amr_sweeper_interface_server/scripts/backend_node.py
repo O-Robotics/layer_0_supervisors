@@ -1,33 +1,49 @@
 #!/usr/bin/env python3
+#
+# Copyright 2026 O-Robotics
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 from __future__ import annotations
 
-import json
+import calendar
+from collections import deque
+from datetime import datetime, timedelta, timezone
 import errno
+from http import HTTPStatus
+import json
 import os
+from pathlib import Path
 import re
 import shutil
 import socket
 import socketserver
 import stat
+import struct
 import threading
 import time
-import calendar
-import struct
-from datetime import datetime, timedelta, timezone
-from collections import deque
-from html import escape
-from http import HTTPStatus
-from pathlib import Path
 from typing import Any
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
-import rclpy
-import yaml
-from ament_index_python.packages import PackageNotFoundError, get_package_share_directory
+from ament_index_python.packages import get_package_share_directory, PackageNotFoundError
 from amr_sweeper_fsm.msg import FSMState, FSMStatus
 from amr_sweeper_fsm.srv import RequestState
+from amr_sweeper_mission_builder.srv import (
+    BuildGaussianSplat,
+    PauseGaussianSplatBuild,
+    ResumeGaussianSplatBuild,
+)
 from amr_sweeper_mission_executor.srv import (
     CreateRecordedMission,
     EndMission,
@@ -37,13 +53,15 @@ from amr_sweeper_mission_executor.srv import (
 )
 from amr_sweeper_safety_msgs.msg import SafetyStop
 from geometry_msgs.msg import Twist
+from rcl_interfaces.msg import Log
+import rclpy
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
-from rcl_interfaces.msg import Log
 from sensor_msgs.msg import BatteryState, NavSatFix
 from std_msgs.msg import Float32, String
 from std_srvs.srv import Trigger
+import yaml
 
 MISSION_LAYER_OVERRIDE_KEYS = (
     "use_amr_sweeper_ros2_control",
@@ -355,16 +373,16 @@ def _load_running_profile_default_overrides() -> dict[int, dict[str, bool]]:
     return overrides_by_profile
 
 
-
-
 DEFAULT_BACKEND_SOCKET_PATH = "/tmp/amr_sweeper_interface_backend.sock"
 
 
 class MissionBackendUnixJSONLServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
+
     daemon_threads = True
 
 
 class MissionBackendNode(Node):
+
     def __init__(self, node_name: str = "backend_node") -> None:
         super().__init__(node_name)
 
@@ -407,6 +425,22 @@ class MissionBackendNode(Node):
         self._create_recorded_mission_service = self.declare_parameter(
             "create_recorded_mission_service",
             "create_recorded_mission",
+        ).value
+        self._build_gaussian_splat_service = self.declare_parameter(
+            "build_gaussian_splat_service",
+            "build_gaussian_splat",
+        ).value
+        self._pause_gaussian_splat_build_service = self.declare_parameter(
+            "pause_gaussian_splat_build_service",
+            "pause_gaussian_splat_build",
+        ).value
+        self._resume_gaussian_splat_build_service = self.declare_parameter(
+            "resume_gaussian_splat_build_service",
+            "resume_gaussian_splat_build",
+        ).value
+        self._gaussian_splat_status_service = self.declare_parameter(
+            "gaussian_splat_status_service",
+            "get_gaussian_splat_status",
         ).value
         self._end_mission_service = self.declare_parameter(
             "end_mission_service",
@@ -476,6 +510,22 @@ class MissionBackendNode(Node):
         self._create_recorded_mission_client = self.create_client(
             CreateRecordedMission,
             self._create_recorded_mission_service,
+        )
+        self._build_gaussian_splat_client = self.create_client(
+            BuildGaussianSplat,
+            self._build_gaussian_splat_service,
+        )
+        self._pause_gaussian_splat_build_client = self.create_client(
+            PauseGaussianSplatBuild,
+            self._pause_gaussian_splat_build_service,
+        )
+        self._resume_gaussian_splat_build_client = self.create_client(
+            ResumeGaussianSplatBuild,
+            self._resume_gaussian_splat_build_service,
+        )
+        self._gaussian_splat_status_client = self.create_client(
+            Trigger,
+            self._gaussian_splat_status_service,
         )
         self._end_mission_client = self.create_client(
             EndMission,
@@ -600,6 +650,7 @@ class MissionBackendNode(Node):
         node = self
 
         class MissionBackendRequestHandler(socketserver.StreamRequestHandler):
+
             def handle(self) -> None:
                 try:
                     request = node._read_raw_ipc_request(self.rfile)
@@ -716,6 +767,14 @@ class MissionBackendNode(Node):
                 return self._ipc_backend_response(self.map_snapshot())
             if action == "LIST_MAPS":
                 return self._ipc_backend_response(self.maps_snapshot())
+            if action == "BUILD_GAUSSIAN_SPLAT":
+                return self._ipc_backend_response(self.build_gaussian_splat(payload))
+            if action == "PAUSE_GAUSSIAN_SPLAT":
+                return self._ipc_backend_response(self.pause_gaussian_splat(payload))
+            if action == "RESUME_GAUSSIAN_SPLAT":
+                return self._ipc_backend_response(self.resume_gaussian_splat(payload))
+            if action == "GET_GAUSSIAN_SPLAT_STATUS":
+                return self._ipc_backend_response(self.gaussian_splat_status())
             if action == "SAVE_MAP":
                 return self._ipc_backend_response(self.save_map(payload))
             if action == "DELETE_MAP":
@@ -1245,6 +1304,117 @@ class MissionBackendNode(Node):
             "mission_folder": response.mission_folder,
             "applied_sweep_pattern": response.applied_sweep_pattern,
             "latest_recorded_map_file": response.latest_recorded_map_file,
+        }
+
+    def build_gaussian_splat(self, payload: dict[str, Any]) -> dict[str, Any]:
+        payload = self._gaussian_splat_build_payload(payload)
+        request = BuildGaussianSplat.Request()
+        request.mission_id = str(payload.get("mission_id", ""))
+        request.mission_execution_directory = str(payload.get("mission_execution_directory", ""))
+        request.gaussian_manifest_file = str(
+            payload.get("gaussian_manifest_file")
+            or self._latest_gaussian_capture_manifest_file()
+            or ""
+        )
+        request.force = bool(payload.get("force", False))
+        try:
+            request.tile_size_meters = float(payload.get("tile_size_meters", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            request.tile_size_meters = 0.0
+        try:
+            request.max_iterations_per_tile = int(payload.get("max_iterations_per_tile", 0) or 0)
+        except (TypeError, ValueError):
+            request.max_iterations_per_tile = 0
+
+        response = self._call_service(
+            self._build_gaussian_splat_client,
+            request,
+            timeout_sec=20.0,
+            service_name=self._build_gaussian_splat_service,
+        )
+        if bool(response.success):
+            map_id = str(payload.get("map_id", ""))
+            if map_id:
+                self._link_map_gaussian_splat_manifest(map_id, response.artifact_manifest_file)
+            else:
+                self._link_latest_gaussian_splat_manifest(response.artifact_manifest_file)
+        return {
+            "success": bool(response.success),
+            "message": response.message,
+            "artifact_manifest_file": response.artifact_manifest_file,
+            "tile_count": int(response.tile_count),
+            "completed_tile_count": int(response.completed_tile_count),
+        }
+
+    def _gaussian_splat_build_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+        request_payload = dict(payload)
+        map_id = self._sanitize_map_id(str(request_payload.get("map_id", "")))
+        if map_id:
+            maps_directory = _resolve_path(self._maps_directory)
+            map_directory = (maps_directory / map_id).resolve()
+            maps_root = maps_directory.resolve()
+            if maps_root not in map_directory.parents or not map_directory.exists():
+                raise RuntimeError(f"Map '{map_id}' was not found")
+            metadata_file = map_directory / "map.json"
+            metadata = json.loads(metadata_file.read_text(encoding="utf-8")) if metadata_file.exists() else {}
+            manifest = Path(str(metadata.get("gaussian_manifest_file", "")))
+            if not manifest.exists():
+                fallback = map_directory / "gaussian" / "manifest.json"
+                manifest = fallback if fallback.exists() else manifest
+            request_payload["map_id"] = map_id
+            request_payload["mission_id"] = str(request_payload.get("mission_id") or map_id)
+            request_payload["mission_execution_directory"] = str(map_directory)
+            request_payload["gaussian_manifest_file"] = str(manifest)
+            return request_payload
+
+        if not request_payload.get("gaussian_manifest_file"):
+            request_payload["gaussian_manifest_file"] = self._latest_gaussian_capture_manifest_file()
+        return request_payload
+
+    def pause_gaussian_splat(self, payload: dict[str, Any]) -> dict[str, Any]:
+        request = PauseGaussianSplatBuild.Request()
+        request.build_id = str(payload.get("build_id", ""))
+        request.mode = str(payload.get("mode", "user_pause") or "user_pause")
+        response = self._call_service(
+            self._pause_gaussian_splat_build_client,
+            request,
+            timeout_sec=65.0,
+            service_name=self._pause_gaussian_splat_build_service,
+        )
+        return {"success": bool(response.success), "message": response.message}
+
+    def resume_gaussian_splat(self, payload: dict[str, Any]) -> dict[str, Any]:
+        request = ResumeGaussianSplatBuild.Request()
+        request.build_id = str(payload.get("build_id", ""))
+        try:
+            request.additional_iterations_per_tile = int(
+                payload.get("additional_iterations_per_tile", 0) or 0
+            )
+        except (TypeError, ValueError):
+            request.additional_iterations_per_tile = 0
+        request.auto_stop_enabled = bool(payload.get("auto_stop_enabled", False))
+        response = self._call_service(
+            self._resume_gaussian_splat_build_client,
+            request,
+            timeout_sec=20.0,
+            service_name=self._resume_gaussian_splat_build_service,
+        )
+        return {"success": bool(response.success), "message": response.message}
+
+    def gaussian_splat_status(self) -> dict[str, Any]:
+        response = self._call_service(
+            self._gaussian_splat_status_client,
+            Trigger.Request(),
+            timeout_sec=5.0,
+            service_name=self._gaussian_splat_status_service,
+        )
+        try:
+            status = json.loads(response.message)
+        except Exception:
+            status = {"message": response.message}
+        return {
+            "success": bool(response.success),
+            "status": status,
         }
 
     def stop_active_mission(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -2275,10 +2445,20 @@ class MissionBackendNode(Node):
                 latest_metadata = json.loads(latest_metadata_file.read_text(encoding="utf-8"))
                 route_path = Path(latest_metadata.get("recorded_work_area_route_file", ""))
                 navsat_path = Path(latest_metadata.get("recorded_work_area_navsat_file", ""))
+                gaussian_manifest_path = Path(str(latest_metadata.get("gaussian_manifest_file", "")))
+                gaussian_splat_manifest_path = Path(str(latest_metadata.get("gaussian_splat_manifest_file", "")))
                 if route_path:
                     latest_route_geojson = self._load_geojson_feature_collection(route_path)
                 if navsat_path:
                     latest_navsat_geojson = self._load_geojson_feature_collection(navsat_path)
+                if gaussian_manifest_path.exists():
+                    latest_metadata["gaussian_manifest"] = json.loads(
+                        gaussian_manifest_path.read_text(encoding="utf-8")
+                    )
+                if gaussian_splat_manifest_path.exists():
+                    latest_metadata["gaussian_splat_manifest"] = json.loads(
+                        gaussian_splat_manifest_path.read_text(encoding="utf-8")
+                    )
             except Exception as exc:  # noqa: BLE001
                 latest_metadata = {"error": str(exc), "path": str(latest_metadata_file)}
 
@@ -2294,6 +2474,55 @@ class MissionBackendNode(Node):
             "latest_route_geojson": latest_route_geojson,
             "latest_navsat_geojson": latest_navsat_geojson,
         }
+
+    def _latest_gaussian_capture_manifest_file(self) -> str:
+        latest_directory = _resolve_path(self._missions_log_directory) / "latest_recorded_map"
+        latest_metadata_file = latest_directory / "latest_recorded_map.json"
+        if latest_metadata_file.exists():
+            try:
+                latest_metadata = json.loads(latest_metadata_file.read_text(encoding="utf-8"))
+                manifest = Path(str(latest_metadata.get("gaussian_manifest_file", "")))
+                if manifest.exists():
+                    return str(manifest)
+            except Exception:
+                pass
+
+        candidates = sorted(
+            _resolve_path(self._missions_log_directory).rglob("gaussian/manifest.json"),
+            key=lambda path: path.stat().st_mtime,
+        )
+        return str(candidates[-1]) if candidates else ""
+
+    def _link_latest_gaussian_splat_manifest(self, artifact_manifest_file: str) -> None:
+        manifest = Path(str(artifact_manifest_file))
+        if not manifest.exists():
+            return
+        latest_directory = _resolve_path(self._missions_log_directory) / "latest_recorded_map"
+        latest_metadata_file = latest_directory / "latest_recorded_map.json"
+        if not latest_metadata_file.exists():
+            return
+        try:
+            latest_metadata = json.loads(latest_metadata_file.read_text(encoding="utf-8"))
+            latest_metadata["gaussian_splat_manifest_file"] = str(manifest)
+            latest_metadata_file.write_text(json.dumps(latest_metadata, indent=2), encoding="utf-8")
+        except Exception:
+            return
+
+    def _link_map_gaussian_splat_manifest(self, map_id: str, artifact_manifest_file: str) -> None:
+        manifest = Path(str(artifact_manifest_file))
+        if not manifest.exists():
+            return
+        map_directory = _resolve_path(self._maps_directory) / self._sanitize_map_id(map_id)
+        metadata_file = map_directory / "map.json"
+        if not metadata_file.exists():
+            return
+        try:
+            metadata = json.loads(metadata_file.read_text(encoding="utf-8"))
+            metadata["gaussian_splat_manifest_file"] = str(manifest)
+            metadata["updated_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            metadata_file.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+        except Exception:
+            return
 
     @staticmethod
     def _route_geojson_from_vda5050(document: dict[str, Any], mission_id: str) -> dict[str, Any] | None:
@@ -2311,6 +2540,7 @@ class MissionBackendNode(Node):
             return None
 
         coordinates: list[list[float]] = []
+
         def append_node(sequence_id: int) -> None:
             node_position = nodes_by_sequence[sequence_id].get("nodePosition", {})
             point = [float(node_position.get("x", 0.0)), float(node_position.get("y", 0.0))]
@@ -2501,12 +2731,33 @@ class MissionBackendNode(Node):
                 destination = map_directory / filename
                 shutil.copyfile(source_path, destination)
                 metadata[key] = str(destination)
+        gaussian_manifest = Path(str(latest_metadata.get("gaussian_manifest_file", "")))
+        if gaussian_manifest.exists() and gaussian_manifest.is_file():
+            gaussian_directory = map_directory / "gaussian"
+            if gaussian_directory.exists():
+                shutil.rmtree(gaussian_directory)
+            shutil.copytree(gaussian_manifest.parent, gaussian_directory)
+            metadata["gaussian_manifest_file"] = str(gaussian_directory / "manifest.json")
+        gaussian_splat_manifest = Path(str(latest_metadata.get("gaussian_splat_manifest_file", "")))
+        if gaussian_splat_manifest.exists() and gaussian_splat_manifest.is_file():
+            gaussian_splat_directory = map_directory / "gaussian_splat"
+            if gaussian_splat_directory.exists():
+                shutil.rmtree(gaussian_splat_directory)
+            shutil.copytree(gaussian_splat_manifest.parent, gaussian_splat_directory)
+            metadata["gaussian_splat_manifest_file"] = str(
+                gaussian_splat_directory / "gaussian_splat_manifest.json"
+            )
         metadata["source_latest_recorded_map_file"] = str(latest_metadata_file)
         metadata["source_mission_id"] = latest_metadata.get("mission_id", "")
         metadata["source_run_started_at"] = latest_metadata.get("run_started_at", "")
         metadata["recorded_obstacle_count"] = latest_metadata.get("recorded_obstacle_count", 0)
         metadata["recorded_obstacle_points"] = latest_metadata.get("recorded_obstacle_points", [])
         metadata["geo_transform"] = latest_metadata.get("geo_transform", {})
+        metadata.setdefault("gaussian_manifest_file", latest_metadata.get("gaussian_manifest_file", ""))
+        metadata.setdefault(
+            "gaussian_splat_manifest_file",
+            latest_metadata.get("gaussian_splat_manifest_file", ""),
+        )
 
     def _map_payload_from_metadata(self, map_directory: Path, metadata: dict[str, Any]) -> dict[str, Any]:
         payload = dict(metadata)
@@ -2517,6 +2768,7 @@ class MissionBackendNode(Node):
         navsat_path = Path(str(payload.get("recorded_work_area_navsat_file", "")))
         zone_set_path = map_directory / "zoneSet.json"
         gaussian_manifest_path = Path(str(payload.get("gaussian_manifest_file", "")))
+        gaussian_splat_manifest_path = Path(str(payload.get("gaussian_splat_manifest_file", "")))
         if route_path.exists():
             payload["route_geojson"] = self._load_geojson_feature_collection(route_path)
         if navsat_path.exists():
@@ -2533,6 +2785,13 @@ class MissionBackendNode(Node):
                 )
             except Exception as exc:  # noqa: BLE001
                 payload["gaussian_error"] = str(exc)
+        if gaussian_splat_manifest_path.exists():
+            try:
+                payload["gaussian_splat_manifest"] = json.loads(
+                    gaussian_splat_manifest_path.read_text(encoding="utf-8")
+                )
+            except Exception as exc:  # noqa: BLE001
+                payload["gaussian_splat_error"] = str(exc)
         return payload
 
     @staticmethod

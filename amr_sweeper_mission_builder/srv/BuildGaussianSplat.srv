@@ -1,0 +1,12 @@
+string mission_id
+string mission_execution_directory
+string gaussian_manifest_file
+bool force
+float64 tile_size_meters
+int32 max_iterations_per_tile
+---
+bool success
+string message
+string artifact_manifest_file
+uint32 tile_count
+uint32 completed_tile_count

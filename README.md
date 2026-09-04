@@ -10,7 +10,7 @@ Dependencies to other AMR Sweeper packages:
 - `amr_sweeper_fsm`
 - `amr_sweeper_mission_executor`
 - `amr_sweeper_scheduler`
-- `amr_sweeper_vda5050_parser`
+- `amr_sweeper_mission_builder`
 - `amr_sweeper_interface_server`
 - `amr_sweeper_layer_1_hardware_bringup`
 - `amr_sweeper_layer_2_controllers_bringup`
@@ -35,7 +35,7 @@ The main packages in this layer are:
 - `amr_sweeper_fsm`: robot-level supervisor plus the `INITIALIZING`, `IDLING`, `RUNNING`, `CHARGING`, and `FAULT` lifecycle state nodes
 - `amr_sweeper_mission_executor`: mission APIs, built-in manual mission routing, execution-folder preparation, and mission finalization back to `IDLING`
 - `amr_sweeper_scheduler`: iCalendar-based work scheduling and scheduled mission handoff into the mission executor
-- `amr_sweeper_vda5050_parser`: background parsing and artifact generation for VDA5050 mission files under `/missions`
+- `amr_sweeper_mission_builder`: background parsing and artifact generation for VDA5050 mission files under `/missions`
 - `amr_sweeper_interface_server`: always-on HTTP operator dashboard for mission launch, status, and VDA5050 upload
 
 ## Notes

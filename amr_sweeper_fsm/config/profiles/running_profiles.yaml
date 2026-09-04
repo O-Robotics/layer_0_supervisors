@@ -212,7 +212,6 @@ profiles:
               - "use_amr_sweeper_localization:=true"
               - "use_amr_sweeper_mapping:=true"
               - "use_amr_sweeper_navigation:=true"
-              - "use_gaussian:=false"
               - "mapping_startup_delay_sec:=5.0"
               - "navigation_startup_delay_sec:=10.0"
               - "mission_execution_directory:={mission_execution_directory}"
@@ -510,7 +509,7 @@ profiles:
                 target: "velocity_smoother"
                 required: true
               - type: "service"
-                target: "gaussian_node/get_parameters"
+                target: "gaussian_splat_capture_node/get_parameters"
                 required: false
               - type: "service"
                 target: "mapping_node/get_parameters"
@@ -804,7 +803,7 @@ profiles:
                 target: "velocity_smoother"
                 required: true
               - type: "service"
-                target: "gaussian_node/get_parameters"
+                target: "gaussian_splat_capture_node/get_parameters"
                 required: false
               - type: "service"
                 target: "mapping_node/get_parameters"
@@ -1098,7 +1097,7 @@ profiles:
                 target: "velocity_smoother"
                 required: true
               - type: "service"
-                target: "gaussian_node/get_parameters"
+                target: "gaussian_splat_capture_node/get_parameters"
                 required: false
               - type: "service"
                 target: "mapping_node/get_parameters"
@@ -1521,6 +1520,67 @@ profiles:
             sigint_timeout_ms: 1500
             sigterm_timeout_ms: 1500
             sigkill_timeout_ms: 1500
+
+        - name: "amr_sweeper_layer_3_navigation_bringup"
+          importance: "critical"
+          startup:
+            exec: "ros2 launch amr_sweeper_layer_3_navigation_bringup amr_sweeper_layer_3_navigation_bringup.launch.py"
+            args:
+              - "namespace:={ns}"
+              - "use_amr_sweeper_visual_odometry:={use_amr_sweeper_visual_odometry}"
+              - "use_amr_sweeper_localization:=true"
+              - "use_gnss:=true"
+              - "use_ntrip_client:={use_ntrip_client}"
+              - "use_amr_sweeper_mapping:=true"
+              - "use_amr_sweeper_navigation:=false"
+              - "use_gaussian:=true"
+              - "mapping_startup_delay_sec:=5.0"
+              - "mission_execution_directory:={mission_execution_directory}"
+              - "auto_start_mission:=true"
+              - "mission_start_mode:={mission_start_mode}"
+              - "use_test:={use_test}"
+              - "test_output_directory:={test_output_directory}"
+            ready:
+              - type: "topic"
+                target: "localization/odometry_fused"
+                required: true
+              - type: "lifecycle"
+                target: "fusioncore"
+                required: true
+              - type: "service"
+                target: "mapping_node/get_parameters"
+                required: true
+              - type: "service"
+                target: "gaussian_splat_capture_node/get_parameters"
+                required: true
+              - type: "topic"
+                target: "mapping/status"
+                required: true
+              - type: "topic"
+                target: "mapping/static_costmap"
+                required: false
+            window_ms: 90000
+          rosout_triggers:
+            - "level>=FATAL;action=FAULT"
+            - "node=bt_navigator;level>=ERROR;match=Goal failed;action=WARN_ONLY"
+            - "node=bt_navigator;level>=ERROR;match=Robot pose is not available;action=WARN_ONLY"
+            - "node=bt_navigator_navigate_through_poses_rclcpp_node;level>=ERROR;match=Failed to get result for follow_path in node halt!;action=WARN_ONLY"
+            - "node=bt_navigator_navigate_through_poses_rclcpp_node;level>=ERROR;match=Failed to get result for compute_path_through_poses in node halt!;action=WARN_ONLY"
+            - "node=planner_server;level>=ERROR;match=Failed to create a plan from potential;action=WARN_ONLY"
+            - "node=controller_server;level>=ERROR;match=Resulting plan has 0 poses in it.;action=WARN_ONLY"
+            - "level>=ERROR;action=FAULT"
+          errors:
+            on_readiness_fail: "FAULT"
+            on_unexpected_exit: "FAULT"
+            priority: 250
+            force: true
+          restart:
+            max_restarts: 5
+            restart_delay_ms: 1000
+          shutdown:
+            sigint_timeout_ms: 2000
+            sigterm_timeout_ms: 2000
+            sigkill_timeout_ms: 2000
 
 
     # ---------------------------------------------------------------------------
@@ -2389,7 +2449,7 @@ profiles:
                 target: "fusioncore"
                 required: true
               - type: "service"
-                target: "gaussian_node/get_parameters"
+                target: "gaussian_splat_capture_node/get_parameters"
                 required: false
               - type: "service"
                 target: "mapping_node/get_parameters"

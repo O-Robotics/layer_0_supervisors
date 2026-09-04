@@ -18,6 +18,7 @@
 #include <sensor_msgs/msg/nav_sat_fix.hpp>
 #include <std_srvs/srv/trigger.hpp>
 
+#include "amr_sweeper_mission_builder/srv/pause_gaussian_splat_build.hpp"
 #include "amr_sweeper_mission_executor/srv/create_recorded_mission.hpp"
 #include "amr_sweeper_mission_executor/srv/end_mission.hpp"
 #include "amr_sweeper_mission_executor/srv/execute_mission.hpp"
@@ -153,6 +154,9 @@ private:
     const PreparedMissionContext & context,
     const srv::ExecuteMission::Request & request,
     std::string & message) const;
+  [[nodiscard]] bool pauseGaussianSplatBuildBeforeRunning(
+    const srv::ExecuteMission::Request & request,
+    std::string & message) const;
   void writeMissionExecutionPreferences(
     const std::filesystem::path & context_path,
     bool record_rosbag,
@@ -190,6 +194,7 @@ private:
   bool record_mission_rosbag_{false};
   std::string mission_parser_node_name_;
   std::string mission_parser_build_service_;
+  std::string gaussian_splat_pause_service_;
   double mission_parser_build_timeout_seconds_{300.0};
   std::string fsm_request_service_;
   bool use_simulation_{false};
@@ -208,6 +213,8 @@ private:
   rclcpp::CallbackGroup::SharedPtr client_callback_group_;
   rclcpp::AsyncParametersClient::SharedPtr mission_parser_parameter_client_;
   rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr mission_parser_build_client_;
+  rclcpp::Client<amr_sweeper_mission_builder::srv::PauseGaussianSplatBuild>::SharedPtr
+    gaussian_splat_pause_client_;
   rclcpp::Client<amr_sweeper_fsm::srv::RequestState>::SharedPtr fsm_request_client_;
   rclcpp::Service<srv::ListExecutableMissions>::SharedPtr list_executable_missions_service_;
   rclcpp::Service<srv::ListManualMissions>::SharedPtr list_manual_missions_service_;

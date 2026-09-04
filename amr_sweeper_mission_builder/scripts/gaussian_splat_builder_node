@@ -1,0 +1,631 @@
+#!/usr/bin/env python3
+#
+# Copyright 2026 O-Robotics
+# SPDX-License-Identifier: Apache-2.0
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import shutil
+import subprocess
+import tempfile
+import threading
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+import rclpy
+from amr_sweeper_fsm.msg import FSMState, FSMStatus
+from amr_sweeper_mission_builder.srv import (
+    BuildGaussianSplat,
+    PauseGaussianSplatBuild,
+    ResumeGaussianSplatBuild,
+)
+from rclpy.executors import MultiThreadedExecutor
+from rclpy.node import Node
+from std_msgs.msg import String
+from std_srvs.srv import Trigger
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _write_json_atomic(path: Path, document: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = path.with_suffix(path.suffix + ".tmp")
+    temp_path.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+    temp_path.replace(path)
+
+
+class GaussianSplatBuilderNode(Node):
+    def __init__(self) -> None:
+        super().__init__("gaussian_splat_builder_node")
+
+        self._missions_log_directory = self._resolve_path(
+            str(self.declare_parameter("missions_log_directory", "missions/logs").value)
+        )
+        self._maps_directory = self._resolve_path(
+            str(self.declare_parameter("maps_directory", "missions/maps").value)
+        )
+        self._simulations_directory = self._resolve_path(
+            str(self.declare_parameter("simulations_directory", "missions/simulations").value)
+        )
+        self._artifact_directory_name = str(
+            self.declare_parameter("gaussian_splat_artifact_directory_name", "gaussian_splat").value
+        )
+        self._default_tile_size_meters = float(
+            self.declare_parameter("default_tile_size_meters", 10.0).value
+        )
+        self._default_max_iterations_per_tile = int(
+            self.declare_parameter("default_max_iterations_per_tile", 3000).value
+        )
+        self._max_image_dimension = int(
+            self.declare_parameter("max_training_image_dimension", 480).value
+        )
+        self._worker_timeout_seconds = float(
+            self.declare_parameter("worker_timeout_seconds", 3600.0).value
+        )
+        self._checkpoint_interval = int(self.declare_parameter("checkpoint_interval", 100).value)
+        self._min_iterations_before_plateau = int(
+            self.declare_parameter("min_iterations_before_plateau", 300).value
+        )
+        self._plateau_patience_windows = int(
+            self.declare_parameter("plateau_patience_windows", 3).value
+        )
+        self._min_relative_loss_improvement = float(
+            self.declare_parameter("min_relative_loss_improvement", 0.0025).value
+        )
+        self._worker_python_executable = str(
+            self.declare_parameter("worker_python_executable", "").value
+        ).strip()
+        self._worker_cuda_home = str(
+            self.declare_parameter("worker_cuda_home", "").value
+        ).strip()
+        self._allow_unknown_fsm_state = bool(
+            self.declare_parameter("allow_unknown_fsm_state", False).value
+        )
+        self._fsm_state_topic = str(
+            self.declare_parameter("fsm_state_topic", "fsm/supervisor_node/fsm_state").value
+        )
+        self._fsm_status_topic = str(
+            self.declare_parameter("fsm_status_topic", "fsm/supervisor_node/fsm_status").value
+        )
+
+        self._latest_fsm_state = ""
+        self._status_lock = threading.Lock()
+        self._job_lock = threading.Lock()
+        self._worker_process: subprocess.Popen[str] | None = None
+        self._active_job: dict[str, Any] | None = None
+        self._latest_status: dict[str, Any] = self._idle_status()
+
+        self._status_publisher = self.create_publisher(String, "gaussian_splat/status", 10)
+        self.create_subscription(FSMState, self._fsm_state_topic, self._handle_fsm_state, 10)
+        self.create_subscription(FSMStatus, self._fsm_status_topic, self._handle_fsm_status, 10)
+        self.create_service(BuildGaussianSplat, "build_gaussian_splat", self._handle_build)
+        self.create_service(PauseGaussianSplatBuild, "pause_gaussian_splat_build", self._handle_pause)
+        self.create_service(ResumeGaussianSplatBuild, "resume_gaussian_splat_build", self._handle_resume)
+        self.create_service(Trigger, "get_gaussian_splat_status", self._handle_status)
+        self.create_timer(1.0, self._refresh_status_from_disk)
+
+        self.get_logger().info(
+            "Gaussian splat builder node ready; builds allowed under "
+            f"{self._missions_log_directory}, {self._maps_directory}, and {self._simulations_directory}"
+        )
+        self._publish_status()
+
+    def _idle_status(self) -> dict[str, Any]:
+        return {
+            "state": "idle",
+            "message": "Gaussian splat builder idle",
+            "updated_at": _utc_now(),
+            "can_pause": False,
+            "can_resume": False,
+        }
+
+    def _handle_fsm_state(self, message: FSMState) -> None:
+        self._set_fsm_state(str(getattr(message, "current_state", "") or getattr(message, "state", "")))
+
+    def _handle_fsm_status(self, message: FSMStatus) -> None:
+        self._set_fsm_state(str(message.current_state))
+
+    def _set_fsm_state(self, state_name: str) -> None:
+        state_name = state_name.strip().upper()
+        if state_name:
+            self._latest_fsm_state = state_name
+
+    def _handle_status(self, request: Trigger.Request, response: Trigger.Response) -> Trigger.Response:
+        del request
+        self._refresh_status_from_disk()
+        with self._status_lock:
+            response.success = self._latest_status.get("state") != "failed"
+            response.message = json.dumps(self._latest_status, separators=(",", ":"))
+        return response
+
+    def _handle_build(
+        self,
+        request: BuildGaussianSplat.Request,
+        response: BuildGaussianSplat.Response,
+    ) -> BuildGaussianSplat.Response:
+        if not self._fsm_allows_build():
+            response.success = False
+            response.message = (
+                "Gaussian splat builds are only allowed in IDLING or CHARGING; "
+                f"current state is {self._latest_fsm_state or 'UNKNOWN'}"
+            )
+            self._set_status("rejected", response.message)
+            return response
+        try:
+            capture_manifest = self._resolve_capture_manifest(request)
+            output_directory = capture_manifest.parent.parent / self._artifact_directory_name
+            self._assert_allowed_path(capture_manifest)
+            self._assert_allowed_path(output_directory)
+            if request.force and output_directory.exists():
+                shutil.rmtree(output_directory)
+            job = self._make_job(
+                str(request.mission_id),
+                capture_manifest,
+                output_directory,
+                float(request.tile_size_meters) if request.tile_size_meters > 0.0 else self._default_tile_size_meters,
+                int(request.max_iterations_per_tile)
+                if request.max_iterations_per_tile > 0
+                else self._default_max_iterations_per_tile,
+                resume=False,
+                auto_stop_enabled=False,
+            )
+            self._start_job(job)
+        except Exception as exc:  # noqa: BLE001
+            response.success = False
+            response.message = str(exc)
+            self._set_status("failed", response.message)
+            return response
+
+        response.success = True
+        response.message = f"Gaussian splat build started; build_id={job['build_id']}"
+        response.artifact_manifest_file = str(job["artifact_manifest_file"])
+        response.tile_count = self._count_tiles(capture_manifest, float(job["tile_size_meters"]))
+        response.completed_tile_count = 0
+        return response
+
+    def _handle_pause(
+        self,
+        request: PauseGaussianSplatBuild.Request,
+        response: PauseGaussianSplatBuild.Response,
+    ) -> PauseGaussianSplatBuild.Response:
+        response.success, response.message = self._pause_active_build(
+            str(request.build_id),
+            str(request.mode or "user_pause").strip() or "user_pause",
+        )
+        return response
+
+    def _handle_resume(
+        self,
+        request: ResumeGaussianSplatBuild.Request,
+        response: ResumeGaussianSplatBuild.Response,
+    ) -> ResumeGaussianSplatBuild.Response:
+        if not self._fsm_allows_build():
+            response.success = False
+            response.message = (
+                "Gaussian splat resumes are only allowed in IDLING or CHARGING; "
+                f"current state is {self._latest_fsm_state or 'UNKNOWN'}"
+            )
+            self._set_status("rejected", response.message)
+            return response
+        try:
+            job = self._load_resumable_job(str(request.build_id))
+            if request.additional_iterations_per_tile > 0:
+                job["max_iterations_per_tile"] = int(job.get("max_iterations_per_tile", 0)) + int(
+                    request.additional_iterations_per_tile
+                )
+            job["resume"] = True
+            job["auto_stop_enabled"] = bool(request.auto_stop_enabled)
+            self._start_job(job)
+            response.success = True
+            response.message = f"Gaussian splat build resumed; build_id={job['build_id']}"
+        except Exception as exc:  # noqa: BLE001
+            response.success = False
+            response.message = str(exc)
+            self._set_status("failed", response.message)
+        return response
+
+    def _start_job(self, job: dict[str, Any]) -> None:
+        with self._job_lock:
+            if self._worker_process is not None and self._worker_process.poll() is None:
+                raise RuntimeError("Another Gaussian splat build is already running")
+            output_directory = Path(str(job["output_directory"]))
+            control_directory = Path(str(job["control_directory"]))
+            control_directory.mkdir(parents=True, exist_ok=True)
+            for name in ("pause.requested",):
+                try:
+                    (control_directory / name).unlink()
+                except FileNotFoundError:
+                    pass
+            try:
+                Path(str(job["result_file"])).unlink()
+            except FileNotFoundError:
+                pass
+            _write_json_atomic(output_directory / "build_state.json", job)
+            command = self._worker_command(job)
+            self.get_logger().info(
+                f"Launching Gaussian splat worker with executable {command[0]} build_id={job['build_id']}"
+            )
+            process = subprocess.Popen(
+                command,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=self._worker_environment(),
+            )
+            self._worker_process = process
+            self._active_job = job
+            self._set_status("running", f"Gaussian splat build running; build_id={job['build_id']}", self._job_fields(job))
+            threading.Thread(target=self._monitor_worker, args=(process, dict(job)), daemon=True).start()
+
+    def _monitor_worker(self, process: subprocess.Popen[str], job: dict[str, Any]) -> None:
+        try:
+            stdout, stderr = process.communicate(timeout=max(1.0, self._worker_timeout_seconds))
+        except subprocess.TimeoutExpired:
+            process.kill()
+            stdout, stderr = process.communicate()
+        if stdout:
+            self.get_logger().info(f"Gaussian splat worker stdout: {stdout[-2000:]}")
+        if stderr:
+            self.get_logger().error(f"Gaussian splat worker stderr: {stderr[-2000:]}")
+        result = self._read_result(Path(str(job["result_file"])))
+        state = str(result.get("status", "completed" if result.get("success") else "failed"))
+        if process.returncode != 0 and state != "paused":
+            state = "failed"
+        with self._job_lock:
+            if self._worker_process is process:
+                self._worker_process = None
+                self._active_job = dict(job)
+        self._set_status(state, str(result.get("message", "Gaussian splat worker exited")), self._status_from_files(job, result))
+
+    def _pause_active_build(self, build_id: str, mode: str) -> tuple[bool, str]:
+        with self._job_lock:
+            process = self._worker_process
+            job = self._active_job
+        if process is None or process.poll() is not None or job is None:
+            return True, "No active Gaussian splat build to pause"
+        if build_id and build_id != str(job.get("build_id", "")):
+            return False, f"Active build_id is {job.get('build_id', '')}"
+        if mode == "manual_preempt":
+            self._write_terminal_worker_result(job, "paused", "Gaussian splat build manually preempted")
+            process.terminate()
+            try:
+                process.wait(timeout=2.0)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=5.0)
+            self._set_status("paused", "Gaussian splat build manually preempted", self._job_fields(job))
+            return True, "Gaussian splat build manually preempted"
+        control_directory = Path(str(job["control_directory"]))
+        control_directory.mkdir(parents=True, exist_ok=True)
+        (control_directory / "pause.requested").write_text(_utc_now() + "\n", encoding="utf-8")
+        if mode == "user_pause":
+            self._set_status("pause_requested", "Gaussian splat build pause requested", self._job_fields(job))
+            return True, "Gaussian splat build pause requested"
+        timeout_sec = 60.0 if mode == "scheduled_preempt" else max(5.0, float(self._checkpoint_interval) * 2.0)
+        deadline = time.monotonic() + timeout_sec
+        while process.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.2)
+        if process.poll() is None:
+            self._write_terminal_worker_result(job, "paused", "Gaussian splat build pause timed out; worker killed")
+            process.kill()
+            process.wait(timeout=5.0)
+            self._set_status("paused", "Gaussian splat build pause timed out; worker killed", self._job_fields(job))
+            return True, "Gaussian splat build pause timed out; worker killed"
+        return True, "Gaussian splat build paused"
+
+    def _write_terminal_worker_result(self, job: dict[str, Any], state: str, message: str) -> None:
+        output_directory = Path(str(job["output_directory"]))
+        progress = self._status_from_files(job, {})
+        progress.update({
+            "state": state,
+            "message": message,
+            "updated_at": _utc_now(),
+        })
+        _write_json_atomic(output_directory / "progress.json", progress)
+        _write_json_atomic(Path(str(job["result_file"])), {
+            "success": True,
+            "status": state,
+            "message": message,
+            "artifact_manifest_file": str(job.get("artifact_manifest_file", "")),
+            "tile_count": int(progress.get("tile_count", 0) or 0),
+            "completed_tile_count": int(progress.get("completed_tile_count", 0) or 0),
+        })
+
+    def _refresh_status_from_disk(self) -> None:
+        with self._job_lock:
+            job = dict(self._active_job) if self._active_job else None
+            running = self._worker_process is not None and self._worker_process.poll() is None
+        if not job:
+            return
+        current = self._status_from_files(job, {})
+        latest_state = str(self._latest_status.get("state", "idle"))
+        if running and latest_state == "pause_requested":
+            state = latest_state
+        elif running:
+            state = "running"
+        else:
+            state = str(current.get("state", latest_state))
+        self._set_status(state, str(self._latest_status.get("message", "Gaussian splat builder idle")), current)
+
+    def _make_job(
+        self,
+        mission_id: str,
+        capture_manifest: Path,
+        output_directory: Path,
+        tile_size_meters: float,
+        max_iterations_per_tile: int,
+        resume: bool,
+        auto_stop_enabled: bool,
+    ) -> dict[str, Any]:
+        build_id = hashlib.sha1(f"{capture_manifest}:{output_directory}".encode("utf-8")).hexdigest()[:12]
+        result_file = Path(tempfile.gettempdir()) / f"gaussian_splat_result_{build_id}.json"
+        return {
+            "build_id": build_id,
+            "mission_id": mission_id,
+            "capture_manifest_file": str(capture_manifest),
+            "output_directory": str(output_directory),
+            "artifact_manifest_file": str(output_directory / "gaussian_splat_manifest.json"),
+            "control_directory": str(output_directory / "control"),
+            "tile_size_meters": tile_size_meters,
+            "max_iterations_per_tile": max_iterations_per_tile,
+            "max_image_dimension": self._max_image_dimension,
+            "checkpoint_interval": max(1, self._checkpoint_interval),
+            "min_iterations_before_plateau": max(1, self._min_iterations_before_plateau),
+            "plateau_patience_windows": max(1, self._plateau_patience_windows),
+            "min_relative_loss_improvement": self._min_relative_loss_improvement,
+            "resume": resume,
+            "auto_stop_enabled": auto_stop_enabled,
+            "result_file": str(result_file),
+            "updated_at": _utc_now(),
+        }
+
+    def _load_resumable_job(self, build_id: str) -> dict[str, Any]:
+        roots = [self._missions_log_directory, self._simulations_directory, self._maps_directory]
+        candidates: list[Path] = []
+        for root in roots:
+            candidates.extend(root.rglob("gaussian_splat/build_state.json"))
+        for candidate in sorted(candidates, key=lambda path: path.stat().st_mtime, reverse=True):
+            try:
+                job = json.loads(candidate.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if not build_id or str(job.get("build_id", "")) == build_id:
+                return job
+        raise RuntimeError(f"No resumable Gaussian splat build found for build_id={build_id or '<latest>'}")
+
+    def _worker_command(self, job: dict[str, Any]) -> list[str]:
+        worker = Path(__file__).with_name("gaussian_splat_worker.py")
+        command = self._worker_command_prefix(worker) + [
+            "--capture-manifest", str(job["capture_manifest_file"]),
+            "--output-directory", str(job["output_directory"]),
+            "--mission-id", str(job.get("mission_id", "")),
+            "--tile-size-meters", str(job["tile_size_meters"]),
+            "--max-iterations-per-tile", str(job["max_iterations_per_tile"]),
+            "--max-image-dimension", str(job["max_image_dimension"]),
+            "--control-directory", str(job["control_directory"]),
+            "--checkpoint-interval", str(job["checkpoint_interval"]),
+            "--min-iterations-before-plateau", str(job["min_iterations_before_plateau"]),
+            "--plateau-patience-windows", str(job["plateau_patience_windows"]),
+            "--min-relative-loss-improvement", str(job["min_relative_loss_improvement"]),
+            "--result-file", str(job["result_file"]),
+        ]
+        if bool(job.get("resume", False)):
+            command.append("--resume")
+        if bool(job.get("auto_stop_enabled", False)):
+            command.append("--auto-stop-enabled")
+        return command
+
+    def _read_result(self, result_file: Path) -> dict[str, Any]:
+        if not result_file.exists():
+            return {"success": False, "message": "Gaussian splat worker did not write a result"}
+        try:
+            return json.loads(result_file.read_text(encoding="utf-8"))
+        finally:
+            try:
+                result_file.unlink()
+            except FileNotFoundError:
+                pass
+
+    def _status_from_files(self, job: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
+        status = self._job_fields(job)
+        output_directory = Path(str(job["output_directory"]))
+        progress_file = output_directory / "progress.json"
+        manifest_file = output_directory / "gaussian_splat_manifest.json"
+        if progress_file.exists():
+            try:
+                status.update(json.loads(progress_file.read_text(encoding="utf-8")))
+            except Exception:
+                pass
+        if manifest_file.exists():
+            try:
+                manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+                status["artifact_manifest_file"] = str(manifest_file)
+                status["tile_count"] = int(manifest.get("tile_count", status.get("tile_count", 0)))
+                status["completed_tile_count"] = int(manifest.get("completed_tile_count", 0))
+            except Exception:
+                pass
+        status.update({key: value for key, value in result.items() if key in {
+            "artifact_manifest_file",
+            "tile_count",
+            "completed_tile_count",
+            "status",
+        }})
+        if "status" in status and "state" not in status:
+            status["state"] = status["status"]
+        state = str(status.get("state", "idle"))
+        status["can_pause"] = state == "running"
+        status["can_resume"] = state in {"paused", "partial", "failed"}
+        return status
+
+    def _job_fields(self, job: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "build_id": str(job.get("build_id", "")),
+            "mission_id": str(job.get("mission_id", "")),
+            "capture_manifest_file": str(job.get("capture_manifest_file", "")),
+            "artifact_manifest_file": str(job.get("artifact_manifest_file", "")),
+            "target_iterations_per_tile": int(job.get("max_iterations_per_tile", 0)),
+            "checkpoint_interval": int(job.get("checkpoint_interval", 0)),
+        }
+
+    def _set_status(self, state: str, message: str, extra: dict[str, Any] | None = None) -> None:
+        status = {
+            "state": state,
+            "message": message,
+            "fsm_state": self._latest_fsm_state,
+            "updated_at": _utc_now(),
+            "can_pause": state == "running",
+            "can_resume": state in {"paused", "partial", "failed"},
+        }
+        if extra:
+            status.update(extra)
+        with self._status_lock:
+            self._latest_status = status
+        self._publish_status()
+
+    def _publish_status(self) -> None:
+        if not rclpy.ok():
+            return
+        message = String()
+        with self._status_lock:
+            message.data = json.dumps(self._latest_status, separators=(",", ":"))
+        try:
+            self._status_publisher.publish(message)
+        except Exception:
+            pass
+
+    def _fsm_allows_build(self) -> bool:
+        return self._latest_fsm_state in {"IDLING", "CHARGING"} or (
+            not self._latest_fsm_state and self._allow_unknown_fsm_state
+        )
+
+    def _worker_command_prefix(self, worker: Path) -> list[str]:
+        if not self._worker_python_executable:
+            return [str(worker)]
+        python_executable = self._resolve_worker_path(self._worker_python_executable)
+        if not python_executable.exists():
+            raise RuntimeError(f"Gaussian splat worker Python not found: {python_executable}")
+        return [str(python_executable), str(worker)]
+
+    def _worker_environment(self) -> dict[str, str]:
+        environment = dict(os.environ)
+        path_entries = []
+        if self._worker_python_executable:
+            python_executable = self._resolve_worker_path(self._worker_python_executable)
+            path_entries.append(str(python_executable.parent))
+        if not self._worker_cuda_home:
+            if path_entries:
+                path_entries.append(environment.get("PATH", ""))
+                environment["PATH"] = ":".join(path_entries)
+            return environment
+        cuda_home = self._resolve_path(self._worker_cuda_home)
+        if not cuda_home.exists():
+            raise RuntimeError(f"Gaussian splat worker CUDA_HOME not found: {cuda_home}")
+        cuda_library_path = str(cuda_home / "lib")
+        environment["CUDA_HOME"] = str(cuda_home)
+        path_entries.extend([str(cuda_home / "bin"), environment.get("PATH", "")])
+        environment["PATH"] = ":".join(path_entries)
+        environment["LIBRARY_PATH"] = ":".join([cuda_library_path, environment.get("LIBRARY_PATH", "")])
+        environment["LD_LIBRARY_PATH"] = ":".join([cuda_library_path, environment.get("LD_LIBRARY_PATH", "")])
+        return environment
+
+    def _resolve_capture_manifest(self, request: BuildGaussianSplat.Request) -> Path:
+        if request.gaussian_manifest_file.strip():
+            return self._resolve_path(request.gaussian_manifest_file)
+        if request.mission_execution_directory.strip():
+            return self._resolve_path(request.mission_execution_directory) / "gaussian" / "manifest.json"
+        if request.mission_id.strip():
+            mission_root = self._missions_log_directory / request.mission_id.strip()
+            candidates = sorted(
+                mission_root.rglob("gaussian/manifest.json"),
+                key=lambda path: path.stat().st_mtime,
+            )
+            if candidates:
+                return candidates[-1].resolve()
+        raise RuntimeError("gaussian_manifest_file, mission_execution_directory, or mission_id is required")
+
+    @staticmethod
+    def _count_tiles(capture_manifest: Path, tile_size_meters: float) -> int:
+        try:
+            document = json.loads(capture_manifest.read_text(encoding="utf-8"))
+            captures = document.get("captures", [])
+            keys = set()
+            for capture in captures if isinstance(captures, list) else []:
+                pose = capture.get("odometry_pose", {}) if isinstance(capture, dict) else {}
+                position = pose.get("position", {}) if isinstance(pose, dict) else {}
+                x = float(position.get("x", 0.0))
+                y = float(position.get("y", 0.0))
+                keys.add((int(x // tile_size_meters), int(y // tile_size_meters)))
+            return len(keys)
+        except Exception:
+            return 0
+
+    def _assert_allowed_path(self, path: Path) -> None:
+        resolved = path.resolve()
+        allowed_roots = [
+            self._missions_log_directory,
+            self._maps_directory,
+            self._simulations_directory,
+            Path("/tmp").resolve(),
+        ]
+        if not any(resolved == root or root in resolved.parents for root in allowed_roots):
+            raise RuntimeError(f"Path is outside configured Gaussian build roots: {resolved}")
+        if path.suffix == ".json" and not path.exists():
+            raise RuntimeError(f"Gaussian capture manifest not found: {resolved}")
+
+    @staticmethod
+    def _resolve_path(path: str) -> Path:
+        resolved = Path(path).expanduser()
+        if not resolved.is_absolute():
+            resolved = Path.cwd() / resolved
+        return resolved.resolve()
+
+    @staticmethod
+    def _resolve_worker_path(path: str) -> Path:
+        resolved = Path(path).expanduser()
+        if not resolved.is_absolute():
+            resolved = Path.cwd() / resolved
+        return resolved.absolute()
+
+
+def main() -> None:
+    rclpy.init()
+    node = GaussianSplatBuilderNode()
+    executor = MultiThreadedExecutor()
+    executor.add_node(node)
+    try:
+        executor.spin()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        try:
+            with node._job_lock:
+                process = node._worker_process
+            if process is not None and process.poll() is None:
+                process.terminate()
+                try:
+                    process.wait(timeout=2.0)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+        except BaseException:
+            pass
+        try:
+            executor.shutdown()
+            node.destroy_node()
+        except BaseException:
+            pass
+        try:
+            if rclpy.ok():
+                rclpy.shutdown()
+        except BaseException:
+            pass
+
+
+if __name__ == "__main__":
+    main()

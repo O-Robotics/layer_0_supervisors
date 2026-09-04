@@ -1,0 +1,253 @@
+// Copyright 2026 O-Robotics
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#pragma once
+
+#include <cstdint>
+#include <array>
+#include <filesystem>
+#include <map>
+#include <memory>
+#include <optional>
+#include <set>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+#include <GeographicLib/LocalCartesian.hpp>
+#include <nlohmann/json_fwd.hpp>
+#include <rclcpp/rclcpp.hpp>
+#include <std_msgs/msg/string.hpp>
+#include <std_srvs/srv/trigger.hpp>
+
+namespace amr_sweeper_mission_builder
+{
+
+struct GeoPoint
+{
+  double latitude;
+  double longitude;
+};
+
+struct MapPoint
+{
+  double x;
+  double y;
+};
+
+struct PolygonZone
+{
+  std::string name;
+  std::string zone_type;
+  std::vector<MapPoint> vertices;
+};
+
+struct Vda5050MissionBuildConfig
+{
+  std::string mission_path{""};
+  std::string zone_type_property{"zone_type"};
+  std::string working_zone_value{"working_zone"};
+  std::string no_go_zone_value{"no_go"};
+  double edge_band_meters{1.0};
+  double coverage_path_clearance_meters{1.0};
+  int edge_band_cost{252};
+  int inside_cost{0};
+  int outside_cost{254};
+  int no_go_cost{254};
+  double origin_latitude{0.0};
+  double origin_longitude{0.0};
+  double origin_altitude{0.0};
+  bool use_first_polygon_vertex_as_origin{true};
+  std::vector<std::string> supported_vda5050_versions{"3.0.0"};
+};
+
+struct MapExtent
+{
+  double min_x;
+  double min_y;
+  double max_x;
+  double max_y;
+};
+
+struct RasterizedMap
+{
+  std::vector<unsigned char> costs;
+  std::vector<int8_t> occupancy;
+  unsigned int width_cells;
+  unsigned int height_cells;
+  double resolution;
+  double origin_x;
+  double origin_y;
+  bool georeference_valid{false};
+  std::string georeference_type;
+  std::string georeference_source_crs{"EPSG:4326"};
+  std::size_t georeference_sample_count{0U};
+  std::array<double, 3> longitude_coefficients{0.0, 0.0, 0.0};
+  std::array<double, 3> latitude_coefficients{0.0, 0.0, 0.0};
+};
+
+struct MissionPathWaypoint
+{
+  std::string node_id;
+  GeoPoint geo_point;
+  MapPoint map_point;
+  double theta;
+  bool use_local_frame{false};
+};
+
+struct MapGeoreference
+{
+  std::string map_id;
+  std::string map_version;
+  std::string crs{"EPSG:4326"};
+  std::string units{"m"};
+  std::string frame{"ENU"};
+  double origin_latitude{0.0};
+  double origin_longitude{0.0};
+  double origin_altitude{0.0};
+  double yaw{0.0};
+  MapExtent bounds{0.0, 0.0, 0.0, 0.0};
+};
+
+struct MissionIdentity
+{
+  std::string order_id;
+  std::string timestamp;
+  std::string stem;
+};
+
+class Vda5050MissionParser
+{
+public:
+  void loadMission(const Vda5050MissionBuildConfig & config);
+  [[nodiscard]] MissionIdentity inspectMissionIdentity(const std::string & mission_path) const;
+  [[nodiscard]] static std::filesystem::path packageOrderPath(
+    const std::filesystem::path & mission_path);
+  [[nodiscard]] static std::filesystem::path packageZoneSetPath(
+    const std::filesystem::path & order_path);
+  [[nodiscard]] static std::filesystem::path packageMapGeoreferencePath(
+    const std::filesystem::path & order_path);
+  [[nodiscard]] RasterizedMap buildSuggestedGlobalCostmap(
+    double resolution,
+    double padding_meters) const;
+  void saveGlobalCostmapArtifacts(
+    const RasterizedMap & map,
+    const std::string & image_path,
+    const std::string & yaml_path) const;
+  void saveMissionWaypointsArtifact(const std::string & path) const;
+  [[nodiscard]] bool hasWorkingZones() const;
+  [[nodiscard]] bool hasMissionWaypoints() const;
+
+private:
+  [[nodiscard]] RasterizedMap buildGlobalCostmap(
+    double origin_x,
+    double origin_y,
+    unsigned int width_cells,
+    unsigned int height_cells,
+    double resolution) const;
+  [[nodiscard]] MapExtent computeExtent(double padding_meters) const;
+  void projectAndStoreZone(
+    const std::vector<GeoPoint> & geo_vertices,
+    const std::string & zone_name,
+    const std::string & zone_type);
+  void loadCoveragePath(
+    const std::vector<MissionPathWaypoint> & coverage_path);
+  void loadFromLegacyGeoJson(const nlohmann::json & document);
+  void loadFromVda5050Order(const nlohmann::json & document);
+  void loadVda5050ZoneSet(const nlohmann::json & document);
+  void loadMapGeoreference(const std::filesystem::path & order_path);
+  void validateVda5050Order(const nlohmann::json & document) const;
+  void validateVda5050ZoneSet(const nlohmann::json & document) const;
+  [[nodiscard]] bool isSupportedVda5050Version(const std::string & version) const;
+  [[nodiscard]] bool pointInPolygon(const MapPoint & point, const PolygonZone & polygon) const;
+  [[nodiscard]] double signedDistanceToPolygon(
+    const MapPoint & point,
+    const PolygonZone & polygon) const;
+  [[nodiscard]] double distanceToSegment(
+    const MapPoint & point,
+    const MapPoint & start,
+    const MapPoint & end) const;
+  [[nodiscard]] unsigned char costForPoint(const MapPoint & point) const;
+  void clearCoveragePathCorridor(RasterizedMap & map) const;
+  [[nodiscard]] std::string resolveMissionPath(const std::string & configured_path) const;
+  [[nodiscard]] MissionIdentity extractMissionIdentity(const nlohmann::json & document) const;
+  [[nodiscard]] static std::string sanitizeTimestamp(const std::string & timestamp);
+  [[nodiscard]] static std::string sanitizeStemToken(const std::string & value);
+  [[nodiscard]] static std::string normalizeZoneType(const std::string & zone_type);
+  Vda5050MissionBuildConfig config_;
+  std::vector<PolygonZone> working_zones_;
+  std::vector<PolygonZone> no_go_zones_;
+  std::vector<MissionPathWaypoint> mission_waypoints_;
+  std::map<std::string, MapGeoreference> map_georeferences_;
+  std::set<std::string> order_map_ids_;
+  bool projection_initialized_{false};
+  GeographicLib::LocalCartesian projector_;
+};
+
+class MissionParserNode : public rclcpp::Node
+{
+public:
+  explicit MissionParserNode(const rclcpp::NodeOptions & options = rclcpp::NodeOptions());
+
+private:
+  void buildIfNeeded();
+  bool buildCurrentMissionArtifacts();
+  void buildDiscoveredMissionArtifacts();
+  [[nodiscard]] std::vector<std::filesystem::path> discoverMissionPaths();
+  [[nodiscard]] std::optional<std::filesystem::path> selectActiveMissionPath();
+  [[nodiscard]] std::filesystem::path stageMissionFile(
+    const std::filesystem::path & mission_path);
+  bool buildArtifactsForMission(const std::filesystem::path & mission_path);
+  void handleBuildCurrentMission(
+    const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
+    std::shared_ptr<std_srvs::srv::Trigger::Response> response);
+  [[nodiscard]] std::filesystem::path resolveMissionPath() const;
+  [[nodiscard]] std::filesystem::path resolvePath(const std::string & path) const;
+  [[nodiscard]] std::filesystem::path resolveMissionsLogDirectory() const;
+  [[nodiscard]] std::filesystem::file_time_type currentMissionStamp(
+    const std::filesystem::path & mission_path) const;
+  [[nodiscard]] std::filesystem::path missionFolderPath(
+    const std::filesystem::path & mission_path) const;
+  [[nodiscard]] std::string missionStemForPath(const std::filesystem::path & mission_path) const;
+  [[nodiscard]] std::string coverageBasenameForMission(
+    const std::filesystem::path & mission_path) const;
+  [[nodiscard]] std::string staticCostmapBasenameForMission(
+    const std::filesystem::path & mission_path) const;
+  void publishStatus(const std::string & state, const std::string & detail) const;
+
+  std::string mission_path_;
+  std::string missions_directory_;
+  std::string missions_log_directory_;
+  std::string mission_file_extension_;
+  double mission_build_resolution_{0.1};
+  double mission_build_padding_meters_{2.0};
+  double mission_build_coverage_path_clearance_meters_{1.0};
+  double mission_projection_origin_latitude_{0.0};
+  double mission_projection_origin_longitude_{0.0};
+  double mission_projection_origin_altitude_{0.0};
+  std::vector<std::string> supported_vda5050_versions_{"3.0.0"};
+  bool mission_projection_use_first_polygon_vertex_as_origin_{true};
+  bool auto_build_on_start_{true};
+  bool watch_for_updates_{true};
+  bool build_discovered_missions_{false};
+  bool waiting_for_active_mission_logged_{false};
+  std::string last_build_error_key_;
+  std::map<std::string, std::filesystem::file_time_type> mission_build_stamps_;
+  std::unique_ptr<Vda5050MissionParser> mission_parser_;
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr status_publisher_;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr build_current_mission_service_;
+  rclcpp::TimerBase::SharedPtr build_timer_;
+};
+
+}  // namespace amr_sweeper_mission_builder

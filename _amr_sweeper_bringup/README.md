@@ -7,7 +7,7 @@ Packages started by this bringup:
 - `amr_sweeper_fsm`
 - `amr_sweeper_mission_executor`
 - `amr_sweeper_scheduler`
-- `amr_sweeper_vda5050_parser`
+- `amr_sweeper_mission_builder`
 - `amr_sweeper_interface_server`
 
 Main launch:
