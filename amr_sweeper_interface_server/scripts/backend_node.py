@@ -143,6 +143,16 @@ def _resolve_path(configured_path: str) -> Path:
     return Path.cwd() / path
 
 
+def _metadata_relative_path(value: Any, metadata_file: Path) -> Path | None:
+    path_text = str(value or "").strip()
+    if not path_text:
+        return None
+    path = Path(path_text).expanduser()
+    if path.is_absolute():
+        return path
+    return metadata_file.parent / path
+
+
 def _existing_paths(candidates: list[Path]) -> list[Path]:
     return [path for path in candidates if path.exists()]
 
@@ -1364,14 +1374,19 @@ class MissionBackendNode(Node):
             metadata_file = map_directory / "map.json"
             metadata = json.loads(metadata_file.read_text(encoding="utf-8")) if metadata_file.exists() else {}
             manifest_value = str(metadata.get("gaussian_manifest_file", "") or "")
-            manifest = Path(manifest_value) if manifest_value else None
+            manifest = _metadata_relative_path(manifest_value, metadata_file) if manifest_value else None
             if not manifest or not manifest.exists():
                 fallback = map_directory / "gaussian" / "manifest.json"
                 manifest = fallback if fallback.exists() else None
+            if not manifest or not manifest.exists() or not manifest.is_file():
+                raise RuntimeError(
+                    f"Saved map '{map_id}' does not have a Gaussian capture manifest; "
+                    f"expected {map_directory / 'gaussian' / 'manifest.json'}"
+                )
             request_payload["map_id"] = map_id
             request_payload["mission_id"] = str(request_payload.get("mission_id") or map_id)
             request_payload["mission_execution_directory"] = str(map_directory)
-            request_payload["gaussian_manifest_file"] = str(manifest) if manifest else ""
+            request_payload["gaussian_manifest_file"] = str(manifest)
             return request_payload
 
         if not request_payload.get("gaussian_manifest_file"):
@@ -2801,20 +2816,26 @@ class MissionBackendNode(Node):
             "recorded_work_area_static_costmap_image": "static_costmap.pgm",
         }
         for key, filename in copy_specs.items():
-            source_path = Path(str(latest_metadata.get(key, "")))
-            if source_path.exists() and source_path.is_file():
+            source_path = _metadata_relative_path(latest_metadata.get(key, ""), latest_metadata_file)
+            if source_path and source_path.exists() and source_path.is_file():
                 destination = map_directory / filename
                 shutil.copyfile(source_path, destination)
                 metadata[key] = str(destination)
-        gaussian_manifest = self._optional_path(latest_metadata.get("gaussian_manifest_file"))
+        gaussian_manifest = _metadata_relative_path(
+            latest_metadata.get("gaussian_manifest_file"),
+            latest_metadata_file,
+        )
         if gaussian_manifest and gaussian_manifest.exists() and gaussian_manifest.is_file():
             gaussian_directory = map_directory / "gaussian"
             if gaussian_directory.exists():
                 shutil.rmtree(gaussian_directory)
             shutil.copytree(gaussian_manifest.parent, gaussian_directory)
-            metadata["gaussian_manifest_file"] = str(gaussian_directory / "manifest.json")
-        gaussian_splat_manifest = self._optional_path(
-            latest_metadata.get("gaussian_splat_manifest_file")
+            saved_gaussian_manifest = gaussian_directory / "manifest.json"
+            self._rewrite_saved_gaussian_capture_manifest(saved_gaussian_manifest, gaussian_directory)
+            metadata["gaussian_manifest_file"] = str(saved_gaussian_manifest)
+        gaussian_splat_manifest = _metadata_relative_path(
+            latest_metadata.get("gaussian_splat_manifest_file"),
+            latest_metadata_file,
         )
         if gaussian_splat_manifest and gaussian_splat_manifest.exists() and gaussian_splat_manifest.is_file():
             gaussian_splat_directory = map_directory / "gaussian_splat"
@@ -2836,18 +2857,34 @@ class MissionBackendNode(Node):
             latest_metadata.get("gaussian_splat_manifest_file", ""),
         )
 
+    @staticmethod
+    def _rewrite_saved_gaussian_capture_manifest(
+        gaussian_manifest: Path,
+        gaussian_directory: Path,
+    ) -> None:
+        try:
+            document = json.loads(gaussian_manifest.read_text(encoding="utf-8"))
+        except Exception as exc:
+            raise RuntimeError(f"Could not update saved Gaussian capture manifest: {exc}") from exc
+        if not isinstance(document, dict):
+            raise RuntimeError("Saved Gaussian capture manifest must contain a JSON object")
+        document["output_directory"] = str(gaussian_directory)
+        document["gaussian_manifest_file"] = str(gaussian_manifest)
+        gaussian_manifest.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+
     def _map_payload_from_metadata(self, map_directory: Path, metadata: dict[str, Any]) -> dict[str, Any]:
         payload = dict(metadata)
         payload.setdefault("map_id", map_directory.name)
         payload.setdefault("name", payload["map_id"])
         payload["directory"] = str(map_directory)
-        route_path = self._optional_path(payload.get("recorded_work_area_route_file"))
-        navsat_path = self._optional_path(payload.get("recorded_work_area_navsat_file"))
+        metadata_file = map_directory / "map.json"
+        route_path = _metadata_relative_path(payload.get("recorded_work_area_route_file"), metadata_file)
+        navsat_path = _metadata_relative_path(payload.get("recorded_work_area_navsat_file"), metadata_file)
         zone_set_path = map_directory / "zoneSet.json"
         gaussian_manifest_file = str(payload.get("gaussian_manifest_file", ""))
         gaussian_splat_manifest_file = str(payload.get("gaussian_splat_manifest_file", ""))
-        gaussian_manifest_path = self._optional_path(gaussian_manifest_file)
-        gaussian_splat_manifest_path = self._optional_path(gaussian_splat_manifest_file)
+        gaussian_manifest_path = _metadata_relative_path(gaussian_manifest_file, metadata_file)
+        gaussian_splat_manifest_path = _metadata_relative_path(gaussian_splat_manifest_file, metadata_file)
         if route_path and route_path.exists():
             payload["route_geojson"] = self._load_geojson_feature_collection(route_path)
         if navsat_path and navsat_path.exists():
