@@ -2792,7 +2792,7 @@ class MissionBackendNode(Node):
         if source == "latest_recorded_map":
             self._copy_latest_recorded_map_into_map_directory(map_directory, metadata)
         elif source == "saved_map" and source_map_id:
-            self._copy_saved_map_into_map_directory(source_map_id, map_directory, metadata)
+            self._copy_saved_map_into_map_directory(source_map_id, map_directory, map_id, metadata)
 
         metadata_file = map_directory / "map.json"
         metadata_file.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
@@ -2826,18 +2826,14 @@ class MissionBackendNode(Node):
         if not latest_metadata_file.exists():
             raise RuntimeError("No latest recorded map is available to save")
         latest_metadata = json.loads(latest_metadata_file.read_text(encoding="utf-8"))
-        copy_specs = {
-            "recorded_work_area_route_file": "boundary.geojson",
-            "recorded_work_area_navsat_file": "boundary_navsat.geojson",
-            "recorded_work_area_static_costmap_yaml": "static_costmap.yaml",
-            "recorded_work_area_static_costmap_image": "static_costmap.pgm",
-        }
-        for key, filename in copy_specs.items():
-            source_path = _metadata_relative_path(latest_metadata.get(key, ""), latest_metadata_file)
-            if source_path and source_path.exists() and source_path.is_file():
-                destination = map_directory / filename
-                shutil.copyfile(source_path, destination)
-                metadata[key] = str(destination)
+        self._copy_directory_contents(latest_directory, map_directory, skip_names={"latest_recorded_map.json"})
+        self._copy_named_map_artifacts_from_metadata(
+            latest_metadata,
+            latest_metadata_file,
+            map_directory,
+            map_directory.name,
+            metadata,
+        )
         gaussian_manifest = _metadata_relative_path(
             latest_metadata.get("gaussian_manifest_file"),
             latest_metadata_file,
@@ -2848,8 +2844,12 @@ class MissionBackendNode(Node):
                 shutil.rmtree(gaussian_directory)
             shutil.copytree(gaussian_manifest.parent, gaussian_directory)
             saved_gaussian_manifest = gaussian_directory / "manifest.json"
-            self._rewrite_saved_gaussian_capture_manifest(saved_gaussian_manifest, gaussian_directory)
-            metadata["gaussian_manifest_file"] = str(saved_gaussian_manifest)
+            if self._try_rewrite_saved_gaussian_capture_manifest(
+                saved_gaussian_manifest,
+                gaussian_directory,
+                metadata,
+            ):
+                metadata["gaussian_manifest_file"] = str(saved_gaussian_manifest)
         gaussian_splat_manifest = _metadata_relative_path(
             latest_metadata.get("gaussian_splat_manifest_file"),
             latest_metadata_file,
@@ -2868,16 +2868,18 @@ class MissionBackendNode(Node):
         metadata["recorded_obstacle_count"] = latest_metadata.get("recorded_obstacle_count", 0)
         metadata["recorded_obstacle_points"] = latest_metadata.get("recorded_obstacle_points", [])
         metadata["geo_transform"] = latest_metadata.get("geo_transform", {})
-        metadata.setdefault("gaussian_manifest_file", latest_metadata.get("gaussian_manifest_file", ""))
-        metadata.setdefault(
-            "gaussian_splat_manifest_file",
-            latest_metadata.get("gaussian_splat_manifest_file", ""),
-        )
+        if "gaussian_error" not in metadata:
+            metadata.setdefault("gaussian_manifest_file", latest_metadata.get("gaussian_manifest_file", ""))
+            metadata.setdefault(
+                "gaussian_splat_manifest_file",
+                latest_metadata.get("gaussian_splat_manifest_file", ""),
+            )
 
     def _copy_saved_map_into_map_directory(
         self,
         source_map_id: str,
         map_directory: Path,
+        target_map_id: str,
         metadata: dict[str, Any],
     ) -> None:
         maps_directory = _resolve_path(self._maps_directory)
@@ -2890,6 +2892,11 @@ class MissionBackendNode(Node):
             return
         if maps_root not in destination_directory.parents:
             raise RuntimeError("Refusing to save map outside maps directory")
+        source_metadata_file = source_directory / "map.json"
+        try:
+            source_metadata = json.loads(source_metadata_file.read_text(encoding="utf-8"))
+        except Exception:
+            source_metadata = {}
 
         destination_directory.mkdir(parents=True, exist_ok=True)
         for child in destination_directory.iterdir():
@@ -2909,16 +2916,107 @@ class MissionBackendNode(Node):
             elif child.is_file():
                 shutil.copyfile(child, destination)
 
+        self._copy_named_map_artifacts_from_metadata(
+            source_metadata,
+            source_metadata_file,
+            destination_directory,
+            target_map_id,
+            metadata,
+            source_root=source_directory,
+        )
+
         gaussian_manifest = destination_directory / "gaussian" / "manifest.json"
         if gaussian_manifest.exists() and gaussian_manifest.is_file():
-            self._rewrite_saved_gaussian_capture_manifest(
+            if self._try_rewrite_saved_gaussian_capture_manifest(
                 gaussian_manifest,
                 destination_directory / "gaussian",
-            )
-            metadata["gaussian_manifest_file"] = str(gaussian_manifest)
+                metadata,
+            ):
+                metadata["gaussian_manifest_file"] = str(gaussian_manifest)
         gaussian_splat_manifest = destination_directory / "gaussian_splat" / "gaussian_splat_manifest.json"
         if gaussian_splat_manifest.exists() and gaussian_splat_manifest.is_file():
             metadata["gaussian_splat_manifest_file"] = str(gaussian_splat_manifest)
+
+    @staticmethod
+    def _copy_directory_contents(
+        source_directory: Path,
+        destination_directory: Path,
+        skip_names: set[str] | None = None,
+    ) -> None:
+        skip = skip_names or set()
+        destination_directory.mkdir(parents=True, exist_ok=True)
+        for child in source_directory.iterdir():
+            if child.name in skip:
+                continue
+            destination = destination_directory / child.name
+            if destination.exists():
+                if destination.is_dir():
+                    shutil.rmtree(destination)
+                else:
+                    destination.unlink()
+            if child.is_dir():
+                shutil.copytree(child, destination)
+            elif child.is_file():
+                shutil.copyfile(child, destination)
+
+    def _copy_named_map_artifacts_from_metadata(
+        self,
+        source_metadata: dict[str, Any],
+        source_metadata_file: Path,
+        map_directory: Path,
+        map_id: str,
+        metadata: dict[str, Any],
+        source_root: Path | None = None,
+    ) -> None:
+        copy_specs = {
+            "recorded_work_area_route_file": f"{map_id}_boundary.geojson",
+            "recorded_work_area_navsat_file": f"{map_id}_boundary_navsat.geojson",
+            "recorded_work_area_static_costmap_yaml": f"{map_id}_static_costmap.yaml",
+            "recorded_work_area_static_costmap_image": f"{map_id}_static_costmap.pgm",
+            "actual_path_file": f"{map_id}_path_actual.geojson",
+            "actual_path_navsat_file": f"{map_id}_path_navsat.geojson",
+            "mission_route_file": f"{map_id}_path_planned.geojson",
+            "mission_static_costmap_yaml": f"{map_id}_mission_static_costmap.yaml",
+            "mission_static_costmap_image": f"{map_id}_mission_static_costmap.pgm",
+            "saved_static_costmap_yaml": f"{map_id}_saved_static_costmap.yaml",
+        }
+        copied: dict[str, Path] = {}
+        for key, filename in copy_specs.items():
+            source_path = _metadata_relative_path(source_metadata.get(key, ""), source_metadata_file)
+            if not source_path or not source_path.exists() or not source_path.is_file():
+                continue
+            destination = map_directory / filename
+            if source_path.resolve() != destination.resolve():
+                shutil.copyfile(source_path, destination)
+            metadata[key] = str(destination)
+            copied[key] = destination
+            if source_root is not None:
+                try:
+                    old_copied_path = map_directory / source_path.resolve().relative_to(source_root.resolve())
+                except ValueError:
+                    old_copied_path = None
+                if old_copied_path and old_copied_path.exists() and old_copied_path.resolve() != destination.resolve():
+                    old_copied_path.unlink()
+
+        static_yaml = copied.get("recorded_work_area_static_costmap_yaml")
+        static_image = copied.get("recorded_work_area_static_costmap_image")
+        if static_yaml and static_image:
+            self._rewrite_costmap_yaml_image_reference(static_yaml, static_image)
+        mission_yaml = copied.get("mission_static_costmap_yaml")
+        mission_image = copied.get("mission_static_costmap_image")
+        if mission_yaml and mission_image:
+            self._rewrite_costmap_yaml_image_reference(mission_yaml, mission_image)
+
+    @staticmethod
+    def _rewrite_costmap_yaml_image_reference(yaml_file: Path, image_file: Path) -> None:
+        try:
+            document = yaml.safe_load(yaml_file.read_text(encoding="utf-8")) or {}
+        except Exception:
+            return
+        if not isinstance(document, dict):
+            return
+        document["image"] = image_file.name
+        yaml_file.write_text(yaml.safe_dump(document, sort_keys=False), encoding="utf-8")
 
     @staticmethod
     def _rewrite_saved_gaussian_capture_manifest(
@@ -2934,6 +3032,20 @@ class MissionBackendNode(Node):
         document["output_directory"] = str(gaussian_directory)
         document["gaussian_manifest_file"] = str(gaussian_manifest)
         gaussian_manifest.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+
+    def _try_rewrite_saved_gaussian_capture_manifest(
+        self,
+        gaussian_manifest: Path,
+        gaussian_directory: Path,
+        metadata: dict[str, Any],
+    ) -> bool:
+        try:
+            self._rewrite_saved_gaussian_capture_manifest(gaussian_manifest, gaussian_directory)
+        except RuntimeError as exc:
+            metadata["gaussian_error"] = str(exc)
+            metadata.pop("gaussian_manifest_file", None)
+            return False
+        return True
 
     def _map_payload_from_metadata(self, map_directory: Path, metadata: dict[str, Any]) -> dict[str, Any]:
         payload = dict(metadata)

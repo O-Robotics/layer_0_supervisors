@@ -290,6 +290,134 @@ class SavedMapGaussianFlowTest(unittest.TestCase):
             self.assertEqual(document["output_directory"], str(copied_directory / "gaussian"))
             self.assertEqual(document["gaussian_manifest_file"], str(copied_manifest))
 
+    def test_save_latest_map_with_empty_gaussian_manifest_still_saves_map(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            latest = workspace / "missions" / "logs" / "latest_recorded_map"
+            latest_gaussian = latest / "gaussian"
+            latest_gaussian.mkdir(parents=True)
+            source_manifest = latest_gaussian / "manifest.json"
+            source_manifest.write_text("", encoding="utf-8")
+            route_file = latest / "latest_recorded_map_route.geojson"
+            navsat_file = latest / "latest_recorded_map_navsat.geojson"
+            costmap_yaml = latest / "latest_recorded_map_static_costmap.yaml"
+            costmap_image = latest / "latest_recorded_map_static_costmap.pgm"
+            route_file.write_text('{"type":"FeatureCollection","features":[]}', encoding="utf-8")
+            navsat_file.write_text('{"type":"FeatureCollection","features":[]}', encoding="utf-8")
+            costmap_yaml.write_text("image: latest_recorded_map_static_costmap.pgm\nresolution: 0.05\n", encoding="utf-8")
+            costmap_image.write_text("P2\n1 1\n255\n0\n", encoding="utf-8")
+            latest_metadata_file = latest / "latest_recorded_map.json"
+            latest_metadata_file.write_text(
+                json.dumps(
+                    {
+                        "recorded_work_area_route_file": str(route_file),
+                        "recorded_work_area_navsat_file": str(navsat_file),
+                        "recorded_work_area_static_costmap_yaml": str(costmap_yaml),
+                        "recorded_work_area_static_costmap_image": str(costmap_image),
+                        "gaussian_manifest_file": str(source_manifest),
+                    }
+                ),
+                encoding="utf-8",
+            )
+            node = backend.MissionBackendNode.__new__(backend.MissionBackendNode)
+            node._maps_directory = str(workspace / "missions" / "maps")
+            node._missions_log_directory = str(workspace / "missions" / "logs")
+            node._simulations_directory = str(workspace / "missions" / "simulations")
+
+            response = node.save_map(
+                {
+                    "map_id": "Empty Gaussian",
+                    "name": "Empty Gaussian",
+                    "source": "latest_recorded_map",
+                    "overwrite_existing": True,
+                }
+            )
+
+            metadata_file = workspace / "missions" / "maps" / "Empty_Gaussian" / "map.json"
+            metadata = json.loads(metadata_file.read_text(encoding="utf-8"))
+            self.assertTrue(response["success"])
+            self.assertEqual(response["map"]["map_id"], "Empty_Gaussian")
+            self.assertTrue((metadata_file.parent / "Empty_Gaussian_boundary.geojson").is_file())
+            self.assertTrue((metadata_file.parent / "Empty_Gaussian_boundary_navsat.geojson").is_file())
+            self.assertTrue((metadata_file.parent / "Empty_Gaussian_static_costmap.yaml").is_file())
+            self.assertTrue((metadata_file.parent / "Empty_Gaussian_static_costmap.pgm").is_file())
+            self.assertEqual(
+                metadata["recorded_work_area_route_file"],
+                str(metadata_file.parent / "Empty_Gaussian_boundary.geojson"),
+            )
+            self.assertIn(
+                "image: Empty_Gaussian_static_costmap.pgm",
+                (metadata_file.parent / "Empty_Gaussian_static_costmap.yaml").read_text(encoding="utf-8"),
+            )
+            self.assertIn("Could not update saved Gaussian capture manifest", metadata["gaussian_error"])
+            self.assertNotIn("gaussian_manifest_file", metadata)
+
+    def test_save_as_from_saved_map_with_empty_gaussian_manifest_still_saves_map(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            maps_root = workspace / "missions" / "maps"
+            source_directory = maps_root / "Test4"
+            source_gaussian = source_directory / "gaussian"
+            source_gaussian.mkdir(parents=True)
+            source_manifest = source_gaussian / "manifest.json"
+            source_manifest.write_text("", encoding="utf-8")
+            source_route = source_directory / "Test4_boundary.geojson"
+            source_navsat = source_directory / "Test4_boundary_navsat.geojson"
+            source_costmap_yaml = source_directory / "Test4_static_costmap.yaml"
+            source_costmap_image = source_directory / "Test4_static_costmap.pgm"
+            source_route.write_text('{"type":"FeatureCollection","features":[]}', encoding="utf-8")
+            source_navsat.write_text('{"type":"FeatureCollection","features":[]}', encoding="utf-8")
+            source_costmap_yaml.write_text("image: Test4_static_costmap.pgm\nresolution: 0.05\n", encoding="utf-8")
+            source_costmap_image.write_text("P2\n1 1\n255\n0\n", encoding="utf-8")
+            (source_directory / "map.json").write_text(
+                json.dumps(
+                    {
+                        "map_id": "Test4",
+                        "name": "Test4",
+                        "recorded_work_area_route_file": str(source_route),
+                        "recorded_work_area_navsat_file": str(source_navsat),
+                        "recorded_work_area_static_costmap_yaml": str(source_costmap_yaml),
+                        "recorded_work_area_static_costmap_image": str(source_costmap_image),
+                        "gaussian_manifest_file": str(source_manifest),
+                    }
+                ),
+                encoding="utf-8",
+            )
+            node = backend.MissionBackendNode.__new__(backend.MissionBackendNode)
+            node._maps_directory = str(maps_root)
+            node._missions_log_directory = str(workspace / "missions" / "logs")
+            node._simulations_directory = str(workspace / "missions" / "simulations")
+
+            response = node.save_map(
+                {
+                    "map_id": "Test4 Copy",
+                    "name": "Test4 Copy",
+                    "source": "saved_map",
+                    "source_map_id": "Test4",
+                    "overwrite_existing": True,
+                }
+            )
+
+            metadata_file = maps_root / "Test4_Copy" / "map.json"
+            metadata = json.loads(metadata_file.read_text(encoding="utf-8"))
+            self.assertTrue(response["success"])
+            self.assertEqual(response["map"]["map_id"], "Test4_Copy")
+            self.assertTrue((metadata_file.parent / "Test4_Copy_boundary.geojson").is_file())
+            self.assertTrue((metadata_file.parent / "Test4_Copy_boundary_navsat.geojson").is_file())
+            self.assertTrue((metadata_file.parent / "Test4_Copy_static_costmap.yaml").is_file())
+            self.assertTrue((metadata_file.parent / "Test4_Copy_static_costmap.pgm").is_file())
+            self.assertFalse((metadata_file.parent / "Test4_boundary.geojson").exists())
+            self.assertEqual(
+                metadata["recorded_work_area_route_file"],
+                str(metadata_file.parent / "Test4_Copy_boundary.geojson"),
+            )
+            self.assertIn(
+                "image: Test4_Copy_static_costmap.pgm",
+                (metadata_file.parent / "Test4_Copy_static_costmap.yaml").read_text(encoding="utf-8"),
+            )
+            self.assertIn("Could not update saved Gaussian capture manifest", metadata["gaussian_error"])
+            self.assertNotIn("gaussian_manifest_file", metadata)
+
 
 if __name__ == "__main__":
     unittest.main()
