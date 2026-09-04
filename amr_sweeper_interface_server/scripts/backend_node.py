@@ -2748,11 +2748,26 @@ class MissionBackendNode(Node):
             return {"success": False, "message": "map_id or name is required"}
         maps_directory = _resolve_path(self._maps_directory)
         map_directory = maps_directory / map_id
+        maps_root = maps_directory.resolve()
         overwrite = bool(payload.get("overwrite_existing", True))
         if map_directory.exists() and not overwrite:
             return {"success": False, "message": f"Map '{map_id}' already exists"}
-        map_directory.mkdir(parents=True, exist_ok=True)
 
+        source = str(payload.get("source", "latest_recorded_map")).strip()
+        source_map_id = self._sanitize_map_id(str(payload.get("source_map_id", "")))
+        source_metadata: dict[str, Any] = {}
+        if source in {"saved_map", "metadata"} and source_map_id:
+            source_directory = (maps_directory / source_map_id).resolve()
+            if maps_root not in source_directory.parents or not source_directory.exists():
+                return {"success": False, "message": f"Source map '{source_map_id}' was not found"}
+            source_metadata_file = source_directory / "map.json"
+            if source_metadata_file.exists():
+                try:
+                    source_metadata = json.loads(source_metadata_file.read_text(encoding="utf-8"))
+                except Exception:
+                    source_metadata = {}
+
+        map_directory.mkdir(parents=True, exist_ok=True)
         existing_metadata_file = map_directory / "map.json"
         existing_metadata: dict[str, Any] = {}
         if existing_metadata_file.exists():
@@ -2761,8 +2776,8 @@ class MissionBackendNode(Node):
             except Exception:
                 existing_metadata = {}
 
-        source = str(payload.get("source", "latest_recorded_map")).strip()
         metadata = {
+            **source_metadata,
             **existing_metadata,
             "map_id": map_id,
             "name": str(payload.get("name") or existing_metadata.get("name") or map_id),
@@ -2776,6 +2791,8 @@ class MissionBackendNode(Node):
 
         if source == "latest_recorded_map":
             self._copy_latest_recorded_map_into_map_directory(map_directory, metadata)
+        elif source == "saved_map" and source_map_id:
+            self._copy_saved_map_into_map_directory(source_map_id, map_directory, metadata)
 
         metadata_file = map_directory / "map.json"
         metadata_file.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
@@ -2856,6 +2873,52 @@ class MissionBackendNode(Node):
             "gaussian_splat_manifest_file",
             latest_metadata.get("gaussian_splat_manifest_file", ""),
         )
+
+    def _copy_saved_map_into_map_directory(
+        self,
+        source_map_id: str,
+        map_directory: Path,
+        metadata: dict[str, Any],
+    ) -> None:
+        maps_directory = _resolve_path(self._maps_directory)
+        maps_root = maps_directory.resolve()
+        source_directory = (maps_directory / source_map_id).resolve()
+        destination_directory = map_directory.resolve()
+        if maps_root not in source_directory.parents or not source_directory.exists():
+            raise RuntimeError(f"Source map '{source_map_id}' was not found")
+        if source_directory == destination_directory:
+            return
+        if maps_root not in destination_directory.parents:
+            raise RuntimeError("Refusing to save map outside maps directory")
+
+        destination_directory.mkdir(parents=True, exist_ok=True)
+        for child in destination_directory.iterdir():
+            if child.name == "map.json":
+                continue
+            if child.is_dir():
+                shutil.rmtree(child)
+            else:
+                child.unlink()
+
+        for child in source_directory.iterdir():
+            if child.name == "map.json":
+                continue
+            destination = destination_directory / child.name
+            if child.is_dir():
+                shutil.copytree(child, destination)
+            elif child.is_file():
+                shutil.copyfile(child, destination)
+
+        gaussian_manifest = destination_directory / "gaussian" / "manifest.json"
+        if gaussian_manifest.exists() and gaussian_manifest.is_file():
+            self._rewrite_saved_gaussian_capture_manifest(
+                gaussian_manifest,
+                destination_directory / "gaussian",
+            )
+            metadata["gaussian_manifest_file"] = str(gaussian_manifest)
+        gaussian_splat_manifest = destination_directory / "gaussian_splat" / "gaussian_splat_manifest.json"
+        if gaussian_splat_manifest.exists() and gaussian_splat_manifest.is_file():
+            metadata["gaussian_splat_manifest_file"] = str(gaussian_splat_manifest)
 
     @staticmethod
     def _rewrite_saved_gaussian_capture_manifest(

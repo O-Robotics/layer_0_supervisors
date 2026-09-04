@@ -238,6 +238,58 @@ class SavedMapGaussianFlowTest(unittest.TestCase):
             self.assertEqual(payload["mission_execution_directory"], str(map_directory))
             self.assertEqual(payload["gaussian_manifest_file"], str(saved_manifest))
 
+    def test_save_as_from_selected_saved_map_copies_selected_source(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            maps_root = workspace / "missions" / "maps"
+            source_directory = maps_root / "Test4"
+            source_gaussian = source_directory / "gaussian"
+            source_gaussian.mkdir(parents=True)
+            source_manifest = source_gaussian / "manifest.json"
+            source_manifest.write_text(
+                json.dumps(
+                    {
+                        "representation": "synchronized_gaussian_capture_dataset",
+                        "output_directory": "/tmp/old/source/gaussian",
+                        "gaussian_manifest_file": "/tmp/old/source/gaussian/manifest.json",
+                        "captures": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (source_directory / "map.json").write_text(
+                json.dumps(
+                    {
+                        "map_id": "Test4",
+                        "name": "Test4",
+                        "gaussian_manifest_file": str(source_manifest),
+                    }
+                ),
+                encoding="utf-8",
+            )
+            node = backend.MissionBackendNode.__new__(backend.MissionBackendNode)
+            node._maps_directory = str(maps_root)
+            node._missions_log_directory = str(workspace / "missions" / "logs")
+            node._simulations_directory = str(workspace / "missions" / "simulations")
+
+            response = node.save_map(
+                {
+                    "map_id": "Test4 Copy",
+                    "name": "Test4 Copy",
+                    "source": "saved_map",
+                    "source_map_id": "Test4",
+                    "overwrite_existing": True,
+                }
+            )
+
+            copied_directory = maps_root / "Test4_Copy"
+            copied_manifest = copied_directory / "gaussian" / "manifest.json"
+            document = json.loads(copied_manifest.read_text(encoding="utf-8"))
+            self.assertTrue(response["success"])
+            self.assertEqual(response["map"]["map_id"], "Test4_Copy")
+            self.assertEqual(document["output_directory"], str(copied_directory / "gaussian"))
+            self.assertEqual(document["gaussian_manifest_file"], str(copied_manifest))
+
 
 if __name__ == "__main__":
     unittest.main()
