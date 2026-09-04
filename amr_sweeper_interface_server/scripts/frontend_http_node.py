@@ -1589,6 +1589,76 @@ class MissionFrontendRenderer:
     .gaussian-overlay-summary.failed strong {{
       color: var(--danger);
     }}
+    .map-layer-control {{
+      position: absolute;
+      left: 10px;
+      top: 82px;
+      z-index: 801;
+      font: 12px/1.5 "Avenir Next", "Segoe UI", sans-serif;
+    }}
+    .map-layer-button {{
+      width: 34px;
+      height: 34px;
+      border: 2px solid rgba(0, 0, 0, 0.22);
+      border-radius: 4px;
+      padding: 0;
+      color: #111827;
+      background: #ffffff;
+      box-shadow: none;
+      font-size: 19px;
+      line-height: 30px;
+      letter-spacing: 0;
+      text-transform: none;
+    }}
+    .map-layer-button:hover {{
+      background: #f4f4f4;
+    }}
+    .map-layer-panel {{
+      display: none;
+      min-width: 178px;
+      margin-top: 6px;
+      padding: 10px;
+      border: 1px solid rgba(0, 0, 0, 0.28);
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.94);
+      color: #111827;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.24);
+    }}
+    .map-layer-control.open .map-layer-panel {{
+      display: grid;
+      gap: 7px;
+    }}
+    .map-layer-panel label {{
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0;
+      color: #111827;
+      font-size: 0.82rem;
+      white-space: nowrap;
+    }}
+    .map-layer-panel input {{
+      margin: 0;
+    }}
+    .map-view-control {{
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      z-index: 700;
+      display: flex;
+      gap: 6px;
+      padding: 5px;
+      border: 1px solid rgba(253, 202, 15, 0.35);
+      border-radius: 8px;
+      background: rgba(7, 9, 10, 0.78);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+    }}
+    .map-view-control button {{
+      min-width: 42px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      font-size: 0.82rem;
+    }}
     .stack {{
       display: grid;
       gap: 16px;
@@ -1655,6 +1725,16 @@ class MissionFrontendRenderer:
     .pattern-option input {{
       margin-right: 8px;
     }}
+    .path-row {{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 14px;
+    }}
+    .path-row label {{
+      margin: 0;
+    }}
     button {{
       border: 0;
       border-radius: 999px;
@@ -1693,6 +1773,8 @@ class MissionFrontendRenderer:
       .layout {{ grid-template-columns: 1fr; }}
       .meta-grid {{ grid-template-columns: 1fr; }}
       #record-map {{ min-height: 440px; }}
+      #splat-view {{ min-height: 440px; }}
+      #splat-canvas {{ height: 440px; }}
     }}
   </style>
 </head>
@@ -1715,6 +1797,21 @@ class MissionFrontendRenderer:
     <section class="layout">
       <section class="card map-shell">
         <div id="record-map"></div>
+        <div id="map-layer-control" class="map-layer-control">
+          <button id="map-layer-button" class="map-layer-button" type="button" aria-label="Layer settings" title="Layer settings">&#9881;</button>
+          <div class="map-layer-panel">
+            <label><input class="layer-toggle" data-layer="background" type="checkbox" checked> Background</label>
+            <label><input class="layer-toggle" data-layer="boundary" type="checkbox" checked> Boundary</label>
+            <label><input class="layer-toggle" data-layer="recorded" type="checkbox" checked> Recorded trace</label>
+            <label><input class="layer-toggle" data-layer="planned" type="checkbox" checked> Planned path</label>
+            <label><input class="layer-toggle" data-layer="zones" type="checkbox" checked> VDA5050 zones</label>
+            <label><input class="layer-toggle" data-layer="gaussian" type="checkbox" checked> Gaussian</label>
+          </div>
+        </div>
+        <div class="map-view-control">
+          <button id="view-2d-button">2D</button>
+          <button id="view-3d-button" class="secondary">3D</button>
+        </div>
         <div id="splat-view"><canvas id="splat-canvas"></canvas></div>
         <div id="gaussian-overlay-summary" class="gaussian-overlay-summary">
           <strong>3D map</strong>
@@ -1723,18 +1820,13 @@ class MissionFrontendRenderer:
       </section>
       <section class="stack">
         <section class="card">
+          <h2>Saved Maps</h2>
           <div class="toolbar">
             <div id="recording-chip" class="status-chip idle">RecordMap idle</div>
             <button id="save-map-button">Save As Map</button>
             <button id="build-gaussian-button" class="secondary">Build 3D map</button>
             <button id="delete-map-button" class="stop">Delete Map</button>
           </div>
-          <div id="gaussian-build-status" class="muted" style="margin-top: 12px;">Gaussian splat idle.</div>
-          <div class="muted" style="margin-top: 12px;">New recordings are started from Teleop. Saved maps persist here after later recordings replace the latest capture.</div>
-        </section>
-
-        <section class="card">
-          <h2>Saved Maps</h2>
           <div style="margin-top: 12px;">
             <label for="map-select">Map</label>
             <select id="map-select"></select>
@@ -1753,6 +1845,7 @@ class MissionFrontendRenderer:
               <div id="latest-obstacles" class="muted" style="margin-top: 6px;">-</div>
             </div>
           </div>
+          <div id="gaussian-build-status" class="muted" style="margin-top: 12px;">Gaussian splat idle.</div>
           <div id="latest-map-message" class="muted" style="margin-top: 12px;">Record from Teleop or select a saved map.</div>
         </section>
 
@@ -1767,6 +1860,10 @@ class MissionFrontendRenderer:
               <label class="pattern-option"><input type="radio" name="pattern" value="spiral"> Spiral inward coverage</label>
             </div>
           </div>
+          <div class="path-row">
+            <label for="planned-path-toggle">Planned path</label>
+            <input id="planned-path-toggle" class="layer-toggle" data-layer="planned" type="checkbox" checked>
+          </div>
           <div style="margin-top: 14px;">
             <label for="start-position">Start position</label>
             <input id="start-position" type="range" min="0" max="100" value="0">
@@ -1776,22 +1873,8 @@ class MissionFrontendRenderer:
             <input id="end-position" type="range" min="0" max="100" value="100">
           </div>
           <div class="toolbar" style="margin-top: 16px;">
-            <button id="save-button">Save Map</button>
+            <button id="save-button">Save Path</button>
             <button id="refresh-button" class="secondary">Refresh</button>
-          </div>
-        </section>
-        <section class="card">
-          <h2>Layers</h2>
-          <div class="pattern-list">
-            <label class="pattern-option"><input class="layer-toggle" data-layer="background" type="checkbox" checked> Background</label>
-            <label class="pattern-option"><input class="layer-toggle" data-layer="boundary" type="checkbox" checked> Boundary</label>
-            <label class="pattern-option"><input class="layer-toggle" data-layer="recorded" type="checkbox" checked> Recorded trace</label>
-            <label class="pattern-option"><input class="layer-toggle" data-layer="zones" type="checkbox" checked> VDA5050 zones</label>
-            <label class="pattern-option"><input class="layer-toggle" data-layer="gaussian" type="checkbox" checked> Gaussian</label>
-          </div>
-          <div class="toolbar" style="margin-top: 16px;">
-            <button id="view-2d-button">2D</button>
-            <button id="view-3d-button" class="secondary">3D</button>
           </div>
         </section>
       </section>
@@ -1818,6 +1901,8 @@ class MissionFrontendRenderer:
     const useEndPositionInput = document.getElementById('use-end-position');
     const endPositionInput = document.getElementById('end-position');
     const layerToggles = [...document.querySelectorAll('.layer-toggle')];
+    const mapLayerControl = document.getElementById('map-layer-control');
+    const mapLayerButton = document.getElementById('map-layer-button');
     const view2dButton = document.getElementById('view-2d-button');
     const view3dButton = document.getElementById('view-3d-button');
     const buildGaussianButton = document.getElementById('build-gaussian-button');
@@ -1837,12 +1922,14 @@ class MissionFrontendRenderer:
     let activePolyline = null;
     let latestPolyline = null;
     let perimeterPolyline = null;
+    let plannedPathPolyline = null;
     let currentMarker = null;
     let boundaryMaskLayer = null;
     let gaussianLayer = null;
     let currentGaussianBuildId = '';
     let gaussianRequestInFlight = false;
     let lastMapSnapshot = {{}};
+    let appliedEditorStateKey = '';
 
     mapSelect.innerHTML = '<option value="">Loading saved maps...</option>';
     gaussianOverlaySummary.style.display = 'none';
@@ -1870,6 +1957,33 @@ class MissionFrontendRenderer:
     function layerEnabled(layer) {{
       const input = layerToggles.find((toggle) => toggle.dataset.layer === layer);
       return !input || input.checked;
+    }}
+
+    function layerVisibility() {{
+      const visibility = {{}};
+      for (const input of layerToggles) {{
+        visibility[input.dataset.layer] = input.checked;
+      }}
+      return visibility;
+    }}
+
+    function syncLayerInputs(source) {{
+      for (const input of layerToggles) {{
+        if (input !== source && input.dataset.layer === source.dataset.layer) {{
+          input.checked = source.checked;
+        }}
+      }}
+    }}
+
+    function applyLayerVisibility(visibility) {{
+      if (!visibility || typeof visibility !== 'object') {{
+        return;
+      }}
+      for (const input of layerToggles) {{
+        if (Object.prototype.hasOwnProperty.call(visibility, input.dataset.layer)) {{
+          input.checked = Boolean(visibility[input.dataset.layer]);
+        }}
+      }}
     }}
 
     function selectedMap() {{
@@ -1929,6 +2043,28 @@ class MissionFrontendRenderer:
       return latlngs;
     }}
 
+    function clampPercent(value) {{
+      const number = Number(value);
+      if (!Number.isFinite(number)) {{
+        return 0;
+      }}
+      return Math.max(0, Math.min(100, number));
+    }}
+
+    function plannedPathSegment(latlngs) {{
+      if (latlngs.length <= 2) {{
+        return latlngs;
+      }}
+      const startPercent = clampPercent(startPositionInput.value);
+      const endPercent = useEndPositionInput.checked ? clampPercent(endPositionInput.value) : 100;
+      const lowerPercent = Math.min(startPercent, endPercent);
+      const upperPercent = Math.max(startPercent, endPercent);
+      const lastIndex = latlngs.length - 1;
+      const startIndex = Math.floor((lowerPercent / 100) * lastIndex);
+      const endIndex = Math.ceil((upperPercent / 100) * lastIndex);
+      return latlngs.slice(startIndex, Math.min(lastIndex, endIndex) + 1);
+    }}
+
     function updateMap(data) {{
       if (activePolyline) {{
         map.removeLayer(activePolyline);
@@ -1941,6 +2077,10 @@ class MissionFrontendRenderer:
       if (perimeterPolyline) {{
         map.removeLayer(perimeterPolyline);
         perimeterPolyline = null;
+      }}
+      if (plannedPathPolyline) {{
+        map.removeLayer(plannedPathPolyline);
+        plannedPathPolyline = null;
       }}
       if (currentMarker) {{
         map.removeLayer(currentMarker);
@@ -1981,6 +2121,17 @@ class MissionFrontendRenderer:
           fillOpacity: layerEnabled('background') ? 0.04 : 0.26,
         }}).addTo(map);
         boundaryMaskLayer.bringToBack();
+      }}
+
+      const plannedLatLngs = plannedPathSegment(perimeterLatLngs);
+      if (layerEnabled('planned') && plannedLatLngs.length > 1) {{
+        plannedPathPolyline = L.polyline(plannedLatLngs, {{
+          color: '#fdca0f',
+          weight: 5,
+          opacity: 0.96,
+        }}).addTo(map);
+        plannedPathPolyline.bringToFront();
+        bounds.push(...plannedLatLngs);
       }}
 
       if (layerEnabled('gaussian')) {{
@@ -2209,6 +2360,7 @@ class MissionFrontendRenderer:
       const entry = selectedMap();
       if (entry) {{
         mapNameInput.value = entry.name || entry.map_id;
+        applyLayerVisibility(entry.layer_visibility || {{}});
         const pattern = patternInputs.find((input) => input.value === (entry.sweep_pattern || 'zigzag'));
         if (pattern) {{
           pattern.checked = true;
@@ -2219,6 +2371,11 @@ class MissionFrontendRenderer:
       }} else if (!mapNameInput.value) {{
         mapNameInput.value = '';
       }}
+    }}
+
+    function editorStateKey(data) {{
+      const latestRunId = String(data.latest_recorded_map?.run_started_at || '');
+      return selectedMapId ? `saved:${{selectedMapId}}` : `latest:${{latestRunId}}`;
     }}
 
     async function loadRecordMapSnapshot() {{
@@ -2235,7 +2392,11 @@ class MissionFrontendRenderer:
         setBanner('warn', 'Previously selected saved map is no longer available.');
       }}
       populateMapSelect();
-      applySelectedMapToEditor();
+      const nextEditorStateKey = editorStateKey(data);
+      if (nextEditorStateKey !== appliedEditorStateKey) {{
+        applySelectedMapToEditor();
+        appliedEditorStateKey = nextEditorStateKey;
+      }}
       chip.textContent = data.active_recording ? 'RecordMap recording' : 'RecordMap idle';
       chip.className = data.active_recording ? 'status-chip' : 'status-chip idle';
 
@@ -2309,7 +2470,7 @@ class MissionFrontendRenderer:
         sweep_pattern: selectedPattern(),
         start_position: {{ percent: Number(startPositionInput.value) }},
         end_position: useEndPositionInput.checked ? {{ percent: Number(endPositionInput.value) }} : null,
-        layer_visibility: Object.fromEntries(layerToggles.map((input) => [input.dataset.layer, input.checked])),
+        layer_visibility: layerVisibility(),
         overwrite_existing: true
       }});
       setBanner(data.success ? 'ok' : 'error', data.message || 'Save map request completed');
@@ -2400,7 +2561,7 @@ class MissionFrontendRenderer:
         sweep_pattern: selectedPattern(),
         start_position: {{ percent: Number(startPositionInput.value) }},
         end_position: useEndPositionInput.checked ? {{ percent: Number(endPositionInput.value) }} : null,
-        layer_visibility: Object.fromEntries(layerToggles.map((input) => [input.dataset.layer, input.checked])),
+        layer_visibility: layerVisibility(),
         overwrite_existing: true
       }});
       setBanner(data.success ? 'ok' : 'error', data.message || 'Save map request completed');
@@ -2417,9 +2578,26 @@ class MissionFrontendRenderer:
       await loadRecordMapSnapshot();
     }});
 
-    for (const input of [...layerToggles, startPositionInput, endPositionInput, useEndPositionInput]) {{
-      input.addEventListener('input', () => loadRecordMapSnapshot().catch(() => null));
-      input.addEventListener('change', () => loadRecordMapSnapshot().catch(() => null));
+    mapLayerButton.addEventListener('click', () => {{
+      mapLayerControl.classList.toggle('open');
+    }});
+
+    document.addEventListener('click', (event) => {{
+      if (!mapLayerControl.contains(event.target)) {{
+        mapLayerControl.classList.remove('open');
+      }}
+    }});
+
+    for (const input of layerToggles) {{
+      input.addEventListener('change', () => {{
+        syncLayerInputs(input);
+        updateMap(lastMapSnapshot);
+      }});
+    }}
+
+    for (const input of [startPositionInput, endPositionInput, useEndPositionInput]) {{
+      input.addEventListener('input', () => updateMap(lastMapSnapshot));
+      input.addEventListener('change', () => updateMap(lastMapSnapshot));
     }}
     view2dButton.addEventListener('click', () => {{
       currentView = '2d';
@@ -2427,6 +2605,7 @@ class MissionFrontendRenderer:
       view3dButton.classList.add('secondary');
       recordMapElement.style.display = '';
       splatViewElement.style.display = 'none';
+      mapLayerControl.style.display = '';
       gaussianOverlaySummary.style.display = 'none';
       window.setTimeout(() => map.invalidateSize(), 0);
     }});
@@ -2436,6 +2615,8 @@ class MissionFrontendRenderer:
       view2dButton.classList.add('secondary');
       recordMapElement.style.display = 'none';
       splatViewElement.style.display = 'block';
+      mapLayerControl.style.display = 'none';
+      mapLayerControl.classList.remove('open');
       gaussianOverlaySummary.style.display = '';
       renderSplatPreview(lastMapSnapshot);
       setBanner('ok', '3D view uses the saved tiled Gaussian splat manifest when available.');
