@@ -768,13 +768,13 @@ class MissionBackendNode(Node):
             if action == "LIST_MAPS":
                 return self._ipc_backend_response(self.maps_snapshot())
             if action == "BUILD_GAUSSIAN_SPLAT":
-                return self._ipc_backend_response(self.build_gaussian_splat(payload))
+                return self._ipc_success_response(self.build_gaussian_splat(payload))
             if action == "PAUSE_GAUSSIAN_SPLAT":
-                return self._ipc_backend_response(self.pause_gaussian_splat(payload))
+                return self._ipc_success_response(self.pause_gaussian_splat(payload))
             if action == "RESUME_GAUSSIAN_SPLAT":
-                return self._ipc_backend_response(self.resume_gaussian_splat(payload))
+                return self._ipc_success_response(self.resume_gaussian_splat(payload))
             if action == "GET_GAUSSIAN_SPLAT_STATUS":
-                return self._ipc_backend_response(self.gaussian_splat_status())
+                return self._ipc_success_response(self.gaussian_splat_status())
             if action == "SAVE_MAP":
                 return self._ipc_backend_response(self.save_map(payload))
             if action == "DELETE_MAP":
@@ -1424,7 +1424,8 @@ class MissionBackendNode(Node):
         except Exception:
             status = {"message": response.message}
         return {
-            "success": bool(response.success),
+            "success": True,
+            "builder_service_success": bool(response.success),
             "status": status,
         }
 
