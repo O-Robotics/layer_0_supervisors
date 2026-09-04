@@ -1721,6 +1721,68 @@ class MissionFrontendRenderer:
       background: rgba(18, 20, 21, 0.82);
       color: var(--ink);
     }}
+    .map-combo {{
+      position: relative;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 42px;
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(18, 20, 21, 0.82);
+    }}
+    .map-combo input[type="text"] {{
+      min-width: 0;
+      border: 0;
+      border-radius: 12px 0 0 12px;
+      background: transparent;
+      outline: none;
+    }}
+    .map-combo input[type="text"]:focus {{
+      box-shadow: inset 0 0 0 1px rgba(253, 202, 15, 0.28);
+    }}
+    .map-combo-button {{
+      border-left: 1px solid var(--line);
+      border-radius: 0 12px 12px 0;
+      padding: 0;
+      color: var(--ink);
+      background: transparent;
+      letter-spacing: 0;
+      text-transform: none;
+    }}
+    .map-combo-button:hover {{
+      background: rgba(253, 202, 15, 0.12);
+    }}
+    .map-combo-list {{
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0;
+      right: 0;
+      z-index: 950;
+      display: none;
+      max-height: 240px;
+      overflow-y: auto;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(18, 20, 21, 0.98);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.32);
+    }}
+    .map-combo.open .map-combo-list {{
+      display: block;
+    }}
+    .map-combo-option {{
+      width: 100%;
+      border: 0;
+      border-radius: 0;
+      padding: 11px 12px;
+      color: var(--ink);
+      background: transparent;
+      text-align: left;
+      letter-spacing: 0;
+      text-transform: none;
+    }}
+    .map-combo-option:hover, .map-combo-option.active {{
+      background: rgba(253, 202, 15, 0.16);
+    }}
     .pattern-list {{
       display: grid;
       gap: 10px;
@@ -1838,12 +1900,12 @@ class MissionFrontendRenderer:
             <button id="delete-map-button" class="stop">Delete Map</button>
           </div>
           <div style="margin-top: 12px;">
-            <label for="map-select">Map</label>
-            <select id="map-select"></select>
-          </div>
-          <div style="margin-top: 12px;">
-            <label for="map-name">Map name</label>
-            <input id="map-name" type="text" placeholder="yard_east">
+            <label for="map-name">Map</label>
+            <div id="map-combo" class="map-combo">
+              <input id="map-name" type="text" autocomplete="off" placeholder="Last Recording">
+              <button id="map-combo-button" class="map-combo-button" type="button" aria-label="Select saved map" title="Select saved map">&#9662;</button>
+              <div id="map-combo-list" class="map-combo-list"></div>
+            </div>
           </div>
           <div class="meta-grid" style="margin-top: 12px;">
             <div class="meta">
@@ -1905,7 +1967,9 @@ class MissionFrontendRenderer:
     const gaussianBuildStatus = document.getElementById('gaussian-build-status');
     const patternCountdown = document.getElementById('pattern-countdown');
     const patternInputs = [...document.querySelectorAll('input[name="pattern"]')];
-    const mapSelect = document.getElementById('map-select');
+    const mapCombo = document.getElementById('map-combo');
+    const mapComboButton = document.getElementById('map-combo-button');
+    const mapComboList = document.getElementById('map-combo-list');
     const mapNameInput = document.getElementById('map-name');
     const startPositionInput = document.getElementById('start-position');
     const useEndPositionInput = document.getElementById('use-end-position');
@@ -1921,8 +1985,11 @@ class MissionFrontendRenderer:
     const splatCanvas = document.getElementById('splat-canvas');
     const gaussianOverlaySummary = document.getElementById('gaussian-overlay-summary');
     const selectedMapStorageKey = 'amr_sweeper.selected_map_id';
+    const latestRecordingLabel = 'Last Recording';
     let mapsCache = [];
     let selectedMapId = window.localStorage.getItem(selectedMapStorageKey) || '';
+    let mapNameTouched = false;
+    let lastAppliedSourceMapId = null;
     let currentView = '2d';
     let patternTouched = false;
     let countdownTimer = null;
@@ -1942,7 +2009,8 @@ class MissionFrontendRenderer:
     let appliedEditorStateKey = '';
     let lastFittedMapKey = '';
 
-    mapSelect.innerHTML = '<option value="">Loading saved maps...</option>';
+    mapNameInput.value = latestRecordingLabel;
+    mapComboList.innerHTML = '<button class="map-combo-option" type="button" disabled>Loading saved maps...</button>';
     gaussianOverlaySummary.style.display = 'none';
 
     const map = L.map('record-map', {{ zoomControl: true }}).setView([55.6761, 12.5683], 18);
@@ -2460,15 +2528,42 @@ class MissionFrontendRenderer:
       }}
     }}
 
+    function selectedSourceDisplayName() {{
+      const entry = selectedMap();
+      return entry ? (entry.name || entry.map_id) : latestRecordingLabel;
+    }}
+
+    function closeMapCombo() {{
+      mapCombo.classList.remove('open');
+    }}
+
+    function selectMapSource(mapId) {{
+      setSelectedMapId(mapId);
+      mapNameInput.value = selectedSourceDisplayName();
+      mapNameTouched = false;
+      lastAppliedSourceMapId = selectedMapId;
+      closeMapCombo();
+    }}
+
+    function appendMapComboOption(mapId, label) {{
+      const option = document.createElement('button');
+      option.type = 'button';
+      option.className = 'map-combo-option';
+      option.textContent = label;
+      option.classList.toggle('active', mapId === selectedMapId);
+      option.addEventListener('click', async () => {{
+        selectMapSource(mapId);
+        await loadRecordMapSnapshot();
+      }});
+      mapComboList.appendChild(option);
+    }}
+
     function populateMapSelect() {{
-      mapSelect.innerHTML = '<option value="">Latest recording</option>';
+      mapComboList.innerHTML = '';
+      appendMapComboOption('', latestRecordingLabel);
       for (const entry of mapsCache) {{
-        const option = document.createElement('option');
-        option.value = entry.map_id;
-        option.textContent = entry.name || entry.map_id;
-        mapSelect.appendChild(option);
+        appendMapComboOption(entry.map_id, entry.name || entry.map_id);
       }}
-      mapSelect.value = selectedMapId;
       if (mapsCache.length === 0 && !selectedMapId) {{
         latestMapMessage.textContent = 'No saved maps yet. Latest recording remains available when captured.';
       }}
@@ -2476,8 +2571,13 @@ class MissionFrontendRenderer:
 
     function applySelectedMapToEditor() {{
       const entry = selectedMap();
+      const sourceChanged = selectedMapId !== lastAppliedSourceMapId;
+      if (!mapNameTouched || sourceChanged) {{
+        mapNameInput.value = selectedSourceDisplayName();
+        mapNameTouched = false;
+        lastAppliedSourceMapId = selectedMapId;
+      }}
       if (entry) {{
-        mapNameInput.value = entry.name || entry.map_id;
         applyLayerVisibility(entry.layer_visibility || {{}});
         const pattern = patternInputs.find((input) => input.value === (entry.sweep_pattern || 'zigzag'));
         if (pattern) {{
@@ -2486,8 +2586,6 @@ class MissionFrontendRenderer:
         startPositionInput.value = String(entry.start_position?.percent ?? 0);
         useEndPositionInput.checked = Boolean(entry.end_position);
         endPositionInput.value = String(entry.end_position?.percent ?? 100);
-      }} else {{
-        mapNameInput.value = '';
       }}
     }}
 
@@ -2567,14 +2665,24 @@ class MissionFrontendRenderer:
       return data;
     }}
 
-    mapSelect.addEventListener('change', async () => {{
-      setSelectedMapId(mapSelect.value);
-      await loadRecordMapSnapshot();
+    mapComboButton.addEventListener('click', () => {{
+      mapCombo.classList.toggle('open');
+    }});
+
+    mapNameInput.addEventListener('focus', () => {{
+      if (!selectedMapId && mapNameInput.value.trim() === latestRecordingLabel) {{
+        mapNameInput.value = '';
+        mapNameTouched = true;
+      }}
+    }});
+
+    mapNameInput.addEventListener('input', () => {{
+      mapNameTouched = true;
     }});
 
     document.getElementById('save-map-button').addEventListener('click', async () => {{
       const mapName = mapNameInput.value.trim();
-      if (!mapName) {{
+      if (!mapName || (!selectedMapId && mapName === latestRecordingLabel)) {{
         setBanner('error', 'Enter a map name before saving.');
         return;
       }}
@@ -2594,6 +2702,8 @@ class MissionFrontendRenderer:
       if (data.success) {{
         setSelectedMapId(data.map?.map_id || '');
         mapNameInput.value = data.map?.name || data.map?.map_id || mapName;
+        mapNameTouched = false;
+        lastAppliedSourceMapId = selectedMapId;
       }}
       await loadRecordMapSnapshot();
     }});
@@ -2607,7 +2717,9 @@ class MissionFrontendRenderer:
       setBanner(data.success ? 'ok' : 'error', data.message || 'Delete map request completed');
       if (data.success) {{
         setSelectedMapId('');
-        mapNameInput.value = '';
+        mapNameInput.value = latestRecordingLabel;
+        mapNameTouched = false;
+        lastAppliedSourceMapId = selectedMapId;
       }}
       await loadRecordMapSnapshot();
     }});
@@ -2700,6 +2812,9 @@ class MissionFrontendRenderer:
       if (!mapLayerControl.contains(event.target)) {{
         mapLayerControl.classList.remove('open');
       }}
+      if (!mapCombo.contains(event.target)) {{
+        closeMapCombo();
+      }}
     }});
 
     for (const input of layerToggles) {{
@@ -2745,8 +2860,9 @@ class MissionFrontendRenderer:
       updateGaussianControls(latestGaussianStatus);
     }});
     loadRecordMapSnapshot().catch((error) => {{
-      mapSelect.innerHTML = '<option value="">Latest recording</option>';
-      mapNameInput.value = '';
+      mapComboList.innerHTML = '';
+      appendMapComboOption('', latestRecordingLabel);
+      mapNameInput.value = latestRecordingLabel;
       latestMapMessage.textContent = error.message || 'Failed to load saved maps.';
       setBanner('error', error.message || 'Failed to load record map page state');
     }});
