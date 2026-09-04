@@ -25,8 +25,16 @@ from typing import Any, Callable
 
 
 def _load_json(path: Path) -> dict[str, Any]:
-    with path.open("r", encoding="utf-8") as stream:
-        document = json.load(stream)
+    try:
+        raw_text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise RuntimeError(f"Gaussian JSON file could not be read: {path}: {exc}") from exc
+    if not raw_text.strip():
+        raise RuntimeError(f"Gaussian JSON file is empty: {path}")
+    try:
+        document = json.loads(raw_text)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Gaussian JSON file is invalid: {path}: {exc}") from exc
     if not isinstance(document, dict):
         raise RuntimeError(f"{path} must contain a JSON object")
     return document

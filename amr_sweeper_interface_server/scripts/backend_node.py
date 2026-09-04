@@ -2429,6 +2429,22 @@ class MissionBackendNode(Node):
         except Exception:
             return None
 
+    @staticmethod
+    def _load_optional_json_object(path: Path) -> dict[str, Any]:
+        try:
+            raw_text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise RuntimeError(f"Could not read JSON file {path}: {exc}") from exc
+        if not raw_text.strip():
+            raise RuntimeError(f"JSON file is empty: {path}")
+        try:
+            document = json.loads(raw_text)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"JSON file is invalid: {path}: {exc}") from exc
+        if not isinstance(document, dict):
+            raise RuntimeError(f"JSON file must contain an object: {path}")
+        return document
+
     def record_map_snapshot(self) -> dict[str, Any]:
         with self._state_lock:
             navsat = dict(self._latest_navsat) if self._latest_navsat is not None else None
@@ -2474,13 +2490,19 @@ class MissionBackendNode(Node):
                 if navsat_path:
                     latest_navsat_geojson = self._load_geojson_feature_collection(navsat_path)
                 if gaussian_manifest_file and gaussian_manifest_path.is_file():
-                    latest_metadata["gaussian_manifest"] = json.loads(
-                        gaussian_manifest_path.read_text(encoding="utf-8")
-                    )
+                    try:
+                        latest_metadata["gaussian_manifest"] = self._load_optional_json_object(
+                            gaussian_manifest_path
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        latest_metadata["gaussian_error"] = str(exc)
                 if gaussian_splat_manifest_file and gaussian_splat_manifest_path.is_file():
-                    latest_metadata["gaussian_splat_manifest"] = json.loads(
-                        gaussian_splat_manifest_path.read_text(encoding="utf-8")
-                    )
+                    try:
+                        latest_metadata["gaussian_splat_manifest"] = self._load_optional_json_object(
+                            gaussian_splat_manifest_path
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        latest_metadata["gaussian_splat_error"] = str(exc)
             except Exception as exc:  # noqa: BLE001
                 latest_metadata = {"error": str(exc), "path": str(latest_metadata_file)}
 
@@ -2804,15 +2826,13 @@ class MissionBackendNode(Node):
                 payload["zoneSet_error"] = str(exc)
         if gaussian_manifest_file and gaussian_manifest_path.is_file():
             try:
-                payload["gaussian_manifest"] = json.loads(
-                    gaussian_manifest_path.read_text(encoding="utf-8")
-                )
+                payload["gaussian_manifest"] = self._load_optional_json_object(gaussian_manifest_path)
             except Exception as exc:  # noqa: BLE001
                 payload["gaussian_error"] = str(exc)
         if gaussian_splat_manifest_file and gaussian_splat_manifest_path.is_file():
             try:
-                payload["gaussian_splat_manifest"] = json.loads(
-                    gaussian_splat_manifest_path.read_text(encoding="utf-8")
+                payload["gaussian_splat_manifest"] = self._load_optional_json_object(
+                    gaussian_splat_manifest_path
                 )
             except Exception as exc:  # noqa: BLE001
                 payload["gaussian_splat_error"] = str(exc)
