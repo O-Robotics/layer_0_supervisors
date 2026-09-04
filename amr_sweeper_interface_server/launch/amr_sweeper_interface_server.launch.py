@@ -24,6 +24,7 @@ def generate_launch_description():
     namespace = LaunchConfiguration("namespace")
     missions_from_db_directory = LaunchConfiguration("missions_from_db_directory")
     missions_log_directory = LaunchConfiguration("missions_log_directory")
+    simulations_directory = LaunchConfiguration("simulations_directory")
     actual_schedule_log_directory = LaunchConfiguration("actual_schedule_log_directory")
     backend_socket_path = LaunchConfiguration("backend_socket_path")
     http_host = LaunchConfiguration("http_host")
@@ -48,6 +49,7 @@ def generate_launch_description():
         DeclareLaunchArgument("namespace", default_value="amr_sweeper"),
         DeclareLaunchArgument("missions_from_db_directory", default_value="missions/database"),
         DeclareLaunchArgument("missions_log_directory", default_value="missions/logs"),
+        DeclareLaunchArgument("simulations_directory", default_value="missions/simulations"),
         DeclareLaunchArgument("actual_schedule_log_directory", default_value="missions/logs"),
         DeclareLaunchArgument("backend_socket_path", default_value="/tmp/amr_sweeper_interface_backend.sock"),
         DeclareLaunchArgument("http_host", default_value="0.0.0.0"),
@@ -79,6 +81,7 @@ def generate_launch_description():
                 "public_base_url": public_base_url,
                 "missions_from_db_directory": missions_from_db_directory,
                 "missions_log_directory": missions_log_directory,
+                "simulations_directory": simulations_directory,
                 "actual_schedule_log_directory": actual_schedule_log_directory,
                 "list_missions_service": "list_executable_missions",
                 "execute_mission_service": "execute_mission",

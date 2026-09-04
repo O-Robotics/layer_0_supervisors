@@ -735,7 +735,9 @@ def build_splat(
     capture_manifest = _load_json(capture_manifest_file)
     captures = capture_manifest.get("captures", [])
     if not isinstance(captures, list) or not captures:
-        raise RuntimeError("Gaussian capture manifest does not contain any captures")
+        raise RuntimeError(
+            f"Gaussian capture manifest does not contain any captures: {capture_manifest_file}"
+        )
 
     capture_count_by_tile: dict[tuple[int, int], int] = {}
     for capture in captures:
@@ -750,7 +752,10 @@ def build_splat(
         capture_count_by_tile[key] = capture_count_by_tile.get(key, 0) + 1
 
     if not capture_count_by_tile:
-        raise RuntimeError("Gaussian capture manifest does not contain usable map-frame poses")
+        raise RuntimeError(
+            f"Gaussian capture manifest does not contain usable map-frame poses: "
+            f"{capture_manifest_file}"
+        )
 
     _, _, _, gsplat_version = _load_training_backend()
     output_directory.mkdir(parents=True, exist_ok=True)
@@ -785,6 +790,11 @@ def build_splat(
             key,
             tile_size_meters,
         )
+        if not samples:
+            raise RuntimeError(
+                "Gaussian capture manifest has no trainable PPM camera samples "
+                f"for tile {tile_name}: {capture_manifest_file}"
+            )
         tile_metadata = {
             "tile_id": tile_name,
             "tile_index": {"x": tile_x, "y": tile_y},

@@ -410,6 +410,10 @@ class MissionBackendNode(Node):
             "maps_directory",
             "missions/maps",
         ).value
+        self._simulations_directory = self.declare_parameter(
+            "simulations_directory",
+            "missions/simulations",
+        ).value
         self._list_missions_service = self.declare_parameter(
             "list_missions_service",
             "list_executable_missions",
@@ -2537,10 +2541,24 @@ class MissionBackendNode(Node):
                 pass
 
         candidates = sorted(
-            _resolve_path(self._missions_log_directory).rglob("gaussian/manifest.json"),
+            self._gaussian_capture_manifest_candidates(),
             key=lambda path: path.stat().st_mtime,
         )
         return str(candidates[-1]) if candidates else ""
+
+    def _gaussian_capture_manifest_candidates(self) -> list[Path]:
+        candidates: list[Path] = []
+        for root in self._gaussian_capture_manifest_roots():
+            if root.exists():
+                candidates.extend(path.resolve() for path in root.rglob("gaussian/manifest.json"))
+        return candidates
+
+    def _gaussian_capture_manifest_roots(self) -> list[Path]:
+        return [
+            _resolve_path(self._missions_log_directory),
+            _resolve_path(self._simulations_directory),
+            _resolve_path(self._maps_directory),
+        ]
 
     def _link_latest_gaussian_splat_manifest(self, artifact_manifest_file: str) -> None:
         manifest = Path(str(artifact_manifest_file))

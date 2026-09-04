@@ -40,6 +40,16 @@ from sensor_msgs.msg import Image
 DEFAULT_BACKEND_SOCKET_PATH = "/tmp/amr_sweeper_interface_backend.sock"
 
 
+def gaussian_splat_artifact_allowed_roots(cwd: Path | None = None) -> list[Path]:
+    root = Path.cwd() if cwd is None else cwd
+    return [
+        (root / "missions" / "logs").resolve(),
+        (root / "missions" / "maps").resolve(),
+        (root / "missions" / "simulations").resolve(),
+        Path("/tmp").resolve(),
+    ]
+
+
 class MissionThreadingHTTPServer(ThreadingHTTPServer):
 
     allow_reuse_address = True
@@ -5051,11 +5061,7 @@ class MissionFrontendHttpNode(Node, MissionFrontendRenderer):
                     artifact_path = Path.cwd() / artifact_path
                 try:
                     resolved = artifact_path.resolve()
-                    allowed_roots = [
-                        (Path.cwd() / "missions" / "logs").resolve(),
-                        (Path.cwd() / "missions" / "maps").resolve(),
-                        Path("/tmp").resolve(),
-                    ]
+                    allowed_roots = gaussian_splat_artifact_allowed_roots()
                     if not any(resolved == root or root in resolved.parents for root in allowed_roots):
                         raise ValueError("Artifact path is outside allowed roots")
                     if not resolved.exists() or not resolved.is_file():

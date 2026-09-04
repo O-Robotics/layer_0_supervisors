@@ -68,6 +68,11 @@ install(DIRECTORY launch config resources
 
 if(BUILD_TESTING)
   include(CTest)
+  find_package(Python3 REQUIRED COMPONENTS Interpreter)
+  add_test(
+    NAME test_gaussian_splat_builder_node
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test/test_gaussian_splat_builder_node.py
+  )
   add_executable(test_mission_package_reader
     test/test_mission_package_reader.cpp
   )

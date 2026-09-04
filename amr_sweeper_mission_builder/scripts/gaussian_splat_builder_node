@@ -42,6 +42,53 @@ def _write_json_atomic(path: Path, document: dict[str, Any]) -> None:
     temp_path.replace(path)
 
 
+def _load_capture_manifest(path: Path) -> dict[str, Any]:
+    try:
+        raw_text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise RuntimeError(f"Gaussian capture manifest could not be read: {path}: {exc}") from exc
+    if not raw_text.strip():
+        raise RuntimeError(f"Gaussian capture manifest is empty: {path}")
+    try:
+        document = json.loads(raw_text)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Gaussian capture manifest is invalid JSON: {path}: {exc}") from exc
+    if not isinstance(document, dict):
+        raise RuntimeError(f"Gaussian capture manifest must contain a JSON object: {path}")
+    return document
+
+
+def _is_capture_manifest(document: dict[str, Any]) -> bool:
+    representation = str(document.get("representation", ""))
+    return representation == "synchronized_gaussian_capture_dataset" or isinstance(
+        document.get("captures"),
+        list,
+    )
+
+
+def _validate_capture_manifest(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        raise RuntimeError(f"Gaussian capture manifest not found: {path.resolve()}")
+    if not path.is_file():
+        raise RuntimeError(f"Gaussian capture manifest is not a file: {path.resolve()}")
+    document = _load_capture_manifest(path)
+    if not _is_capture_manifest(document):
+        raise RuntimeError(
+            "Gaussian manifest is not a capture manifest; expected "
+            f"synchronized_gaussian_capture_dataset with captures: {path}"
+        )
+    return document
+
+
+def _splat_output_directory_for_capture_manifest(
+    capture_manifest: Path,
+    artifact_directory_name: str,
+) -> Path:
+    if capture_manifest.name == "manifest.json" and capture_manifest.parent.name == "gaussian":
+        return capture_manifest.parent.parent / artifact_directory_name
+    return capture_manifest.parent / artifact_directory_name
+
+
 class GaussianSplatBuilderNode(Node):
 
     def __init__(self) -> None:
@@ -163,8 +210,12 @@ class GaussianSplatBuilderNode(Node):
             return response
         try:
             capture_manifest = self._resolve_capture_manifest(request)
-            output_directory = capture_manifest.parent.parent / self._artifact_directory_name
             self._assert_allowed_path(capture_manifest)
+            _validate_capture_manifest(capture_manifest)
+            output_directory = _splat_output_directory_for_capture_manifest(
+                capture_manifest,
+                self._artifact_directory_name,
+            )
             self._assert_allowed_path(output_directory)
             if request.force and output_directory.exists():
                 shutil.rmtree(output_directory)
@@ -295,6 +346,11 @@ class GaussianSplatBuilderNode(Node):
         state = str(result.get("status", "completed" if result.get("success") else "failed"))
         if process.returncode != 0 and state != "paused":
             state = "failed"
+        artifact_manifest = Path(str(job["artifact_manifest_file"]))
+        if state in {"completed", "partial", "paused"} and not artifact_manifest.exists():
+            state = "failed"
+            result["status"] = state
+            result["message"] = f"Gaussian splat output manifest was not created: {artifact_manifest}"
         with self._job_lock:
             if self._worker_process is process:
                 self._worker_process = None
@@ -672,14 +728,38 @@ class GaussianSplatBuilderNode(Node):
         if request.mission_execution_directory.strip():
             return self._resolve_path(request.mission_execution_directory) / "gaussian" / "manifest.json"
         if request.mission_id.strip():
-            mission_root = self._missions_log_directory / request.mission_id.strip()
-            candidates = sorted(
-                mission_root.rglob("gaussian/manifest.json"),
-                key=lambda path: path.stat().st_mtime,
-            )
-            if candidates:
-                return candidates[-1].resolve()
-        raise RuntimeError("gaussian_manifest_file, mission_execution_directory, or mission_id is required")
+            return self._newest_capture_manifest_for_mission(request.mission_id.strip())
+        raise RuntimeError(
+            "gaussian_manifest_file, mission_execution_directory, or mission_id is required "
+            "to locate gaussian/manifest.json"
+        )
+
+    def _newest_capture_manifest_for_mission(self, mission_id: str) -> Path:
+        candidates: list[Path] = []
+        for root in self._capture_manifest_roots():
+            mission_root = root / mission_id
+            if not mission_root.exists():
+                continue
+            for candidate in mission_root.rglob("gaussian/manifest.json"):
+                try:
+                    _validate_capture_manifest(candidate)
+                except RuntimeError:
+                    continue
+                candidates.append(candidate.resolve())
+        if candidates:
+            return sorted(candidates, key=lambda path: path.stat().st_mtime)[-1]
+        searched = ", ".join(str(root / mission_id) for root in self._capture_manifest_roots())
+        raise RuntimeError(
+            f"No valid Gaussian capture manifest found for mission_id={mission_id}; "
+            f"searched {searched}"
+        )
+
+    def _capture_manifest_roots(self) -> list[Path]:
+        return [
+            self._missions_log_directory,
+            self._simulations_directory,
+            self._maps_directory,
+        ]
 
     @staticmethod
     def _count_tiles(capture_manifest: Path, tile_size_meters: float) -> int:
@@ -695,8 +775,6 @@ class GaussianSplatBuilderNode(Node):
         ]
         if not any(resolved == root or root in resolved.parents for root in allowed_roots):
             raise RuntimeError(f"Path is outside configured Gaussian build roots: {resolved}")
-        if path.suffix == ".json" and not path.exists():
-            raise RuntimeError(f"Gaussian capture manifest not found: {resolved}")
 
     @staticmethod
     def _resolve_path(path: str) -> Path:

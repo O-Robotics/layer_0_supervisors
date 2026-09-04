@@ -29,6 +29,7 @@ def generate_launch_description():
     missions_directory = LaunchConfiguration("missions_directory")
     missions_log_directory = LaunchConfiguration("missions_log_directory")
     maps_directory = LaunchConfiguration("maps_directory")
+    simulations_directory = LaunchConfiguration("simulations_directory")
     launch_gaussian_splat_builder_node = LaunchConfiguration("launch_gaussian_splat_builder_node")
     fsm_state_topic = LaunchConfiguration("fsm_state_topic")
     fsm_status_topic = LaunchConfiguration("fsm_status_topic")
@@ -52,6 +53,7 @@ def generate_launch_description():
         DeclareLaunchArgument("missions_directory", default_value="missions/database"),
         DeclareLaunchArgument("missions_log_directory", default_value="missions/logs"),
         DeclareLaunchArgument("maps_directory", default_value="missions/maps"),
+        DeclareLaunchArgument("simulations_directory", default_value="missions/simulations"),
         DeclareLaunchArgument("launch_gaussian_splat_builder_node", default_value="false"),
         DeclareLaunchArgument("fsm_state_topic", default_value="fsm/supervisor_node/fsm_state"),
         DeclareLaunchArgument("fsm_status_topic", default_value="fsm/supervisor_node/fsm_status"),
@@ -98,6 +100,7 @@ def generate_launch_description():
                     "use_sim_time": use_sim_time,
                     "missions_log_directory": missions_log_directory,
                     "maps_directory": maps_directory,
+                    "simulations_directory": simulations_directory,
                     "fsm_state_topic": fsm_state_topic,
                     "fsm_status_topic": fsm_status_topic,
                 },
