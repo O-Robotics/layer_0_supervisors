@@ -100,7 +100,7 @@ class MissionFrontendRenderer:
     main {{
       max-width: 1100px;
       margin: 0 auto;
-      padding: 24px;
+      padding: calc(82px + env(safe-area-inset-top)) 24px 24px;
     }}
     h1, h2 {{
       margin: 0 0 12px;
@@ -227,23 +227,94 @@ class MissionFrontendRenderer:
     .banner.ok {{ background: rgba(15, 118, 110, 0.12); color: var(--accent-strong); }}
     .banner.error {{ background: rgba(185, 28, 28, 0.12); color: var(--danger); }}
     .banner.warn {{ background: rgba(180, 83, 9, 0.12); color: var(--warn); }}
-    .nav {{
-      display: flex;
+    .app-topbar {{
+      position: fixed;
+      top: calc(10px + env(safe-area-inset-top));
+      left: calc(10px + env(safe-area-inset-left));
+      right: calc(10px + env(safe-area-inset-right));
+      z-index: 700;
+      display: grid;
+      grid-template-columns: 46px minmax(0, 1fr) auto auto;
       gap: 10px;
-      flex-wrap: wrap;
-      margin-top: 14px;
+      align-items: center;
+      min-height: 52px;
+      padding: 5px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(24, 27, 29, 0.84);
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.32);
+      backdrop-filter: blur(8px);
+    }}
+    .app-topbar h1 {{
+      overflow: hidden;
+      margin: 0;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 1.08rem;
+    }}
+    .topbar-status {{
+      display: inline-flex;
+      align-items: center;
+      min-height: 34px;
+      border-radius: 999px;
+      padding: 6px 10px;
+      background: rgba(253, 202, 15, 0.12);
+      color: var(--accent);
+      font-weight: 700;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+    }}
+    .icon-button {{
+      width: 46px;
+      padding: 0;
+      color: var(--ink);
+      background: rgba(18, 20, 21, 0.76);
+      border: 1px solid var(--line);
+      font-size: 1.24rem;
+      letter-spacing: 0;
+      text-transform: none;
+    }}
+    .drawer-backdrop {{
+      position: fixed;
+      inset: 0;
+      z-index: 850;
+      display: none;
+      background: rgba(0, 0, 0, 0.42);
+    }}
+    .drawer-backdrop.show {{ display: block; }}
+    .nav {{
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      z-index: 900;
+      display: grid;
+      align-content: start;
+      gap: 9px;
+      width: min(90vw, 390px);
+      padding: calc(18px + env(safe-area-inset-top)) 18px calc(18px + env(safe-area-inset-bottom));
+      overflow-y: auto;
+      background: rgba(42, 46, 48, 0.96);
+      border-right: 1px solid var(--line);
+      box-shadow: 0 18px 42px rgba(0, 0, 0, 0.36);
+      transform: translateX(-105%);
+      transition: transform 180ms ease;
+      backdrop-filter: blur(8px);
+    }}
+    .nav.open {{
+      transform: translateX(0);
     }}
     .nav-link {{
-      display: inline-block;
+      display: block;
       text-decoration: none;
       color: var(--ink);
       border: 1px solid var(--line);
-      border-radius: 999px;
-      padding: 8px 14px;
-      background: rgba(52, 53, 53, 0.72);
+      border-radius: 8px;
+      padding: 12px;
+      background: rgba(18, 20, 21, 0.58);
       font-size: 0.92rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
+      text-transform: none;
+      letter-spacing: 0;
     }}
     .actions {{
       display: flex;
@@ -366,6 +437,9 @@ class MissionFrontendRenderer:
       background: #ec3b3b;
     }}
     @media (max-width: 780px) {{
+      main {{ padding: calc(124px + env(safe-area-inset-top)) 14px 18px; }}
+      .app-topbar {{ grid-template-columns: 46px minmax(0, 1fr) auto; }}
+      #topbar-battery {{ display: none; }}
       .status-card {{
         grid-column: span 1;
       }}
@@ -373,28 +447,36 @@ class MissionFrontendRenderer:
   </style>
 </head>
 <body>
+  <header class="app-topbar" aria-label="Dashboard controls">
+    <button id="open-nav-button" class="icon-button" type="button" aria-label="Open navigation">&#9776;</button>
+    <h1>Dashboard</h1>
+    <span id="topbar-live" class="topbar-status">Connecting</span>
+    <span id="topbar-battery" class="topbar-status">--</span>
+  </header>
+  <div id="drawer-backdrop" class="drawer-backdrop"></div>
+  <nav id="nav-drawer" class="nav" aria-label="Application navigation">
+    <h2>O-ROBOTICS</h2>
+    <div class="live-strip">
+      <div class="live-pill">
+        <span id="live-dot" class="live-dot"></span>
+        <span id="live-status" class="live-status-text">CONNECTING</span>
+      </div>
+    </div>
+    <a class="nav-link" href="/">Dashboard</a>
+    <a class="nav-link" href="/calendar">Calendar</a>
+    <a class="nav-link" href="/missions">Missions</a>
+    <a class="nav-link" href="/teleop">Teleop</a>
+    <a class="nav-link" href="/developer">Developer</a>
+    <button id="drawer-safety-stop-button" class="stop" type="button">SAFETY STOP</button>
+  </nav>
   <main>
     <section class="hero">
       <h1>AMR-Sweeper</h1>
       <div id="banner" class="banner"></div>
-      <div class="live-strip">
-        <div class="live-pill">
-          <span id="live-dot" class="live-dot"></span>
-          <span id="live-status" class="live-status-text">CONNECTING</span>
-        </div>
-      </div>
-      <div class="nav">
-        <a class="nav-link" href="/">Dashboard</a>
-        <a class="nav-link" href="/calendar">Calendar</a>
-        <a class="nav-link" href="/missions">Missions</a>
-        <a class="nav-link" href="/teleop">Teleop</a>
-        <a class="nav-link" href="/map">Map</a>
-        <a class="nav-link" href="/developer">Developer</a>
-      </div>
     </section>
 
     <section class="grid">
-      <article id="safety-card" class="card safety-card status-card">
+      <article id="system-status-card" class="card safety-card status-card">
         <h2>System Status</h2>
         <div class="status-sections">
           <section class="status-panel">
@@ -405,7 +487,7 @@ class MissionFrontendRenderer:
               <button id="reboot-button">Reboot</button>
             </div>
           </section>
-          <section id="safety-card" class="status-panel safety-card">
+          <section id="safety-control-panel" class="status-panel safety-card">
             <div class="safety-action">
               <button class="stop" id="safety-stop-button">SAFETY STOP</button>
             </div>
@@ -559,6 +641,7 @@ class MissionFrontendRenderer:
       liveStatus.classList.add('connected');
       liveStatus.classList.remove('disconnected');
       document.getElementById('live-dot').classList.add('connected');
+      document.getElementById('topbar-live').textContent = 'Connected';
 
       const rawCurrentState = fsm.current_state || 'Unknown';
       const rawCurrentProfile = formatProfileValue(fsm.current_profile);
@@ -576,6 +659,7 @@ class MissionFrontendRenderer:
       document.getElementById('fsm-state').textContent = transitionInProgress
         ? formatArrowValue(currentState, targetState)
         : currentState;
+      document.getElementById('topbar-live').textContent = transitionInProgress ? 'Running' : currentState;
       document.getElementById('fsm-profile').textContent = transitionInProgress
         ? `Profile: ${{formatArrowValue(currentProfile, formattedTargetProfile)}}`
         : `Profile: ${{currentProfile}}`;
@@ -600,12 +684,16 @@ class MissionFrontendRenderer:
         battery.percentage !== null && battery.percentage !== undefined
           ? `${{Math.round(Number(battery.percentage) * 100)}}%`
           : '--';
+      document.getElementById('topbar-battery').textContent =
+        battery.percentage !== null && battery.percentage !== undefined
+          ? `${{Math.round(Number(battery.percentage) * 100)}}%`
+          : '--';
       document.getElementById('battery-voltage').textContent =
         battery.voltage !== undefined ? `Voltage: ${{Number(battery.voltage).toFixed(2)}} V` : 'Voltage: --';
       document.getElementById('battery-current').textContent =
         battery.current !== undefined ? `Current: ${{Number(battery.current).toFixed(2)}} A` : 'Current: --';
 
-      const safetyCard = document.getElementById('safety-card');
+      const safetyCard = document.getElementById('safety-control-panel');
       const safetyButton = document.getElementById('safety-stop-button');
       const safetyLatched = Boolean(safety.latched);
       const safetyCanClear = Boolean(safety.can_clear);
@@ -672,6 +760,17 @@ class MissionFrontendRenderer:
       );
       await loadStatus();
     }});
+    document.getElementById('drawer-safety-stop-button').addEventListener('click', () => {{
+      document.getElementById('safety-stop-button').click();
+    }});
+    document.getElementById('open-nav-button').addEventListener('click', () => {{
+      document.getElementById('nav-drawer').classList.add('open');
+      document.getElementById('drawer-backdrop').classList.add('show');
+    }});
+    document.getElementById('drawer-backdrop').addEventListener('click', () => {{
+      document.getElementById('nav-drawer').classList.remove('open');
+      document.getElementById('drawer-backdrop').classList.remove('show');
+    }});
 
     async function refresh() {{
       try {{
@@ -682,6 +781,7 @@ class MissionFrontendRenderer:
         liveStatus.classList.add('disconnected');
         liveStatus.classList.remove('connected');
         document.getElementById('live-dot').classList.remove('connected');
+        document.getElementById('topbar-live').textContent = 'Disconnected';
         setBanner('error', error.message || 'Failed to reach mission web server');
       }}
     }}
@@ -719,6 +819,7 @@ class MissionFrontendRenderer:
         liveStatus.classList.add('disconnected');
         liveStatus.classList.remove('connected');
         document.getElementById('live-dot').classList.remove('connected');
+        document.getElementById('topbar-live').textContent = 'Disconnected';
       }}
     }}, 1000);
     setInterval(refreshHeartbeat, 250);
@@ -761,7 +862,7 @@ class MissionFrontendRenderer:
     main {{
       max-width: 1200px;
       margin: 0 auto;
-      padding: 24px;
+      padding: calc(82px + env(safe-area-inset-top)) 24px 24px;
     }}
     .card {{
       background: var(--card);
@@ -779,23 +880,95 @@ class MissionFrontendRenderer:
     h1 {{
       color: var(--accent);
     }}
-    .nav {{
-      display: flex;
+    .app-topbar {{
+      position: fixed;
+      top: calc(10px + env(safe-area-inset-top));
+      left: calc(10px + env(safe-area-inset-left));
+      right: calc(10px + env(safe-area-inset-right));
+      z-index: 700;
+      display: grid;
+      grid-template-columns: 46px minmax(0, 1fr) auto;
       gap: 10px;
-      flex-wrap: wrap;
-      margin-top: 14px;
+      align-items: center;
+      min-height: 52px;
+      padding: 5px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(24, 27, 29, 0.84);
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.32);
+      backdrop-filter: blur(8px);
+    }}
+    .app-topbar h1 {{
+      overflow: hidden;
+      margin: 0;
+      color: var(--accent);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 1.08rem;
+    }}
+    .topbar-status {{
+      display: inline-flex;
+      align-items: center;
+      min-height: 34px;
+      border-radius: 999px;
+      padding: 6px 10px;
+      background: rgba(253, 202, 15, 0.12);
+      color: var(--accent);
+      font-weight: 700;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+    }}
+    .icon-button {{
+      width: 46px;
+      padding: 0;
+      color: var(--ink);
+      background: rgba(18, 20, 21, 0.76);
+      border: 1px solid var(--line);
+      font-size: 1.24rem;
+      letter-spacing: 0;
+      text-transform: none;
+    }}
+    .drawer-backdrop {{
+      position: fixed;
+      inset: 0;
+      z-index: 850;
+      display: none;
+      background: rgba(0, 0, 0, 0.42);
+    }}
+    .drawer-backdrop.show {{ display: block; }}
+    .nav {{
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      z-index: 900;
+      display: grid;
+      align-content: start;
+      gap: 9px;
+      width: min(90vw, 390px);
+      padding: calc(18px + env(safe-area-inset-top)) 18px calc(18px + env(safe-area-inset-bottom));
+      overflow-y: auto;
+      background: rgba(42, 46, 48, 0.96);
+      border-right: 1px solid var(--line);
+      box-shadow: 0 18px 42px rgba(0, 0, 0, 0.36);
+      transform: translateX(-105%);
+      transition: transform 180ms ease;
+      backdrop-filter: blur(8px);
+    }}
+    .nav.open {{
+      transform: translateX(0);
     }}
     .nav-link {{
-      display: inline-block;
+      display: block;
       text-decoration: none;
       color: var(--ink);
       border: 1px solid var(--line);
-      border-radius: 999px;
-      padding: 8px 14px;
-      background: rgba(52, 53, 53, 0.72);
+      border-radius: 8px;
+      padding: 12px;
+      background: rgba(18, 20, 21, 0.58);
       font-size: 0.92rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
+      text-transform: none;
+      letter-spacing: 0;
     }}
     .toolbar {{
       display: flex;
@@ -951,6 +1124,17 @@ class MissionFrontendRenderer:
       margin-bottom: 4px;
     }}
     .muted {{ color: var(--muted); }}
+    .banner {{
+      margin-top: 12px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      display: none;
+      font-weight: 700;
+    }}
+    .banner.show {{ display: block; }}
+    .banner.ok {{ background: rgba(15, 118, 110, 0.18); color: var(--accent-strong); }}
+    .banner.error {{ background: rgba(185, 28, 28, 0.18); color: var(--safety); }}
+    .banner.warn {{ background: rgba(180, 83, 9, 0.18); color: var(--accent); }}
     .legend {{
       display: flex;
       gap: 12px;
@@ -1018,28 +1202,43 @@ class MissionFrontendRenderer:
       color: #fff4ec;
     }}
     @media (max-width: 900px) {{
+      main {{ padding: calc(82px + env(safe-area-inset-top)) 14px 18px; }}
       .toolbar {{
         align-items: flex-start;
       }}
       .editor-layout {{
         grid-template-columns: 1fr;
       }}
+      .form-grid {{
+        grid-template-columns: 1fr;
+      }}
+      .form-grid .span-2 {{
+        grid-column: span 1;
+      }}
     }}
   </style>
 </head>
 <body>
+  <header class="app-topbar" aria-label="Calendar controls">
+    <button id="open-nav-button" class="icon-button" type="button" aria-label="Open navigation">&#9776;</button>
+    <h1>Calendar</h1>
+    <span id="topbar-status" class="topbar-status">Schedule</span>
+  </header>
+  <div id="drawer-backdrop" class="drawer-backdrop"></div>
+  <nav id="nav-drawer" class="nav" aria-label="Application navigation">
+    <h2>O-ROBOTICS</h2>
+    <div class="muted">Schedule planning</div>
+    <a class="nav-link" href="/">Dashboard</a>
+    <a class="nav-link" href="/calendar">Calendar</a>
+    <a class="nav-link" href="/missions">Missions</a>
+    <a class="nav-link" href="/teleop">Teleop</a>
+    <a class="nav-link" href="/developer">Developer</a>
+  </nav>
   <main>
     <section class="card">
       <h1>Calendar</h1>
       <div class="muted">View the active schedule as a weekly planner with full 24-hour day lanes.</div>
-      <div class="nav">
-        <a class="nav-link" href="/">Dashboard</a>
-        <a class="nav-link" href="/calendar">Calendar</a>
-        <a class="nav-link" href="/missions">Missions</a>
-        <a class="nav-link" href="/teleop">Teleop</a>
-        <a class="nav-link" href="/map">Map</a>
-        <a class="nav-link" href="/developer">Developer</a>
-      </div>
+      <div id="banner" class="banner" role="status" aria-live="polite"></div>
     </section>
     <section class="toolbar">
       <div class="toolbar-group">
@@ -1148,6 +1347,18 @@ class MissionFrontendRenderer:
     let activeScheduleData = null;
     const weekdayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     const hourHeight = 64;
+    const banner = document.getElementById('banner');
+    const navDrawer = document.getElementById('nav-drawer');
+    const drawerBackdrop = document.getElementById('drawer-backdrop');
+
+    function setBanner(kind, message) {{
+      banner.className = `banner show ${{kind}}`;
+      banner.textContent = message;
+      window.setTimeout(() => {{
+        banner.className = 'banner';
+        banner.textContent = '';
+      }}, 5000);
+    }}
 
     function shiftWeek(week, delta) {{
       const [yearPart, weekPart] = week.split('-W');
@@ -1286,11 +1497,15 @@ class MissionFrontendRenderer:
         const [editButton, deleteButton] = card.querySelectorAll('button');
         editButton.addEventListener('click', () => populateEntryForm(entry));
         deleteButton.addEventListener('click', async () => {{
-          const result = await postJson('/api/v1/schedule/entry/delete', {{ uid: entry.uid }});
-          if (!result.success) {{
-            window.alert(result.message || 'Failed to delete schedule entry');
+          if (!window.confirm('Delete this planned schedule entry?')) {{
             return;
           }}
+          const result = await postJson('/api/v1/schedule/entry/delete', {{ uid: entry.uid }});
+          if (!result.success) {{
+            setBanner('error', result.message || 'Failed to delete schedule entry');
+            return;
+          }}
+          setBanner('ok', result.message || 'Schedule entry deleted');
           await loadCalendar(activeWeek);
         }});
         list.appendChild(card);
@@ -1420,6 +1635,14 @@ class MissionFrontendRenderer:
     document.getElementById('next-week').addEventListener('click', async () => {{
       await loadCalendar(shiftWeek(activeWeek, 1));
     }});
+    document.getElementById('open-nav-button').addEventListener('click', () => {{
+      navDrawer.classList.add('open');
+      drawerBackdrop.classList.add('show');
+    }});
+    drawerBackdrop.addEventListener('click', () => {{
+      navDrawer.classList.remove('open');
+      drawerBackdrop.classList.remove('show');
+    }});
 
     document.getElementById('schedule-form').addEventListener('submit', async (event) => {{
       event.preventDefault();
@@ -1440,10 +1663,11 @@ class MissionFrontendRenderer:
       }};
       const result = await postJson('/api/v1/schedule/entry', payload);
       if (!result.success) {{
-        window.alert(result.message || 'Failed to save schedule entry');
+        setBanner('error', result.message || 'Failed to save schedule entry');
         return;
       }}
       resetEntryForm();
+      setBanner('ok', result.message || 'Schedule entry saved');
       await loadCalendar(activeWeek || toIsoWeekString(new Date()));
     }});
 
@@ -1469,7 +1693,7 @@ class MissionFrontendRenderer:
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{title} - Map</title>
+  <title>{title} - Missions</title>
   <link
     rel="stylesheet"
     href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -1490,95 +1714,530 @@ class MissionFrontendRenderer:
       --danger: #ff7b5c;
       --line: rgba(253, 202, 15, 0.22);
       --gold: #fdca0f;
+      --surface: rgba(30, 34, 36, 0.86);
+      --sheet: rgba(42, 46, 48, 0.94);
+      --bottom-sheet-height: 96px;
     }}
     * {{ box-sizing: border-box; }}
+    html, body {{
+      width: 100vw;
+      height: 100dvh;
+      overflow: hidden;
+    }}
     body {{
       margin: 0;
       color: var(--ink);
       font-family: "Avenir Next", "Segoe UI", sans-serif;
-      background:
-        radial-gradient(circle at top left, rgba(253, 202, 15, 0.18), transparent 26%),
-        radial-gradient(circle at top right, rgba(255, 255, 255, 0.06), transparent 20%),
-        linear-gradient(180deg, var(--bg) 0%, var(--bg-alt) 100%);
+      background: linear-gradient(180deg, var(--bg) 0%, var(--bg-alt) 100%);
+      touch-action: manipulation;
     }}
-    main {{
-      max-width: 1280px;
-      margin: 0 auto;
-      padding: 24px;
+    button, input, textarea {{
+      font: inherit;
     }}
-    .card {{
-      background: var(--card);
+    button {{
+      border: 0;
+      border-radius: 999px;
+      min-height: 44px;
+      padding: 11px 16px;
+      cursor: pointer;
+      color: #08100a;
+      background: var(--accent);
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }}
+    button:hover {{ background: var(--accent-strong); }}
+    button:focus-visible, input:focus-visible, textarea:focus-visible {{
+      outline: 2px solid var(--accent-strong);
+      outline-offset: 2px;
+    }}
+    button.stop {{ background: var(--danger); }}
+    button.secondary {{
+      color: var(--ink);
+      background: rgba(96, 100, 102, 0.72);
       border: 1px solid var(--line);
-      border-radius: 20px;
-      padding: 18px;
-      box-shadow: 0 14px 36px rgba(0, 0, 0, 0.24);
-      backdrop-filter: blur(4px);
     }}
-    .hero {{
-      display: grid;
-      gap: 12px;
-      background:
-        linear-gradient(135deg, rgba(253, 202, 15, 0.16), rgba(42, 46, 48, 0.18) 42%),
-        var(--card-strong);
+    button.icon-button {{
+      width: 46px;
+      padding: 0;
+      color: var(--ink);
+      background: rgba(18, 20, 21, 0.76);
+      border: 1px solid var(--line);
+      font-size: 1.24rem;
+      letter-spacing: 0;
+      text-transform: none;
     }}
-    h1, h2 {{
+    button:disabled {{
+      cursor: not-allowed;
+      color: #d7ddd8;
+      background: #5c5b55;
+    }}
+    label {{
+      display: block;
+      font-size: 0.9rem;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }}
+    input[type="text"], textarea {{
+      width: 100%;
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: rgba(18, 20, 21, 0.82);
+      color: var(--ink);
+    }}
+    h1, h2, h3 {{
+      margin: 0;
       text-transform: uppercase;
       letter-spacing: 0.09em;
       font-family: "Avenir Next Condensed", "Franklin Gothic Medium", "Arial Narrow", sans-serif;
     }}
-    h1 {{
-      color: var(--accent);
-    }}
-    .nav {{
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-    }}
-    .nav-link {{
-      display: inline-block;
-      text-decoration: none;
-      color: var(--ink);
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      padding: 8px 14px;
-      background: rgba(52, 53, 53, 0.72);
-      font-size: 0.92rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }}
-    .layout {{
-      display: grid;
-      grid-template-columns: 1.6fr 1fr;
-      gap: 18px;
-      margin-top: 18px;
-    }}
-    .map-shell {{
+    h2 {{ color: var(--accent); font-size: 1.08rem; }}
+    h3 {{ color: var(--accent); font-size: 0.82rem; }}
+    .mission-app {{
       position: relative;
-      min-height: 620px;
+      width: 100vw;
+      height: 100dvh;
       overflow: hidden;
-      padding: 0;
-    }}
-    #record-map {{
-      width: 100%;
-      min-height: 620px;
-      border-radius: 20px;
-    }}
-    #splat-view {{
-      display: none;
-      width: 100%;
-      min-height: 620px;
-      border-radius: 20px;
       background: #07090a;
     }}
+    .map-stage {{
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+    }}
+    #record-map, #splat-view {{
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+      border-radius: 0;
+      background: #07090a;
+    }}
+    #splat-view {{ display: none; }}
     #splat-canvas {{
       display: block;
       width: 100%;
-      height: 620px;
+      height: 100%;
+    }}
+    .app-topbar {{
+      position: absolute;
+      top: calc(10px + env(safe-area-inset-top));
+      left: calc(10px + env(safe-area-inset-left));
+      right: calc(10px + env(safe-area-inset-right));
+      z-index: 700;
+      display: grid;
+      grid-template-columns: 46px minmax(0, 1fr) 46px;
+      gap: 10px;
+      align-items: center;
+      min-height: 52px;
+      padding: 5px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(24, 27, 29, 0.78);
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.32);
+      backdrop-filter: blur(8px);
+    }}
+    .mission-title-button {{
+      min-width: 0;
+      justify-self: start;
+      max-width: 100%;
+      color: var(--ink);
+      background: transparent;
+      border: 0;
+      padding: 8px 10px;
+      text-align: left;
+      letter-spacing: 0;
+      text-transform: none;
+    }}
+    .mission-title-button strong {{
+      display: block;
+      overflow: hidden;
+      color: var(--accent);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 1.08rem;
+    }}
+    .mission-title-button span {{
+      display: block;
+      overflow: hidden;
+      color: var(--muted);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 0.78rem;
+    }}
+    .floating-surface, .drawer, .sheet, .popover, .modal-card {{
+      border: 1px solid var(--line);
+      background: var(--sheet);
+      box-shadow: 0 18px 42px rgba(0, 0, 0, 0.36);
+      backdrop-filter: blur(8px);
+    }}
+    .nav-drawer, .mission-drawer {{
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      z-index: 900;
+      width: min(90vw, 390px);
+      padding: calc(18px + env(safe-area-inset-top)) 18px calc(18px + env(safe-area-inset-bottom));
+      transform: translateX(-105%);
+      transition: transform 180ms ease;
+      overflow-y: auto;
+    }}
+    .nav-drawer.open, .mission-drawer.open {{
+      transform: translateX(0);
+    }}
+    .drawer-backdrop, .modal-backdrop {{
+      position: absolute;
+      inset: 0;
+      z-index: 850;
+      display: none;
+      background: rgba(0, 0, 0, 0.42);
+    }}
+    .drawer-backdrop.show, .modal-backdrop.show {{ display: block; }}
+    .drawer-header, .sheet-header {{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }}
+    .nav-list, .mission-list, .action-list, .run-list {{
+      display: grid;
+      gap: 9px;
+    }}
+    .nav-link, .mission-row, .action-list button, .run-row {{
+      display: block;
+      width: 100%;
+      min-height: 44px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      color: var(--ink);
+      background: rgba(18, 20, 21, 0.58);
+      text-align: left;
+      text-decoration: none;
+      letter-spacing: 0;
+      text-transform: none;
+    }}
+    .mission-row.active {{
+      border-color: rgba(253, 202, 15, 0.72);
+      background: rgba(253, 202, 15, 0.15);
+    }}
+    .mission-row strong, .run-row strong {{ display: block; }}
+    .mission-row span, .run-row span {{
+      display: block;
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 0.86rem;
+    }}
+    .filter-row {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 12px 0;
+    }}
+    .filter-chip {{
+      min-height: 34px;
+      padding: 7px 11px;
+      color: var(--ink);
+      background: rgba(18, 20, 21, 0.62);
+      border: 1px solid var(--line);
+      font-size: 0.78rem;
+    }}
+    .filter-chip.active {{
+      color: #08100a;
+      background: var(--accent);
+    }}
+    .map-view-control {{
+      position: absolute;
+      left: calc(14px + env(safe-area-inset-left));
+      bottom: calc(var(--bottom-sheet-height) + 18px + env(safe-area-inset-bottom));
+      z-index: 650;
+      display: flex;
+      gap: 6px;
+      padding: 5px;
+      border-radius: 12px;
+      transition: bottom 160ms ease;
+    }}
+    .map-view-control button {{
+      min-width: 48px;
+      border-radius: 8px;
+      padding: 9px 11px;
+    }}
+    .map-tools {{
+      position: absolute;
+      right: calc(14px + env(safe-area-inset-right));
+      bottom: calc(var(--bottom-sheet-height) + 18px + env(safe-area-inset-bottom));
+      z-index: 650;
+      display: grid;
+      gap: 10px;
+      transition: bottom 160ms ease;
+    }}
+    .map-layer-control {{
+      position: relative;
+      z-index: 651;
+      font: 13px/1.45 "Avenir Next", "Segoe UI", sans-serif;
+    }}
+    .map-layer-button {{
+      min-width: 104px;
+      color: var(--ink);
+      background: rgba(18, 20, 21, 0.78);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+    }}
+    .map-layer-panel {{
+      position: absolute;
+      right: 0;
+      bottom: calc(100% + 8px);
+      display: none;
+      min-width: 210px;
+      padding: 12px;
+      border-radius: 12px;
+      color: var(--ink);
+    }}
+    .map-layer-control.open .map-layer-panel {{
+      display: grid;
+      gap: 8px;
+    }}
+    .map-layer-panel label {{
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0;
+      color: var(--ink);
+      white-space: nowrap;
+    }}
+    .bottom-sheet {{
+      position: absolute;
+      left: max(10px, env(safe-area-inset-left));
+      right: max(10px, env(safe-area-inset-right));
+      bottom: max(10px, env(safe-area-inset-bottom));
+      z-index: 700;
+      max-width: 860px;
+      margin: 0 auto;
+      height: var(--bottom-sheet-height);
+      border-radius: 20px;
+      padding: 8px 16px 16px;
+      overflow: hidden;
+      transition: height 180ms ease;
+    }}
+    .bottom-sheet.medium {{ --bottom-sheet-height: min(52dvh, 440px); }}
+    .bottom-sheet.expanded {{ --bottom-sheet-height: min(88dvh, 760px); }}
+    .sheet-handle {{
+      width: 64px;
+      height: 5px;
+      margin: 0 auto 8px;
+      border-radius: 999px;
+      background: rgba(245, 241, 223, 0.42);
+    }}
+    .sheet-summary {{
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+    }}
+    .sheet-summary strong {{
+      display: block;
+      overflow: hidden;
+      color: var(--ink);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 1.04rem;
+    }}
+    .sheet-summary span {{ color: var(--muted); font-size: 0.88rem; }}
+    .status-chip {{
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 6px 10px;
+      background: rgba(253, 202, 15, 0.12);
+      color: var(--accent);
+      font-weight: 700;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }}
+    .status-chip.idle {{
+      background: rgba(180, 83, 9, 0.12);
+      color: var(--gold);
+    }}
+    .sheet-tabs {{
+      display: none;
+      gap: 8px;
+      margin-top: 16px;
+    }}
+    .bottom-sheet.medium .sheet-tabs, .bottom-sheet.expanded .sheet-tabs,
+    .bottom-sheet.medium .sheet-content, .bottom-sheet.expanded .sheet-content {{
+      display: grid;
+    }}
+    .sheet-tab {{
+      color: var(--ink);
+      background: rgba(18, 20, 21, 0.52);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }}
+    .sheet-tab.active {{
+      color: #08100a;
+      background: var(--accent);
+    }}
+    .sheet-content {{
+      display: none;
+      max-height: calc(var(--bottom-sheet-height) - 154px);
+      overflow-y: auto;
+      margin-top: 14px;
+      padding-right: 4px;
+    }}
+    .detail-grid {{
+      display: grid;
+      gap: 9px;
+    }}
+    .detail-row {{
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      border-bottom: 1px solid rgba(253, 202, 15, 0.12);
+      padding-bottom: 8px;
+    }}
+    .detail-row span:first-child {{ color: var(--muted); }}
+    .toast {{
+      position: absolute;
+      top: calc(76px + env(safe-area-inset-top));
+      left: 50%;
+      z-index: 980;
+      display: none;
+      width: min(92vw, 520px);
+      transform: translateX(-50%);
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-weight: 700;
+    }}
+    .toast.show {{ display: block; }}
+    .toast.ok {{ background: rgba(15, 118, 110, 0.88); color: var(--ink); }}
+    .toast.error {{ background: rgba(185, 28, 28, 0.9); color: #fff8f6; }}
+    .toast.warn {{ background: rgba(180, 83, 9, 0.9); color: var(--ink); }}
+    .side-sheet {{
+      position: absolute;
+      top: calc(76px + env(safe-area-inset-top));
+      right: calc(10px + env(safe-area-inset-right));
+      bottom: calc(var(--bottom-sheet-height) + 20px + env(safe-area-inset-bottom));
+      z-index: 760;
+      display: none;
+      width: min(92vw, 420px);
+      overflow-y: auto;
+      border-radius: 18px;
+      padding: 16px;
+    }}
+    .side-sheet.open {{ display: block; }}
+    .toolbar, .meta-grid, .pattern-list {{
+      display: grid;
+      gap: 10px;
+    }}
+    .meta-grid {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
+    .meta, .pattern-option {{
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      background: var(--panel);
+    }}
+    .pattern-option input {{ margin-right: 8px; }}
+    .path-row {{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 14px;
+    }}
+    .area-edit-toolbar {{
+      position: absolute;
+      left: 50%;
+      bottom: calc(var(--bottom-sheet-height) + 18px + env(safe-area-inset-bottom));
+      z-index: 660;
+      display: none;
+      grid-template-columns: repeat(5, auto);
+      gap: 8px;
+      max-width: calc(100vw - 28px);
+      padding: 8px;
+      overflow-x: auto;
+      transform: translateX(-50%);
+      border-radius: 14px;
+      transition: bottom 160ms ease;
+    }}
+    .area-edit-toolbar.open {{ display: grid; }}
+    .area-edit-toolbar button {{
+      min-width: max-content;
+      border-radius: 8px;
+      color: var(--ink);
+      background: rgba(18, 20, 21, 0.72);
+      border: 1px solid var(--line);
+      text-transform: none;
+      letter-spacing: 0;
+    }}
+    .area-edit-toolbar button.active {{
+      color: #08100a;
+      background: var(--accent);
+    }}
+    .zone-dot {{
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      border: 2px solid #101214;
+      background: var(--accent);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+    }}
+    .zone-dot.station {{ background: #38bdf8; }}
+    .countdown {{
+      font-size: 0.88rem;
+      color: var(--gold);
+      min-height: 1.2rem;
+    }}
+    .action-menu {{
+      position: absolute;
+      top: calc(70px + env(safe-area-inset-top));
+      right: calc(12px + env(safe-area-inset-right));
+      z-index: 820;
+      display: none;
+      width: min(86vw, 280px);
+      border-radius: 14px;
+      padding: 10px;
+    }}
+    .action-menu.open {{ display: block; }}
+    .run-review-banner {{
+      position: absolute;
+      top: calc(76px + env(safe-area-inset-top));
+      left: 50%;
+      z-index: 760;
+      display: none;
+      width: min(92vw, 560px);
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      transform: translateX(-50%);
+      border-radius: 14px;
+      padding: 10px 12px;
+    }}
+    .run-review-banner.show {{ display: grid; }}
+    .run-review-banner span {{
+      overflow: hidden;
+      color: var(--muted);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }}
+    .modal-backdrop {{ z-index: 950; place-items: center; }}
+    .modal-backdrop.show {{ display: grid; }}
+    .modal-card {{
+      width: min(92vw, 440px);
+      max-height: 88dvh;
+      overflow-y: auto;
+      border-radius: 18px;
+      padding: 18px;
     }}
     .gaussian-overlay-summary {{
       position: absolute;
-      left: 14px;
-      top: 14px;
+      left: calc(14px + env(safe-area-inset-left));
+      top: calc(76px + env(safe-area-inset-top));
       z-index: 500;
       max-width: min(460px, calc(100% - 28px));
       padding: 12px 14px;
@@ -1599,183 +2258,20 @@ class MissionFrontendRenderer:
     .gaussian-overlay-summary.failed strong {{
       color: var(--danger);
     }}
-    .map-layer-control {{
-      position: absolute;
-      left: 10px;
-      top: 82px;
-      z-index: 801;
-      font: 12px/1.5 "Avenir Next", "Segoe UI", sans-serif;
-    }}
-    .map-layer-button {{
-      width: 34px;
-      height: 34px;
-      border: 2px solid rgba(0, 0, 0, 0.22);
-      border-radius: 4px;
-      padding: 0;
-      color: #111827;
-      background: #ffffff;
-      box-shadow: none;
-      font-size: 19px;
-      line-height: 30px;
-      letter-spacing: 0;
-      text-transform: none;
-    }}
-    .map-layer-button:hover {{
-      background: #f4f4f4;
-    }}
-    .map-layer-panel {{
-      display: none;
-      min-width: 178px;
-      margin-top: 6px;
-      padding: 10px;
-      border: 1px solid rgba(0, 0, 0, 0.28);
-      border-radius: 4px;
-      background: rgba(255, 255, 255, 0.94);
-      color: #111827;
-      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.24);
-    }}
-    .map-layer-control.open .map-layer-panel {{
-      display: grid;
-      gap: 7px;
-    }}
-    .map-layer-panel label {{
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin: 0;
-      color: #111827;
-      font-size: 0.82rem;
-      white-space: nowrap;
-    }}
-    .map-layer-panel input {{
-      margin: 0;
-    }}
-    .map-view-control {{
-      position: absolute;
-      top: 14px;
-      right: 14px;
-      z-index: 700;
-      display: flex;
-      gap: 6px;
-      padding: 5px;
-      border: 1px solid rgba(253, 202, 15, 0.35);
-      border-radius: 8px;
-      background: rgba(7, 9, 10, 0.78);
-      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
-    }}
-    .map-view-control button {{
-      min-width: 42px;
-      padding: 8px 10px;
-      border-radius: 6px;
-      font-size: 0.82rem;
-    }}
-    .stack {{
-      display: grid;
-      gap: 16px;
-    }}
-    .toolbar {{
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-      align-items: center;
-    }}
-    .status-chip {{
-      display: inline-flex;
-      align-items: center;
-      border-radius: 999px;
-      padding: 8px 12px;
-      background: rgba(253, 202, 15, 0.12);
-      color: var(--accent);
-      font-weight: 600;
-      font-size: 0.92rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }}
-    .status-chip.idle {{
-      background: rgba(180, 83, 9, 0.12);
-      color: var(--gold);
-    }}
     .muted {{ color: var(--muted); }}
-    .meta-grid {{
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
-    }}
-    .meta {{
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      padding: 12px;
-      background: var(--panel);
-    }}
-    label {{
-      display: block;
-      font-size: 0.9rem;
-      color: var(--muted);
-      margin-bottom: 6px;
-    }}
-    input[type="text"], select {{
-      width: 100%;
-      padding: 12px;
-      border-radius: 12px;
-      border: 1px solid var(--line);
-      background: rgba(18, 20, 21, 0.82);
-      color: var(--ink);
-    }}
-    .map-combo {{
-      position: relative;
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) 42px;
-      width: 100%;
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      background: rgba(18, 20, 21, 0.82);
-    }}
-    .map-combo input[type="text"] {{
-      min-width: 0;
-      border: 0;
-      border-radius: 12px 0 0 12px;
-      background: transparent;
-      outline: none;
-    }}
-    .map-combo input[type="text"]:focus {{
-      box-shadow: inset 0 0 0 1px rgba(253, 202, 15, 0.28);
-    }}
-    .map-combo-button {{
-      border-left: 1px solid var(--line);
-      border-radius: 0 12px 12px 0;
-      padding: 0;
-      color: var(--ink);
-      background: transparent;
-      letter-spacing: 0;
-      text-transform: none;
-    }}
-    .map-combo-button:hover {{
-      background: rgba(253, 202, 15, 0.12);
-    }}
     .map-combo-list {{
-      position: absolute;
-      top: calc(100% + 4px);
-      left: 0;
-      right: 0;
-      z-index: 950;
-      display: none;
-      max-height: 240px;
+      display: grid;
+      gap: 8px;
+      max-height: 52dvh;
       overflow-y: auto;
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      background: rgba(18, 20, 21, 0.98);
-      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.32);
-    }}
-    .map-combo.open .map-combo-list {{
-      display: block;
     }}
     .map-combo-option {{
       width: 100%;
-      border: 0;
-      border-radius: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
       padding: 11px 12px;
       color: var(--ink);
-      background: transparent;
+      background: rgba(18, 20, 21, 0.58);
       text-align: left;
       letter-spacing: 0;
       text-transform: none;
@@ -1783,174 +2279,271 @@ class MissionFrontendRenderer:
     .map-combo-option:hover, .map-combo-option.active {{
       background: rgba(253, 202, 15, 0.16);
     }}
-    .pattern-list {{
-      display: grid;
-      gap: 10px;
-      margin-top: 8px;
+    .map-combo-option strong, .map-combo-option span {{
+      display: block;
     }}
-    .pattern-option {{
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      padding: 12px;
-      background: var(--panel);
+    .map-combo-option span {{
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 0.86rem;
     }}
-    .pattern-option input {{
-      margin-right: 8px;
-    }}
-    .path-row {{
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      margin-top: 14px;
-    }}
-    .path-row label {{
-      margin: 0;
-    }}
-    button {{
-      border: 0;
-      border-radius: 999px;
-      padding: 11px 16px;
-      font-size: 0.95rem;
-      cursor: pointer;
-      color: #08100a;
-      background: var(--accent);
-      font-weight: 700;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-    }}
-    button:hover {{ background: var(--accent-strong); }}
-    button.stop {{ background: var(--danger); }}
-    button.secondary {{
-      color: var(--ink);
-      background: rgba(96, 100, 102, 0.72);
-      border: 1px solid var(--line);
-    }}
-    .banner {{
-      display: none;
-      border-radius: 14px;
-      padding: 12px 14px;
-      font-weight: 600;
-    }}
-    .banner.show {{ display: block; }}
-    .banner.ok {{ background: rgba(15, 118, 110, 0.12); color: var(--accent-strong); }}
-    .banner.error {{ background: rgba(185, 28, 28, 0.12); color: var(--danger); }}
-    .banner.warn {{ background: rgba(180, 83, 9, 0.12); color: var(--gold); }}
-    .countdown {{
-      font-size: 0.88rem;
-      color: var(--gold);
-      min-height: 1.2rem;
-    }}
-    @media (max-width: 980px) {{
-      .layout {{ grid-template-columns: 1fr; }}
+    .hidden {{ display: none !important; }}
+    @media (max-width: 520px) {{
+      .app-topbar {{ grid-template-columns: 46px minmax(0, 1fr) 46px; }}
       .meta-grid {{ grid-template-columns: 1fr; }}
-      #record-map {{ min-height: 440px; }}
-      #splat-view {{ min-height: 440px; }}
-      #splat-canvas {{ height: 440px; }}
+      .bottom-sheet {{ left: 0; right: 0; bottom: 0; border-radius: 20px 20px 0 0; }}
+      .side-sheet {{ left: 8px; right: 8px; width: auto; }}
     }}
   </style>
 </head>
 <body>
-  <main>
-    <section class="card hero">
-      <h1>Map</h1>
-      <div class="muted">Display, edit, save, and delete recorded maps. Start new map recordings from Teleop.</div>
-      <div id="banner" class="banner"></div>
-      <div class="nav">
+  <main id="mission-app" class="mission-app">
+    <section class="map-stage" aria-label="Mission map workspace">
+        <div id="record-map"></div>
+        <div id="splat-view"><canvas id="splat-canvas"></canvas></div>
+        <div id="gaussian-overlay-summary" class="gaussian-overlay-summary">
+          <strong>3D environment</strong>
+          <span>No 3D environment build started.</span>
+        </div>
+    </section>
+
+    <div id="banner" class="toast" role="status" aria-live="polite"></div>
+
+    <header class="app-topbar" aria-label="Mission controls">
+      <button id="open-nav-button" class="icon-button" type="button" aria-label="Open navigation">&#9776;</button>
+      <button id="mission-title-button" class="mission-title-button" type="button" aria-label="Select mission">
+        <strong id="selected-mission-title">Missions</strong>
+        <span id="selected-mission-state">Loading mission...</span>
+      </button>
+      <button id="mission-menu-button" class="icon-button" type="button" aria-label="Mission actions">&#8942;</button>
+    </header>
+
+    <div id="drawer-backdrop" class="drawer-backdrop"></div>
+    <nav id="nav-drawer" class="drawer nav-drawer" aria-label="Application navigation">
+      <div class="drawer-header">
+        <h2>Navigate</h2>
+        <button id="close-nav-button" class="icon-button" type="button" aria-label="Close navigation">&times;</button>
+      </div>
+      <div class="nav-list">
         <a class="nav-link" href="/">Dashboard</a>
         <a class="nav-link" href="/calendar">Calendar</a>
         <a class="nav-link" href="/missions">Missions</a>
         <a class="nav-link" href="/teleop">Teleop</a>
-        <a class="nav-link" href="/map">Map</a>
         <a class="nav-link" href="/developer">Developer</a>
+      </div>
+    </nav>
+
+    <aside id="mission-drawer" class="drawer mission-drawer" aria-label="Mission Selection">
+      <div class="drawer-header">
+        <h2>Mission Selection</h2>
+        <button id="close-mission-drawer-button" class="icon-button" type="button" aria-label="Close mission selection">&times;</button>
+      </div>
+      <input id="map-name" type="text" autocomplete="off" placeholder="Search missions">
+      <div class="filter-row">
+        <button class="filter-chip active" type="button" data-filter="all">All</button>
+        <button class="filter-chip" type="button" data-filter="ready">Ready</button>
+        <button class="filter-chip" type="button" data-filter="processing">Processing</button>
+        <button class="filter-chip" type="button" data-filter="attention">Attention</button>
+      </div>
+      <div id="map-combo" class="hidden">
+        <button id="map-combo-button" type="button" aria-label="Select mission"></button>
+      </div>
+      <div id="map-combo-list" class="map-combo-list"></div>
+      <button id="new-mission-button" class="secondary" type="button" style="width: 100%; margin-top: 14px;">+ New Mission</button>
+    </aside>
+
+    <div class="map-view-control floating-surface" aria-label="Map view mode">
+      <button id="view-2d-button" type="button" aria-label="Switch to 2D view">2D</button>
+      <button id="view-3d-button" class="secondary" type="button" aria-label="Switch to 3D view">3D</button>
+    </div>
+
+    <div class="map-tools">
+      <div id="map-layer-control" class="map-layer-control">
+        <button id="map-layer-button" class="map-layer-button" type="button" aria-label="Map layers" title="Map layers">Layers</button>
+        <div class="map-layer-panel floating-surface">
+          <h3>Layers</h3>
+          <label data-layer-mode="2d"><input class="layer-toggle" data-layer="background" type="checkbox" checked> Satellite</label>
+          <label data-layer-mode="both"><input class="layer-toggle" data-layer="boundary" type="checkbox" checked> Mission boundary</label>
+          <label data-layer-mode="both"><input class="layer-toggle" data-layer="work_areas" type="checkbox" checked> Work areas</label>
+          <label data-layer-mode="both"><input class="layer-toggle" data-layer="no_go" type="checkbox" checked> No-go areas</label>
+          <label data-layer-mode="both"><input class="layer-toggle" data-layer="transit" type="checkbox" checked> Transit paths</label>
+          <label data-layer-mode="both"><input class="layer-toggle" data-layer="planned" type="checkbox" checked> Mission path</label>
+          <label data-layer-mode="both"><input class="layer-toggle" data-layer="recorded" type="checkbox" checked> Actual path</label>
+          <label data-layer-mode="both"><input class="layer-toggle" data-layer="start_finish" type="checkbox" checked> Start / finish</label>
+          <label data-layer-mode="both"><input class="layer-toggle" data-layer="zones" type="checkbox" checked> Work zones</label>
+          <label data-layer-mode="both"><input class="layer-toggle" data-layer="station" type="checkbox" checked> Station</label>
+          <label data-layer-mode="both"><input class="layer-toggle" data-layer="robot" type="checkbox" checked> Robot</label>
+          <label data-layer-mode="both"><input class="layer-toggle" data-layer="obstacles" type="checkbox" checked> Obstacles</label>
+          <label data-layer-mode="3d"><input class="layer-toggle" data-layer="gaussian" type="checkbox" checked> 3D environment</label>
+        </div>
+      </div>
+      <button id="fit-mission-button" class="icon-button" type="button" aria-label="Fit mission" title="Fit mission">&#9678;</button>
+    </div>
+
+    <div id="area-edit-toolbar" class="floating-surface area-edit-toolbar" aria-label="Area editing">
+      <button type="button" data-area-tool="WORK_AREA">+ Work area</button>
+      <button type="button" data-area-tool="NO_GO">+ No-go area</button>
+      <button type="button" data-area-tool="TRANSIT">+ Transit path</button>
+      <button type="button" data-area-tool="STATION">+ Station</button>
+      <button id="cancel-area-edit-button" type="button">Done</button>
+    </div>
+
+    <section id="mission-bottom-sheet" class="sheet bottom-sheet" aria-label="Mission details">
+      <button id="sheet-handle-button" type="button" class="mission-title-button" aria-label="Open mission details" style="width: 100%; padding: 0;">
+        <div class="sheet-handle"></div>
+      </button>
+      <div class="sheet-summary">
+        <div>
+          <strong id="sheet-mission-title">No mission selected</strong>
+          <span id="sheet-mission-meta">Select a mission to review it.</span>
+        </div>
+        <button id="start-mission-button" type="button">Start</button>
+      </div>
+      <div class="sheet-tabs">
+        <button id="mission-tab-button" class="sheet-tab active" type="button">Mission</button>
+        <button id="runs-tab-button" class="sheet-tab" type="button">Runs</button>
+      </div>
+      <div id="mission-tab-panel" class="sheet-content">
+        <div id="mission-detail-grid" class="detail-grid"></div>
+      </div>
+      <div id="runs-tab-panel" class="sheet-content hidden">
+        <div id="run-list" class="run-list"></div>
       </div>
     </section>
 
-    <section class="layout">
-      <section class="card map-shell">
-        <div id="record-map"></div>
-        <div id="map-layer-control" class="map-layer-control">
-          <button id="map-layer-button" class="map-layer-button" type="button" aria-label="Layer settings" title="Layer settings">&#9881;</button>
-          <div class="map-layer-panel">
-            <label><input class="layer-toggle" data-layer="background" type="checkbox" checked> Satellite background</label>
-            <label><input class="layer-toggle" data-layer="boundary" type="checkbox" checked> Boundary</label>
-            <label><input class="layer-toggle" data-layer="recorded" type="checkbox" checked> Recorded trace</label>
-            <label><input class="layer-toggle" data-layer="planned" type="checkbox" checked> Planned path</label>
-            <label><input class="layer-toggle" data-layer="zones" type="checkbox" checked> Zones</label>
-            <label><input class="layer-toggle" data-layer="gaussian" type="checkbox" checked> 3D Tiles</label>
-          </div>
-        </div>
-        <div class="map-view-control">
-          <button id="view-2d-button">2D</button>
-          <button id="view-3d-button" class="secondary">3D</button>
-        </div>
-        <div id="splat-view"><canvas id="splat-canvas"></canvas></div>
-        <div id="gaussian-overlay-summary" class="gaussian-overlay-summary">
-          <strong>3D map</strong>
-          <span>No Gaussian build started.</span>
-        </div>
-      </section>
-      <section class="stack">
-        <section class="card">
-          <h2>Saved Maps</h2>
-          <div class="toolbar">
-            <div id="recording-chip" class="status-chip idle">RecordMap idle</div>
-            <button id="save-map-button">Save Map</button>
-            <button id="build-gaussian-button" class="secondary">Build 3D map</button>
-            <button id="delete-map-button" class="stop">Delete Map</button>
-          </div>
-          <div style="margin-top: 12px;">
-            <label for="map-name">Map</label>
-            <div id="map-combo" class="map-combo">
-              <input id="map-name" type="text" autocomplete="off" placeholder="Last Recording">
-              <button id="map-combo-button" class="map-combo-button" type="button" aria-label="Select saved map" title="Select saved map">&#9662;</button>
-              <div id="map-combo-list" class="map-combo-list"></div>
-            </div>
-          </div>
-          <div class="meta-grid" style="margin-top: 12px;">
-            <div class="meta">
-              <strong>Recorded Run</strong>
-              <div id="latest-run" class="muted" style="margin-top: 6px;">No recording captured yet.</div>
-            </div>
-            <div class="meta">
-              <strong>Obstacle Count</strong>
-              <div id="latest-obstacles" class="muted" style="margin-top: 6px;">-</div>
-            </div>
-          </div>
-          <div id="gaussian-build-status" class="muted" style="margin-top: 12px;">Gaussian splat idle.</div>
-          <div id="latest-map-message" class="muted" style="margin-top: 12px;">Record from Teleop or select a saved map.</div>
-        </section>
-
-        <section class="card">
-          <h2>Edit Path</h2>
-          <div style="margin-top: 14px;">
-            <strong>Pattern</strong>
-            <div id="pattern-countdown" class="countdown"></div>
-            <div class="pattern-list">
-              <label class="pattern-option"><input type="radio" name="pattern" value="zigzag"> Zigzag coverage</label>
-              <label class="pattern-option"><input type="radio" name="pattern" value="random"> Random roaming coverage</label>
-              <label class="pattern-option"><input type="radio" name="pattern" value="spiral"> Spiral inward coverage</label>
-            </div>
-          </div>
-          <div class="path-row">
-            <label for="planned-path-toggle">Planned path</label>
-            <input id="planned-path-toggle" class="layer-toggle" data-layer="planned" type="checkbox" checked>
-          </div>
-          <div style="margin-top: 14px;">
-            <label for="start-position">Start position</label>
-            <input id="start-position" type="range" min="0" max="100" value="0">
-          </div>
-          <div style="margin-top: 14px;">
-            <label class="pattern-option"><input id="use-end-position" type="checkbox"> Use end position</label>
-            <input id="end-position" type="range" min="0" max="100" value="100">
-          </div>
-          <div class="toolbar" style="margin-top: 16px;">
-            <button id="save-button">Save Path</button>
-            <button id="refresh-button" class="secondary">Refresh</button>
-          </div>
-        </section>
-      </section>
+    <section id="mission-action-menu" class="popover action-menu" aria-label="Mission actions">
+      <div class="action-list">
+        <button id="open-area-edit-button" type="button">Edit areas</button>
+        <button id="open-map-edit-button" type="button">Map edit</button>
+        <button id="open-path-edit-button" type="button">Edit path</button>
+        <button id="open-mission-settings-button" type="button">Mission settings</button>
+        <button id="open-advanced-button" type="button">Advanced information</button>
+        <button id="download-mission-button" type="button">Download Mission JSON</button>
+        <button id="save-map-button" type="button">Save As Mission</button>
+        <button id="rename-mission-button" type="button">Rename</button>
+        <button id="delete-map-button" class="stop" type="button">Delete</button>
+      </div>
     </section>
+
+    <section id="run-review-banner" class="floating-surface run-review-banner" aria-label="Run review">
+      <span id="run-review-label">Reviewing run</span>
+      <button id="exit-run-review-button" class="secondary" type="button">Exit review</button>
+    </section>
+
+    <aside id="map-edit-sheet" class="sheet side-sheet" aria-label="Map Edit">
+      <div class="sheet-header">
+        <h2>Map Edit</h2>
+        <button class="icon-button close-side-sheet-button" type="button" aria-label="Close Map Edit">&times;</button>
+      </div>
+      <div class="toolbar">
+        <div id="recording-chip" class="status-chip idle">RecordMap idle</div>
+        <button id="build-gaussian-button" class="secondary" type="button">Build 3D Environment</button>
+      </div>
+      <div class="meta-grid" style="margin-top: 12px;">
+        <div class="meta">
+          <strong>Recorded Run</strong>
+          <div id="latest-run" class="muted" style="margin-top: 6px;">No recording captured yet.</div>
+        </div>
+        <div class="meta">
+          <strong>Obstacle Count</strong>
+          <div id="latest-obstacles" class="muted" style="margin-top: 6px;">-</div>
+        </div>
+      </div>
+      <div id="gaussian-build-status" class="muted" style="margin-top: 12px;">3D environment idle.</div>
+      <div id="latest-map-message" class="muted" style="margin-top: 12px;">Select a mission to review map artifacts.</div>
+    </aside>
+
+    <aside id="path-edit-sheet" class="sheet side-sheet" aria-label="Path Edit">
+      <div class="sheet-header">
+        <h2>Path Edit</h2>
+        <button class="icon-button close-side-sheet-button" type="button" aria-label="Close Path Edit">&times;</button>
+      </div>
+      <strong>Pattern</strong>
+      <div id="pattern-countdown" class="countdown"></div>
+      <div class="pattern-list" style="margin-top: 8px;">
+        <label class="pattern-option"><input type="radio" name="pattern" value="zigzag"> Zigzag coverage</label>
+        <label class="pattern-option"><input type="radio" name="pattern" value="random"> Random roaming coverage</label>
+        <label class="pattern-option"><input type="radio" name="pattern" value="spiral"> Spiral inward coverage</label>
+      </div>
+      <div class="path-row">
+        <label for="planned-path-toggle">Mission path</label>
+        <input id="planned-path-toggle" class="layer-toggle" data-layer="planned" type="checkbox" checked>
+      </div>
+      <div style="margin-top: 14px;">
+        <label for="start-position">Start position</label>
+        <input id="start-position" type="range" min="0" max="100" value="0">
+      </div>
+      <div style="margin-top: 14px;">
+        <label class="pattern-option"><input id="use-end-position" type="checkbox"> Use end position</label>
+        <input id="end-position" type="range" min="0" max="100" value="100">
+      </div>
+      <div class="toolbar" style="margin-top: 16px;">
+        <button id="save-button" type="button">Save Path</button>
+        <button id="refresh-button" class="secondary" type="button">Refresh</button>
+      </div>
+    </aside>
+
+    <aside id="area-edit-sheet" class="sheet side-sheet" aria-label="Edit Areas">
+      <div class="sheet-header">
+        <h2>Edit Areas</h2>
+        <button class="icon-button close-side-sheet-button" type="button" aria-label="Close Edit Areas">&times;</button>
+      </div>
+      <div id="area-edit-message" class="muted">Choose an area tool, then tap the map.</div>
+      <div style="margin-top: 12px;">
+        <label for="area-name-input">Name</label>
+        <input id="area-name-input" type="text" placeholder="Area name">
+      </div>
+      <div id="area-point-list" class="muted" style="margin-top: 10px;">No points selected.</div>
+      <div class="toolbar" style="margin-top: 14px;">
+        <button id="save-area-button" type="button">Save area</button>
+        <button id="cancel-area-button" class="secondary" type="button">Cancel</button>
+        <button id="delete-area-button" class="stop" type="button">Delete</button>
+      </div>
+    </aside>
+
+    <aside id="mission-settings-sheet" class="sheet side-sheet" aria-label="Mission Settings">
+      <div class="sheet-header">
+        <h2>Mission Settings</h2>
+        <button class="icon-button close-side-sheet-button" type="button" aria-label="Close Mission Settings">&times;</button>
+      </div>
+      <div class="detail-grid" id="mission-settings-grid"></div>
+    </aside>
+
+    <aside id="advanced-sheet" class="sheet side-sheet" aria-label="Advanced Information">
+      <div class="sheet-header">
+        <h2>Advanced Information</h2>
+        <button class="icon-button close-side-sheet-button" type="button" aria-label="Close Advanced Information">&times;</button>
+      </div>
+      <div id="advanced-detail-grid" class="detail-grid"></div>
+    </aside>
+
+    <div id="modal-backdrop" class="modal-backdrop">
+      <section id="start-confirmation-sheet" class="modal-card" aria-label="Start Mission">
+        <div class="sheet-header">
+          <h2>Start Mission</h2>
+          <button id="cancel-start-x-button" class="icon-button" type="button" aria-label="Cancel start">&times;</button>
+        </div>
+        <div id="start-confirmation-summary" class="detail-grid"></div>
+        <label class="pattern-option" style="margin-top: 14px;">
+          <input id="record-rosbag-toggle" type="checkbox"> Record rosbag
+        </label>
+        <div class="toolbar" style="margin-top: 16px; grid-template-columns: 1fr 1fr;">
+          <button id="cancel-start-button" class="secondary" type="button">Cancel</button>
+          <button id="confirm-start-mission-button" type="button">Start</button>
+        </div>
+      </section>
+      <section id="new-mission-sheet" class="modal-card hidden" aria-label="New Mission">
+        <div class="sheet-header">
+          <h2>New Mission</h2>
+          <button id="cancel-new-mission-button" class="icon-button" type="button" aria-label="Close New Mission">&times;</button>
+        </div>
+        <input id="upload-file" type="file" accept=".json,application/json" style="margin-top: 10px;">
+        <input id="upload-mission-id" type="text" placeholder="Mission ID" style="margin-top: 10px;">
+        <label class="pattern-option" style="margin-top: 10px;"><input id="upload-overwrite" type="checkbox"> Overwrite existing mission with same id</label>
+        <textarea id="upload-json" rows="12" placeholder="Paste VDA5050 mission JSON" style="margin-top: 10px; font-family: monospace;"></textarea>
+        <button id="upload-button" type="button" style="width: 100%; margin-top: 12px;">Upload Mission</button>
+      </section>
+    </div>
   </main>
 
   <script
@@ -1971,6 +2564,42 @@ class MissionFrontendRenderer:
     const mapComboButton = document.getElementById('map-combo-button');
     const mapComboList = document.getElementById('map-combo-list');
     const mapNameInput = document.getElementById('map-name');
+    const missionApp = document.getElementById('mission-app');
+    const selectedMissionTitle = document.getElementById('selected-mission-title');
+    const selectedMissionState = document.getElementById('selected-mission-state');
+    const sheetMissionTitle = document.getElementById('sheet-mission-title');
+    const sheetMissionMeta = document.getElementById('sheet-mission-meta');
+    const missionBottomSheet = document.getElementById('mission-bottom-sheet');
+    const missionDetailGrid = document.getElementById('mission-detail-grid');
+    const advancedDetailGrid = document.getElementById('advanced-detail-grid');
+    const runList = document.getElementById('run-list');
+    const drawerBackdrop = document.getElementById('drawer-backdrop');
+    const navDrawer = document.getElementById('nav-drawer');
+    const missionDrawer = document.getElementById('mission-drawer');
+    const missionActionMenu = document.getElementById('mission-action-menu');
+    const mapEditSheet = document.getElementById('map-edit-sheet');
+    const pathEditSheet = document.getElementById('path-edit-sheet');
+    const areaEditSheet = document.getElementById('area-edit-sheet');
+    const missionSettingsSheet = document.getElementById('mission-settings-sheet');
+    const advancedSheet = document.getElementById('advanced-sheet');
+    const areaEditToolbar = document.getElementById('area-edit-toolbar');
+    const areaEditMessage = document.getElementById('area-edit-message');
+    const areaNameInput = document.getElementById('area-name-input');
+    const areaPointList = document.getElementById('area-point-list');
+    const saveAreaButton = document.getElementById('save-area-button');
+    const deleteAreaButton = document.getElementById('delete-area-button');
+    const missionSettingsGrid = document.getElementById('mission-settings-grid');
+    const runReviewBanner = document.getElementById('run-review-banner');
+    const runReviewLabel = document.getElementById('run-review-label');
+    const modalBackdrop = document.getElementById('modal-backdrop');
+    const startConfirmationSheet = document.getElementById('start-confirmation-sheet');
+    const newMissionSheet = document.getElementById('new-mission-sheet');
+    const startConfirmationSummary = document.getElementById('start-confirmation-summary');
+    const startMissionButton = document.getElementById('start-mission-button');
+    const confirmStartMissionButton = document.getElementById('confirm-start-mission-button');
+    const renameMissionButton = document.getElementById('rename-mission-button');
+    const deleteMapButton = document.getElementById('delete-map-button');
+    const recordRosbagToggle = document.getElementById('record-rosbag-toggle');
     const startPositionInput = document.getElementById('start-position');
     const useEndPositionInput = document.getElementById('use-end-position');
     const endPositionInput = document.getElementById('end-position');
@@ -1987,8 +2616,14 @@ class MissionFrontendRenderer:
     const gaussianOverlaySummary = document.getElementById('gaussian-overlay-summary');
     const selectedMapStorageKey = 'amr_sweeper.selected_map_id';
     const latestRecordingLabel = 'Last Recording';
+    const defaultMissionIds = new Set(['SpotSweep', '3x3Sweep']);
+    const protectedMissionIds = new Set(['RecordMap']);
     let mapsCache = [];
+    let missionsCache = [];
     let selectedMapId = window.localStorage.getItem(selectedMapStorageKey) || '';
+    let missionSearchText = '';
+    let missionStatusFilter = 'all';
+    let lastFitLatLngs = [];
     let mapNameTouched = false;
     let lastAppliedSourceMapId = null;
     let currentView = '2d';
@@ -2002,13 +2637,23 @@ class MissionFrontendRenderer:
     let perimeterPolyline = null;
     let plannedPathPolyline = null;
     let currentMarker = null;
+    let startFinishLayer = null;
     let boundaryMaskLayer = null;
     let gaussianLayer = null;
+    let semanticZoneLayer = null;
+    let obstacleLayer = null;
+    let stationLayer = null;
+    let draftAreaLayer = null;
     let currentGaussianBuildId = '';
     let gaussianRequestInFlight = false;
     let lastMapSnapshot = {{}};
     let appliedEditorStateKey = '';
     let lastFittedMapKey = '';
+    let runReviewRoute = null;
+    let areaEditMode = false;
+    let activeAreaTool = '';
+    let draftAreaPoints = [];
+    let editingZoneId = '';
 
     mapNameInput.value = latestRecordingLabel;
     mapComboList.innerHTML = '<button class="map-combo-option" type="button" disabled>Loading saved maps...</button>';
@@ -2029,9 +2674,108 @@ class MissionFrontendRenderer:
       banner.className = `banner show ${{kind}}`;
       banner.textContent = message;
       window.setTimeout(() => {{
-        banner.className = 'banner';
+        banner.className = 'toast';
         banner.textContent = '';
       }}, 5000);
+    }}
+
+    function missionUiStatus(entry) {{
+      if (!entry) {{
+        return 'UNAVAILABLE';
+      }}
+      if (lastMapSnapshot?.active_execution?.mission_id === (entry.mission_id || entry.map_id)) {{
+        return 'RUNNING';
+      }}
+      if (entry.error || entry.gaussian_error || entry.gaussian_splat_error) {{
+        return 'NEEDS ATTENTION';
+      }}
+      if (entry.artifacts_ready === false) {{
+        return 'PROCESSING';
+      }}
+      if (entry.route_available === false && !entry.route_geojson && !entry.navsat_geojson) {{
+        return 'UNAVAILABLE';
+      }}
+      return 'READY';
+    }}
+
+    function statusMatchesFilter(entry) {{
+      const status = missionUiStatus(entry).toLowerCase();
+      if (missionStatusFilter === 'all') {{
+        return true;
+      }}
+      if (missionStatusFilter === 'attention') {{
+        return status === 'needs attention' || status === 'unavailable';
+      }}
+      return status === missionStatusFilter;
+    }}
+
+    function missionMetrics(entry) {{
+      const area = Number(entry?.area_square_meters || entry?.coverage_area_square_meters || 0);
+      const pathLength = Number(entry?.path_length_meters || entry?.actual_path_length_meters || 0);
+      const duration = Number(entry?.estimated_duration_seconds || entry?.duration_seconds || 0);
+      const parts = [];
+      if (area > 0) {{
+        parts.push(`${{Math.round(area).toLocaleString()}} m2`);
+      }}
+      if (pathLength > 0) {{
+        parts.push(pathLength >= 1000 ? `${{(pathLength / 1000).toFixed(1)}} km` : `${{Math.round(pathLength)}} m`);
+      }}
+      if (duration > 0) {{
+        const minutes = Math.max(1, Math.round(duration / 60));
+        parts.push(minutes >= 60 ? `~${{Math.floor(minutes / 60)}}h ${{minutes % 60}}m` : `~${{minutes}}m`);
+      }}
+      return parts.join(' | ') || 'Mission artifacts pending';
+    }}
+
+    function setSheetState(state) {{
+      missionBottomSheet.classList.remove('medium', 'expanded');
+      if (state === 'medium' || state === 'expanded') {{
+        missionBottomSheet.classList.add(state);
+      }}
+      window.setTimeout(() => {{
+        missionApp.style.setProperty('--bottom-sheet-height', `${{missionBottomSheet.offsetHeight}}px`);
+        map.invalidateSize();
+      }}, 0);
+    }}
+
+    function closeOverlayPanels() {{
+      missionActionMenu.classList.remove('open');
+      mapEditSheet.classList.remove('open');
+      pathEditSheet.classList.remove('open');
+      areaEditSheet.classList.remove('open');
+      missionSettingsSheet.classList.remove('open');
+      advancedSheet.classList.remove('open');
+    }}
+
+    function exitRunReview() {{
+      runReviewRoute = null;
+      runReviewBanner.classList.remove('show');
+      updateMap(lastMapSnapshot);
+    }}
+
+    function closeDrawers() {{
+      navDrawer.classList.remove('open');
+      missionDrawer.classList.remove('open');
+      drawerBackdrop.classList.remove('show');
+    }}
+
+    function openDrawer(drawer) {{
+      closeOverlayPanels();
+      navDrawer.classList.toggle('open', drawer === navDrawer);
+      missionDrawer.classList.toggle('open', drawer === missionDrawer);
+      drawerBackdrop.classList.add('show');
+    }}
+
+    function openSideSheet(sheet) {{
+      closeDrawers();
+      missionActionMenu.classList.remove('open');
+      for (const element of [mapEditSheet, pathEditSheet, areaEditSheet, missionSettingsSheet, advancedSheet]) {{
+        element.classList.toggle('open', element === sheet);
+      }}
+    }}
+
+    function detailRow(label, value) {{
+      return `<div class="detail-row"><span>${{label}}</span><strong>${{value || '-'}}</strong></div>`;
     }}
 
     function selectedPattern() {{
@@ -2072,6 +2816,51 @@ class MissionFrontendRenderer:
       }}
     }}
 
+    function updateLayerPanelMode() {{
+      const entry = selectedMap();
+      for (const label of document.querySelectorAll('[data-layer-mode]')) {{
+        const mode = label.dataset.layerMode || 'both';
+        const input = label.querySelector('.layer-toggle');
+        const layer = input?.dataset?.layer || '';
+        label.classList.toggle(
+          'hidden',
+          (mode !== 'both' && mode !== currentView) || !layerHasData(layer, entry)
+        );
+      }}
+    }}
+
+    function layerHasData(layer, entry) {{
+      if (!entry) {{
+        return ['background', 'robot'].includes(layer);
+      }}
+      const zones = entry.semantic_zones || [];
+      if (layer === 'work_areas' || layer === 'zones') {{
+        return zones.some((zone) => zone.enabled && zone.type === 'WORK_AREA');
+      }}
+      if (layer === 'no_go') {{
+        return zones.some((zone) => zone.enabled && zone.type === 'NO_GO');
+      }}
+      if (layer === 'transit') {{
+        return zones.some((zone) => zone.enabled && zone.type === 'TRANSIT');
+      }}
+      if (layer === 'station') {{
+        return Boolean(entry.station?.position);
+      }}
+      if (layer === 'obstacles') {{
+        return (entry.recorded_obstacle_points || lastMapSnapshot?.latest_recorded_map?.recorded_obstacle_points || []).length > 0;
+      }}
+      if (layer === 'start_finish' || layer === 'planned' || layer === 'boundary') {{
+        return Boolean(entry.route_geojson || entry.navsat_geojson || lastMapSnapshot?.latest_route_geojson);
+      }}
+      if (layer === 'recorded') {{
+        return Boolean(entry.navsat_geojson || lastMapSnapshot?.latest_navsat_geojson || lastMapSnapshot?.active_navsat_geojson);
+      }}
+      if (layer === 'gaussian') {{
+        return Boolean(entry.gaussian_splat_manifest || entry.gaussian_manifest || lastMapSnapshot?.latest_recorded_map?.gaussian_splat_manifest);
+      }}
+      return true;
+    }}
+
     function applyLayerVisibility(visibility) {{
       if (!visibility || typeof visibility !== 'object') {{
         return;
@@ -2087,6 +2876,58 @@ class MissionFrontendRenderer:
       return mapsCache.find((entry) => entry.map_id === selectedMapId) || null;
     }}
 
+    function missionIsProtected(entry) {{
+      const missionId = entry?.mission_id || entry?.map_id || selectedMapId || '';
+      return Boolean(entry?.readonly) || protectedMissionIds.has(missionId) || defaultMissionIds.has(missionId);
+    }}
+
+    function selectedMission() {{
+      return missionsCache.find((entry) => entry.mission_id === selectedMapId)
+        || selectedMap()
+        || null;
+    }}
+
+    function selectedMissionGroup(entry) {{
+      const missionId = entry?.mission_id || entry?.map_id || '';
+      if (missionId === 'RecordMap') {{
+        return 'Latest Recording';
+      }}
+      if (defaultMissionIds.has(missionId)) {{
+        return 'Default Missions';
+      }}
+      return 'Saved Missions';
+    }}
+
+    function missionIsSelectable(entry) {{
+      const missionId = String(entry?.mission_id || entry?.map_id || '').trim();
+      if (!missionId || missionId === 'Teleop') {{
+        return false;
+      }}
+      const directory = String(entry?.directory || entry?.mission_directory || entry?.source_directory || '');
+      if (directory.includes('/missions/simulations/') || directory.includes('missions/simulations/')) {{
+        return false;
+      }}
+      const missionType = String(entry?.mission_type || entry?.source || '').toLowerCase();
+      return !missionType.includes('simulation');
+    }}
+
+    function selectedMissionIsSavedEditable() {{
+      const entry = selectedMap();
+      return Boolean(entry) && !missionIsProtected(entry);
+    }}
+
+    function recordRosbagStorageKey(missionId) {{
+      return `amr_sweeper_record_rosbag_${{missionId}}`;
+    }}
+
+    function loadRecordRosbagPreference(missionId) {{
+      return window.localStorage.getItem(recordRosbagStorageKey(missionId)) === '1';
+    }}
+
+    function saveRecordRosbagPreference(missionId, enabled) {{
+      window.localStorage.setItem(recordRosbagStorageKey(missionId), enabled ? '1' : '0');
+    }}
+
     function gaussianStatusMatchesSelectedSource(status) {{
       if (!status || Object.keys(status).length === 0) {{
         return false;
@@ -2096,6 +2937,8 @@ class MissionFrontendRenderer:
       const missionId = String(status.mission_id || '');
       if (selectedMapId) {{
         return missionId === selectedMapId
+          || captureManifest.includes(`/missions/logs/${{selectedMapId}}/_3D_map/gaussian/manifest.json`)
+          || outputDirectory.includes(`/missions/logs/${{selectedMapId}}/_3D_map/gaussian_splat`)
           || captureManifest.includes(`/missions/maps/${{selectedMapId}}/gaussian/manifest.json`)
           || outputDirectory.includes(`/missions/maps/${{selectedMapId}}/gaussian_splat`);
       }}
@@ -2224,13 +3067,129 @@ class MissionFrontendRenderer:
       return latlngs.slice(startIndex, Math.min(lastIndex, endIndex) + 1);
     }}
 
+    function geometryLatLngs(geometry) {{
+      if (!geometry || typeof geometry !== 'object') {{
+        return [];
+      }}
+      if (geometry.type === 'Polygon') {{
+        const ring = geometry.coordinates?.[0] || [];
+        return ring
+          .filter((point) => Array.isArray(point) && point.length >= 2)
+          .map((point) => [Number(point[1]), Number(point[0])])
+          .filter((point) => Number.isFinite(point[0]) && Number.isFinite(point[1]));
+      }}
+      if (geometry.type === 'LineString') {{
+        return (geometry.coordinates || [])
+          .filter((point) => Array.isArray(point) && point.length >= 2)
+          .map((point) => [Number(point[1]), Number(point[0])])
+          .filter((point) => Number.isFinite(point[0]) && Number.isFinite(point[1]));
+      }}
+      return [];
+    }}
+
+    function zoneLayerEnabled(zoneType) {{
+      if (zoneType === 'WORK_AREA') {{
+        return layerEnabled('work_areas') || layerEnabled('zones');
+      }}
+      if (zoneType === 'NO_GO') {{
+        return layerEnabled('no_go');
+      }}
+      if (zoneType === 'TRANSIT') {{
+        return layerEnabled('transit');
+      }}
+      return true;
+    }}
+
+    function zoneStyle(zoneType) {{
+      if (zoneType === 'NO_GO') {{
+        return {{ color: '#ff7b5c', fillColor: '#ff7b5c', fillOpacity: 0.24, weight: 2 }};
+      }}
+      if (zoneType === 'TRANSIT') {{
+        return {{ color: '#38bdf8', weight: 4, dashArray: '10 8' }};
+      }}
+      return {{ color: '#22c55e', fillColor: '#22c55e', fillOpacity: 0.18, weight: 2 }};
+    }}
+
+    function drawSemanticObjects(entry, bounds) {{
+      semanticZoneLayer = L.layerGroup();
+      for (const zone of entry?.semantic_zones || []) {{
+        if (!zone?.enabled || !zoneLayerEnabled(zone.type)) {{
+          continue;
+        }}
+        const latlngs = geometryLatLngs(zone.geometry);
+        if (latlngs.length < 2) {{
+          continue;
+        }}
+        const style = zoneStyle(zone.type);
+        const layer = zone.type === 'TRANSIT'
+          ? L.polyline(latlngs, style)
+          : L.polygon(latlngs, style);
+        layer.bindTooltip(zone.name || zone.id || 'Area');
+        layer.on('click', () => beginEditExistingZone(zone));
+        layer.addTo(semanticZoneLayer);
+        bounds.push(...latlngs);
+      }}
+      if (semanticZoneLayer.getLayers().length) {{
+        semanticZoneLayer.addTo(map);
+      }}
+
+      const station = entry?.station;
+      if (layerEnabled('station') && station?.position) {{
+        const y = Number(station.position.y);
+        const x = Number(station.position.x);
+        if (Number.isFinite(x) && Number.isFinite(y)) {{
+          stationLayer = L.circleMarker([y, x], {{
+            radius: 8,
+            color: '#ffffff',
+            weight: 2,
+            fillColor: '#38bdf8',
+            fillOpacity: 1,
+          }}).addTo(map);
+          stationLayer.bindTooltip(station.name || 'Station');
+          bounds.push([y, x]);
+        }}
+      }}
+    }}
+
+    function drawStartFinish(plannedLatLngs, bounds) {{
+      if (!layerEnabled('start_finish') || plannedLatLngs.length < 2) {{
+        return;
+      }}
+      startFinishLayer = L.layerGroup();
+      L.circleMarker(plannedLatLngs[0], {{
+        radius: 7,
+        color: '#101214',
+        weight: 2,
+        fillColor: '#22c55e',
+        fillOpacity: 1,
+      }}).bindTooltip('Start').addTo(startFinishLayer);
+      L.circleMarker(plannedLatLngs[plannedLatLngs.length - 1], {{
+        radius: 7,
+        color: '#101214',
+        weight: 2,
+        fillColor: '#ff7b5c',
+        fillOpacity: 1,
+      }}).bindTooltip('Finish').addTo(startFinishLayer);
+      startFinishLayer.addTo(map);
+      bounds.push(plannedLatLngs[0], plannedLatLngs[plannedLatLngs.length - 1]);
+    }}
+
     function fitMapToDefaultBounds(data, latlngs) {{
       const key = `${{editorStateKey(data)}}:${{latlngs.length}}`;
       if (key === lastFittedMapKey || latlngs.length === 0) {{
         return;
       }}
+      lastFitLatLngs = latlngs;
       map.fitBounds(latlngs, {{ padding: [34, 34], maxZoom: 19 }});
       lastFittedMapKey = key;
+    }}
+
+    function fitSelectedMission() {{
+      if (lastFitLatLngs.length > 0 && currentView === '2d') {{
+        map.fitBounds(lastFitLatLngs, {{ padding: [42, 42], maxZoom: 19 }});
+      }} else {{
+        renderSplatPreview(lastMapSnapshot);
+      }}
     }}
 
     function updateMap(data) {{
@@ -2255,6 +3214,10 @@ class MissionFrontendRenderer:
         map.removeLayer(currentMarker);
         currentMarker = null;
       }}
+      if (startFinishLayer) {{
+        map.removeLayer(startFinishLayer);
+        startFinishLayer = null;
+      }}
       if (boundaryMaskLayer) {{
         map.removeLayer(boundaryMaskLayer);
         boundaryMaskLayer = null;
@@ -2263,11 +3226,23 @@ class MissionFrontendRenderer:
         map.removeLayer(gaussianLayer);
         gaussianLayer = null;
       }}
+      if (semanticZoneLayer) {{
+        map.removeLayer(semanticZoneLayer);
+        semanticZoneLayer = null;
+      }}
+      if (obstacleLayer) {{
+        map.removeLayer(obstacleLayer);
+        obstacleLayer = null;
+      }}
+      if (stationLayer) {{
+        map.removeLayer(stationLayer);
+        stationLayer = null;
+      }}
 
       const bounds = [];
       const defaultBounds = [];
       const mapEntry = selectedMap();
-      const selectedNavsat = mapEntry?.navsat_geojson || null;
+      const selectedNavsat = runReviewRoute || mapEntry?.navsat_geojson || null;
       const selectedRoute = mapEntry?.route_geojson || null;
       const activeLatLngs = leafletLatLngs(data.active_navsat_geojson);
       if (layerEnabled('recorded') && activeLatLngs.length > 1) {{
@@ -2306,6 +3281,30 @@ class MissionFrontendRenderer:
         plannedPathPolyline.bringToFront();
         bounds.push(...plannedLatLngs);
       }}
+      drawStartFinish(plannedLatLngs, bounds);
+      drawSemanticObjects(mapEntry, bounds);
+
+      if (layerEnabled('obstacles')) {{
+        const obstaclePoints = mapEntry?.recorded_obstacle_points || data.latest_recorded_map?.recorded_obstacle_points || [];
+        obstacleLayer = L.layerGroup();
+        for (const point of obstaclePoints) {{
+          const lat = Number(point.latitude ?? point.lat ?? point.y);
+          const lon = Number(point.longitude ?? point.lon ?? point.lng ?? point.x);
+          if (Number.isFinite(lat) && Number.isFinite(lon)) {{
+            L.circleMarker([lat, lon], {{
+              radius: 4,
+              color: '#101214',
+              weight: 1,
+              fillColor: '#ff7b5c',
+              fillOpacity: 0.88,
+            }}).bindTooltip('Obstacle').addTo(obstacleLayer);
+            bounds.push([lat, lon]);
+          }}
+        }}
+        if (obstacleLayer.getLayers().length) {{
+          obstacleLayer.addTo(map);
+        }}
+      }}
 
       if (layerEnabled('gaussian')) {{
         const obstaclePoints = mapEntry?.recorded_obstacle_points || data.latest_recorded_map?.recorded_obstacle_points || [];
@@ -2326,7 +3325,7 @@ class MissionFrontendRenderer:
       }}
 
       const position = data.current_position;
-      if (position && position.latitude !== undefined && position.longitude !== undefined) {{
+      if (layerEnabled('robot') && position && position.latitude !== undefined && position.longitude !== undefined) {{
         currentMarker = L.circleMarker(
           [Number(position.latitude), Number(position.longitude)],
           {{ radius: 6, color: '#ffffff', weight: 2, fillColor: '#1d4ed8', fillOpacity: 1 }}
@@ -2405,7 +3404,7 @@ class MissionFrontendRenderer:
       const message = status?.message ? ` | ${{status.message}}` : '';
       gaussianOverlaySummary.classList.toggle('failed', state === 'failed' || state === 'rejected');
       gaussianOverlaySummary.innerHTML = `
-        <strong>3D map ${{state}}</strong>
+        <strong>3D environment ${{state}}</strong>
         <span>${{completed}}/${{tileCount}} tiles · ${{overall.toFixed(1)}}%${{currentTile}}${{checkpoint}}</span>
         <span style="display:block; margin-top: 4px;">${{updated ? `Updated ${{updated}}` : 'Waiting for first checkpoint.'}}${{message}}</span>
       `;
@@ -2429,7 +3428,7 @@ class MissionFrontendRenderer:
       if (!tiles.length) {{
         context.fillStyle = '#c4bb98';
         context.font = '16px Avenir Next, Segoe UI, sans-serif';
-        context.fillText(scopedStatus?.message || 'No Gaussian splat tiles available yet.', 24, 40);
+        context.fillText(scopedStatus?.message || 'No 3D environment tiles available yet.', 24, 40);
         return;
       }}
       const bounds = tiles.reduce((acc, tile) => {{
@@ -2469,12 +3468,12 @@ class MissionFrontendRenderer:
       }}
       context.fillStyle = '#f5f1df';
       context.font = '15px Avenir Next, Segoe UI, sans-serif';
-      context.fillText(`${{tiles.length}} Gaussian tile${{tiles.length === 1 ? '' : 's'}}`, 24, 32);
+      context.fillText(`${{tiles.length}} 3D environment tile${{tiles.length === 1 ? '' : 's'}}`, 24, 32);
     }}
 
     function formatGaussianStatus(status) {{
       if (!status || Object.keys(status).length === 0) {{
-        return 'Gaussian splat idle.';
+        return '3D environment idle.';
       }}
       const state = status.state || 'idle';
       const message = status.message || '';
@@ -2485,7 +3484,7 @@ class MissionFrontendRenderer:
       const checkpoint = status.latest_checkpoint_iteration
         ? ` · checkpoint ${{status.latest_checkpoint_iteration}}/${{status.target_iterations_per_tile || '-'}}`
         : '';
-      return `${{state}} · ${{completed}}/${{tiles}} tiles · ${{progress.toFixed(1)}}%${{currentTile}}${{checkpoint}}${{message ? ` · ${{message}}` : ''}}`;
+      return `${{state}} · ${{completed}}/${{tiles}} environment tiles · ${{progress.toFixed(1)}}%${{currentTile}}${{checkpoint}}${{message ? ` · ${{message}}` : ''}}`;
     }}
 
     function updateGaussianControls(status) {{
@@ -2494,7 +3493,7 @@ class MissionFrontendRenderer:
       currentGaussianBuildId = scopedStatus.build_id || '';
       const state = scopedStatus.state || 'idle';
       const canResume = Boolean(scopedStatus.can_resume) || ['paused', 'partial', 'failed'].includes(state);
-      buildGaussianButton.disabled = gaussianRequestInFlight;
+      buildGaussianButton.disabled = gaussianRequestInFlight || defaultMissionIds.has(selectedMapId);
       buildGaussianButton.classList.toggle('stop', state === 'running' || state === 'pause_requested');
       buildGaussianButton.classList.toggle('secondary', !(state === 'running' || state === 'pause_requested'));
       if (gaussianRequestInFlight) {{
@@ -2502,12 +3501,13 @@ class MissionFrontendRenderer:
       }} else if (state === 'running' || state === 'pause_requested') {{
         buildGaussianButton.textContent = 'Stop build';
       }} else if (canResume) {{
-        buildGaussianButton.textContent = 'Resume building 3D map';
+        buildGaussianButton.textContent = 'Resume building 3D environment';
       }} else {{
-        buildGaussianButton.textContent = 'Build 3D map';
+        buildGaussianButton.textContent = 'Build 3D environment';
       }}
       gaussianBuildStatus.textContent = formatGaussianStatus(scopedStatus);
       renderSplatPreview(lastMapSnapshot);
+      updateMissionActionState();
     }}
 
     async function refreshGaussianStatus() {{
@@ -2531,7 +3531,11 @@ class MissionFrontendRenderer:
 
     function selectedSourceDisplayName() {{
       const entry = selectedMap();
-      return entry ? (entry.name || entry.map_id) : latestRecordingLabel;
+      const mission = selectedMission();
+      if (selectedMapId === 'RecordMap') {{
+        return latestRecordingLabel;
+      }}
+      return entry ? (entry.name || entry.map_id) : (mission?.mission_id || latestRecordingLabel);
     }}
 
     function closeMapCombo() {{
@@ -2540,17 +3544,37 @@ class MissionFrontendRenderer:
 
     function selectMapSource(mapId) {{
       setSelectedMapId(mapId);
-      mapNameInput.value = selectedSourceDisplayName();
+      missionSearchText = '';
+      mapNameInput.value = '';
       mapNameTouched = false;
       lastAppliedSourceMapId = selectedMapId;
+      recordRosbagToggle.checked = selectedMapId ? loadRecordRosbagPreference(selectedMapId) : false;
       closeMapCombo();
+      closeDrawers();
     }}
 
-    function appendMapComboOption(mapId, label) {{
+    function missionLabel(entry) {{
+      const missionId = entry?.mission_id || entry?.map_id || '';
+      return missionId === 'RecordMap' ? 'Latest Recording' : (entry?.name || missionId);
+    }}
+
+    function missionDetail(entry) {{
+      const parts = [];
+      const missionId = entry?.mission_id || entry?.map_id || '';
+      if (missionIsProtected(entry)) {{
+        parts.push(missionId === 'RecordMap' ? 'Latest recording' : 'Read-only');
+      }} else {{
+        parts.push('Saved mission');
+      }}
+      parts.push(missionMetrics(entry));
+      return parts.join(' | ');
+    }}
+
+    function appendMapComboOption(mapId, label, detail = '') {{
       const option = document.createElement('button');
       option.type = 'button';
       option.className = 'map-combo-option';
-      option.textContent = label;
+      option.innerHTML = `<strong>${{label}}</strong><span>${{missionUiStatus(selectedMapById(mapId))}} | ${{detail}}</span>`;
       option.classList.toggle('active', mapId === selectedMapId);
       option.addEventListener('click', async () => {{
         selectMapSource(mapId);
@@ -2559,14 +3583,45 @@ class MissionFrontendRenderer:
       mapComboList.appendChild(option);
     }}
 
+    function selectedMapById(mapId) {{
+      return mapsCache.find((entry) => entry.map_id === mapId) || null;
+    }}
+
     function populateMapSelect() {{
       mapComboList.innerHTML = '';
-      appendMapComboOption('', latestRecordingLabel);
+      const search = missionSearchText.trim().toLowerCase();
+      const groups = new Map([
+        ['Latest Recording', []],
+        ['Default Missions', []],
+        ['Saved Missions', []],
+      ]);
       for (const entry of mapsCache) {{
-        appendMapComboOption(entry.map_id, entry.name || entry.map_id);
+        const text = `${{entry.map_id || ''}} ${{entry.mission_id || ''}} ${{entry.name || ''}}`.toLowerCase();
+        if (search && !text.includes(search)) {{
+          continue;
+        }}
+        if (!statusMatchesFilter(entry)) {{
+          continue;
+        }}
+        groups.get(selectedMissionGroup(entry))?.push(entry);
       }}
-      if (mapsCache.length === 0 && !selectedMapId) {{
-        latestMapMessage.textContent = 'No saved maps yet. Latest recording remains available when captured.';
+      for (const [groupName, entries] of groups.entries()) {{
+        if (!entries.length) {{
+          continue;
+        }}
+        const groupHeading = document.createElement('h3');
+        groupHeading.textContent = groupName;
+        groupHeading.style.marginTop = mapComboList.children.length ? '12px' : '0';
+        mapComboList.appendChild(groupHeading);
+        entries.sort((left, right) => missionLabel(left).localeCompare(missionLabel(right)));
+        for (const entry of entries) {{
+          appendMapComboOption(entry.map_id, missionLabel(entry), missionDetail(entry));
+        }}
+      }}
+      if (mapsCache.length === 0) {{
+        latestMapMessage.textContent = 'No mission artifacts are available yet.';
+      }} else if (!mapComboList.children.length) {{
+        mapComboList.innerHTML = '<div class="muted">No missions match the current filter.</div>';
       }}
     }}
 
@@ -2574,7 +3629,12 @@ class MissionFrontendRenderer:
       const entry = selectedMap();
       const sourceChanged = selectedMapId !== lastAppliedSourceMapId;
       if (!mapNameTouched || sourceChanged) {{
-        mapNameInput.value = selectedSourceDisplayName();
+        if (sourceChanged) {{
+          mapNameInput.value = '';
+          missionSearchText = '';
+          runReviewRoute = null;
+          runReviewBanner.classList.remove('show');
+        }}
         mapNameTouched = false;
         lastAppliedSourceMapId = selectedMapId;
       }}
@@ -2588,25 +3648,210 @@ class MissionFrontendRenderer:
         useEndPositionInput.checked = Boolean(entry.end_position);
         endPositionInput.value = String(entry.end_position?.percent ?? 100);
       }}
+      updateMissionActionState();
+      updateMissionSummary();
+    }}
+
+    function updateMissionActionState() {{
+      const entry = selectedMap();
+      const protectedSelection = missionIsProtected(entry);
+      const isRecordMap = selectedMapId === 'RecordMap';
+      const isDefault = defaultMissionIds.has(selectedMapId);
+      const canSaveAs = Boolean(selectedMapId) && !isDefault;
+      const canRename = selectedMissionIsSavedEditable();
+      const canDelete = selectedMissionIsSavedEditable();
+      const canEditPath = selectedMissionIsSavedEditable();
+      document.getElementById('open-area-edit-button').disabled = !canEditPath;
+      saveMapButton.disabled = !canSaveAs;
+      renameMissionButton.disabled = !canRename;
+      deleteMapButton.disabled = !canDelete;
+      buildGaussianButton.disabled = gaussianRequestInFlight || isDefault;
+      startMissionButton.disabled = !selectedMapId;
+      recordRosbagToggle.disabled = !selectedMapId;
+      for (const input of patternInputs) {{
+        input.disabled = !canEditPath;
+      }}
+      startPositionInput.disabled = !canEditPath;
+      useEndPositionInput.disabled = !canEditPath;
+      endPositionInput.disabled = !canEditPath || !useEndPositionInput.checked;
+      document.getElementById('save-button').disabled = !canEditPath;
+      if (isRecordMap) {{
+        latestMapMessage.textContent = entry?.artifacts_ready
+          ? 'Latest recording can be saved as a new mission. Rename and delete are disabled for RecordMap.'
+          : 'RecordMap is selectable, but no reusable map artifacts are available yet.';
+      }} else if (isDefault) {{
+        latestMapMessage.textContent = 'Default missions are preview-only here. Start is available; save, rename, and delete are disabled.';
+      }} else if (protectedSelection) {{
+        latestMapMessage.textContent = 'This mission is preview-only.';
+      }}
+    }}
+
+    function updateMissionSummary() {{
+      const entry = selectedMap();
+      const title = selectedSourceDisplayName();
+      const status = missionUiStatus(entry);
+      const metrics = missionMetrics(entry);
+      selectedMissionTitle.textContent = title;
+      selectedMissionState.textContent = status;
+      sheetMissionTitle.textContent = title;
+      sheetMissionMeta.textContent = `${{status}} | ${{metrics}}`;
+      missionDetailGrid.innerHTML = [
+        detailRow('Status', status),
+        detailRow('Area', entry?.area_square_meters ? `${{Math.round(Number(entry.area_square_meters)).toLocaleString()}} m2` : '-'),
+        detailRow('Path length', entry?.path_length_meters ? `${{Math.round(Number(entry.path_length_meters)).toLocaleString()}} m` : '-'),
+        detailRow('Estimated duration', entry?.estimated_duration_seconds ? `${{Math.round(Number(entry.estimated_duration_seconds) / 60)}} min` : '-'),
+        detailRow('Work areas', String((entry?.semantic_zones || []).filter((zone) => zone.type === 'WORK_AREA').length)),
+        detailRow('No-go areas', String((entry?.semantic_zones || []).filter((zone) => zone.type === 'NO_GO').length)),
+        detailRow('Mission type', entry?.mission_type || (missionIsProtected(entry) ? 'Protected' : 'Saved')),
+        detailRow('Artifacts', entry?.artifacts_ready === false ? 'Processing' : 'Ready'),
+      ].join('');
+      const settings = entry?.mission_settings || {{}};
+      missionSettingsGrid.innerHTML = [
+        detailRow('Pattern', settings.pattern || entry?.sweep_pattern || 'zigzag'),
+        detailRow('Robot speed', settings.robot_speed || 'standard'),
+        detailRow('Sweep intensity', settings.sweep_intensity || 'standard'),
+        detailRow('Edge sweep', settings.edge_sweep === false ? 'Off' : 'On'),
+        detailRow('Tool', settings.tool?.enabled === false ? 'Off' : 'On'),
+      ].join('');
+      advancedDetailGrid.innerHTML = [
+        detailRow('Mission ID', entry?.mission_id || entry?.map_id || '-'),
+        detailRow('Directory', entry?.directory || '-'),
+        detailRow('Execution mode', entry?.execution_mode || '-'),
+        detailRow('Running profile', entry?.running_profile_id || '-'),
+        detailRow('Route available', entry?.route_geojson || entry?.navsat_geojson ? 'Yes' : 'No'),
+        detailRow('3D manifest', entry?.gaussian_splat_manifest_file || entry?.gaussian_manifest_file || '-'),
+      ].join('');
+      renderRunList(entry);
+    }}
+
+    function renderRunList(entry) {{
+      const runs = entry?.run_history || [];
+      if (!runs.length) {{
+        runList.innerHTML = '<div class="muted">No recorded runs available.</div>';
+        return;
+      }}
+      runList.innerHTML = '';
+      for (const run of runs) {{
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'run-row';
+        const started = run.run_started_at || run.started_at || 'Recorded run';
+        const state = run.status || run.outcome || 'Completed';
+        const length = Number(run.actual_path_length_meters || 0);
+        button.innerHTML = `<strong>${{started}}</strong><span>${{state}}${{length > 0 ? ` | ${{Math.round(length)}} m` : ''}}</span>`;
+        button.addEventListener('click', () => {{
+          runReviewRoute = run.actual_path_navsat_geojson || run.actual_path_geojson || null;
+          runReviewLabel.textContent = `Reviewing run | ${{started}}`;
+          runReviewBanner.classList.add('show');
+          setSheetState('collapsed');
+          setBanner('ok', `Reviewing run ${{started}}`);
+          updateMap(lastMapSnapshot);
+        }});
+        runList.appendChild(button);
+      }}
     }}
 
     function editorStateKey(data) {{
       const latestRunId = String(data.latest_recorded_map?.run_started_at || '');
-      return selectedMapId ? `saved:${{selectedMapId}}` : `latest:${{latestRunId}}`;
+      return selectedMapId ? `mission:${{selectedMapId}}:${{latestRunId}}` : `latest:${{latestRunId}}`;
+    }}
+
+    async function fetchJson(path) {{
+      const response = await fetch(path, {{ cache: 'no-store' }});
+      const data = await response.json();
+      if (!response.ok || data.success === false) {{
+        throw new Error(data.message || `${{path}} failed with HTTP ${{response.status}}`);
+      }}
+      return data;
+    }}
+
+    function normalizeMissionEntry(entry) {{
+      const missionId = String(entry?.mission_id || entry?.map_id || '').trim();
+      return {{
+        ...entry,
+        map_id: missionId,
+        mission_id: missionId,
+        name: entry?.name || (missionId === 'RecordMap' ? latestRecordingLabel : missionId),
+        readonly: Boolean(entry?.readonly) || protectedMissionIds.has(missionId) || defaultMissionIds.has(missionId),
+      }};
+    }}
+
+    function mergeMissionAndMapEntries(missionData, mapData, previewData) {{
+      const byId = new Map();
+      const latest = mapData.latest_recorded_map || null;
+      if (latest && !latest.error) {{
+        byId.set('RecordMap', normalizeMissionEntry({{
+          ...latest,
+          map_id: 'RecordMap',
+          mission_id: 'RecordMap',
+          name: latestRecordingLabel,
+          readonly: true,
+          artifacts_ready: true,
+        }}));
+      }} else {{
+        byId.set('RecordMap', normalizeMissionEntry({{
+          map_id: 'RecordMap',
+          mission_id: 'RecordMap',
+          name: latestRecordingLabel,
+          readonly: true,
+          artifacts_ready: false,
+        }}));
+      }}
+
+      for (const mission of missionData.missions || []) {{
+        const normalized = normalizeMissionEntry(mission);
+        if (!missionIsSelectable(normalized)) {{
+          continue;
+        }}
+        byId.set(normalized.mission_id, {{
+          ...(byId.get(normalized.mission_id) || {{}}),
+          ...normalized,
+        }});
+      }}
+      for (const mission of previewData.missions || []) {{
+        const normalized = normalizeMissionEntry(mission);
+        if (!missionIsSelectable(normalized)) {{
+          continue;
+        }}
+        const existing = byId.get(normalized.mission_id) || {{}};
+        byId.set(normalized.mission_id, {{
+          ...existing,
+          ...normalized,
+          readonly: existing.readonly || normalized.readonly,
+        }});
+      }}
+
+      for (const mapEntry of mapData.maps || []) {{
+        const normalized = normalizeMissionEntry(mapEntry);
+        if (!missionIsSelectable(normalized)) {{
+          continue;
+        }}
+        const existing = byId.get(normalized.map_id) || {{}};
+        byId.set(normalized.map_id, {{
+          ...existing,
+          ...normalized,
+          readonly: existing.readonly || normalized.readonly,
+        }});
+      }}
+
+      return [...byId.values()].filter((entry) => entry.map_id && missionIsSelectable(entry));
     }}
 
     async function loadRecordMapSnapshot() {{
-      const response = await fetch('/api/v1/maps', {{ cache: 'no-store' }});
-      const data = await response.json();
-      if (!response.ok || data.success === false) {{
-        throw new Error(data.message || `Map load failed with HTTP ${{response.status}}`);
-      }}
+      const [data, missionData, previewData] = await Promise.all([
+        fetchJson('/api/v1/maps'),
+        fetchJson('/api/v1/missions').catch(() => ({{ missions: [] }})),
+        fetchJson('/api/v1/map-data').catch(() => ({{ missions: [] }})),
+      ]);
       lastMapSnapshot = data;
-      mapsCache = data.maps || [];
+      missionsCache = missionData.missions || [];
+      mapsCache = mergeMissionAndMapEntries(missionData, data, previewData);
       if (selectedMapId && !mapsCache.some((entry) => entry.map_id === selectedMapId)) {{
-        selectedMapId = '';
-        window.localStorage.removeItem(selectedMapStorageKey);
+        setSelectedMapId('RecordMap');
         setBanner('warn', 'Previously selected saved map is no longer available.');
+      }}
+      if (!selectedMapId) {{
+        setSelectedMapId('RecordMap');
       }}
       populateMapSelect();
       const nextEditorStateKey = editorStateKey(data);
@@ -2625,12 +3870,12 @@ class MissionFrontendRenderer:
         if (!scopedStatus?.state || scopedStatus.state === 'idle') {{
           const splat = selectedMap()?.gaussian_splat_manifest || latest.gaussian_splat_manifest;
           gaussianBuildStatus.textContent = splat
-            ? `3D map ready: ${{splat.tile_count || 0}} tile(s).`
-            : 'Gaussian capture ready for manual 3D map build.';
+            ? `3D environment ready: ${{splat.tile_count || 0}} tile(s).`
+            : 'Capture ready for manual 3D environment build.';
         }}
-        latestMapMessage.textContent = selectedMapId
-          ? 'Editing saved map metadata and display preferences.'
-          : 'Latest recording is ready to save as a named map.';
+        if (!missionIsProtected(selectedMap())) {{
+          latestMapMessage.textContent = 'Editing saved mission map metadata and display preferences.';
+        }}
         const latestRunId = String(latest.run_started_at || '');
         if (latestRunId && latestRunId !== lastLatestRunId) {{
           startPatternCountdown();
@@ -2639,17 +3884,19 @@ class MissionFrontendRenderer:
       }} else {{
         latestRun.textContent = 'No recording captured yet.';
         latestObstacles.textContent = '-';
-        gaussianBuildStatus.textContent = 'Gaussian splat idle.';
-        latestMapMessage.textContent = selectedMapId
-          ? 'Editing saved map metadata and display preferences.'
-          : 'Record from Teleop to create a new latest map.';
+        gaussianBuildStatus.textContent = '3D environment idle.';
+        if (!missionIsProtected(selectedMap())) {{
+          latestMapMessage.textContent = 'Editing saved mission map metadata and display preferences.';
+        }}
         window.clearInterval(countdownTimer);
         patternCountdown.textContent = '';
         lastLatestRunId = '';
       }}
 
       updateMap(data);
+      updateLayerPanelMode();
       updateGaussianControls(latestGaussianStatus);
+      updateMissionActionState();
       return data;
     }}
 
@@ -2666,37 +3913,308 @@ class MissionFrontendRenderer:
       return data;
     }}
 
-    mapComboButton.addEventListener('click', () => {{
-      mapCombo.classList.toggle('open');
+    function selectedMissionEditableMessage() {{
+      return selectedMissionIsSavedEditable()
+        ? ''
+        : 'Only saved missions can be edited. Default missions and the latest recording are preview-only.';
+    }}
+
+    function setAreaEditMessage(message) {{
+      areaEditMessage.textContent = message;
+    }}
+
+    function redrawDraftArea() {{
+      if (draftAreaLayer) {{
+        map.removeLayer(draftAreaLayer);
+        draftAreaLayer = null;
+      }}
+      if (!draftAreaPoints.length) {{
+        areaPointList.textContent = 'No points selected.';
+        return;
+      }}
+      areaPointList.textContent = `${{draftAreaPoints.length}} point${{draftAreaPoints.length === 1 ? '' : 's'}} selected.`;
+      const latlngs = draftAreaPoints.map((point) => [point.lat, point.lng]);
+      draftAreaLayer = L.layerGroup();
+      if (activeAreaTool === 'TRANSIT') {{
+        if (latlngs.length > 1) {{
+          L.polyline(latlngs, zoneStyle('TRANSIT')).addTo(draftAreaLayer);
+        }}
+      }} else if (activeAreaTool === 'STATION') {{
+        L.circleMarker(latlngs[latlngs.length - 1], {{
+          radius: 8,
+          color: '#ffffff',
+          weight: 2,
+          fillColor: '#38bdf8',
+          fillOpacity: 1,
+        }}).addTo(draftAreaLayer);
+      }} else if (latlngs.length > 1) {{
+        L.polygon(latlngs, zoneStyle(activeAreaTool || 'WORK_AREA')).addTo(draftAreaLayer);
+      }}
+      for (const point of draftAreaPoints) {{
+        const marker = L.marker([point.lat, point.lng], {{
+          draggable: true,
+          icon: L.divIcon({{ className: 'zone-dot', iconSize: [16, 16] }}),
+        }});
+        marker.on('dragend', () => {{
+          const next = marker.getLatLng();
+          point.lat = next.lat;
+          point.lng = next.lng;
+          redrawDraftArea();
+        }});
+        marker.on('click', () => {{
+          draftAreaPoints = draftAreaPoints.filter((candidate) => candidate !== point);
+          redrawDraftArea();
+        }});
+        marker.addTo(draftAreaLayer);
+      }}
+      draftAreaLayer.addTo(map);
+    }}
+
+    function resetAreaDraft() {{
+      draftAreaPoints = [];
+      editingZoneId = '';
+      areaNameInput.value = '';
+      if (draftAreaLayer) {{
+        map.removeLayer(draftAreaLayer);
+        draftAreaLayer = null;
+      }}
+      redrawDraftArea();
+    }}
+
+    function enterAreaEditMode(tool = '') {{
+      const message = selectedMissionEditableMessage();
+      if (message) {{
+        setBanner('error', message);
+        return;
+      }}
+      areaEditMode = true;
+      activeAreaTool = tool || activeAreaTool || 'WORK_AREA';
+      areaEditToolbar.classList.add('open');
+      openSideSheet(areaEditSheet);
+      for (const button of document.querySelectorAll('[data-area-tool]')) {{
+        button.classList.toggle('active', button.dataset.areaTool === activeAreaTool);
+      }}
+      setAreaEditMessage(activeAreaTool === 'STATION'
+        ? 'Tap the map to place the station.'
+        : 'Tap the map to add points. Tap a point marker to remove it, or drag it to adjust.');
+    }}
+
+    function exitAreaEditMode() {{
+      areaEditMode = false;
+      activeAreaTool = '';
+      areaEditToolbar.classList.remove('open');
+      resetAreaDraft();
+      closeOverlayPanels();
+    }}
+
+    function beginEditExistingZone(zone) {{
+      if (!areaEditMode || !selectedMissionIsSavedEditable()) {{
+        return;
+      }}
+      editingZoneId = zone.id || '';
+      activeAreaTool = zone.type || 'WORK_AREA';
+      areaNameInput.value = zone.name || '';
+      draftAreaPoints = geometryLatLngs(zone.geometry).map((point) => ({{ lat: point[0], lng: point[1] }}));
+      if (activeAreaTool !== 'TRANSIT' && draftAreaPoints.length > 1) {{
+        const first = draftAreaPoints[0];
+        const last = draftAreaPoints[draftAreaPoints.length - 1];
+        if (Math.abs(first.lat - last.lat) < 1e-9 && Math.abs(first.lng - last.lng) < 1e-9) {{
+          draftAreaPoints.pop();
+        }}
+      }}
+      enterAreaEditMode(activeAreaTool);
+      redrawDraftArea();
+      setAreaEditMessage('Editing selected area. Drag points to adjust or tap a point to remove it.');
+    }}
+
+    function draftGeometry() {{
+      if (activeAreaTool === 'STATION') {{
+        const point = draftAreaPoints[draftAreaPoints.length - 1];
+        if (!point) {{
+          throw new Error('Tap the map to place the station.');
+        }}
+        return {{ position: {{ x: point.lng, y: point.lat }} }};
+      }}
+      const coordinates = draftAreaPoints.map((point) => [point.lng, point.lat]);
+      if (activeAreaTool === 'TRANSIT') {{
+        if (coordinates.length < 2) {{
+          throw new Error('Transit path needs at least two points.');
+        }}
+        return {{ type: 'LineString', coordinates }};
+      }}
+      if (coordinates.length < 3) {{
+        throw new Error('Area needs at least three points.');
+      }}
+      coordinates.push([...coordinates[0]]);
+      return {{ type: 'Polygon', coordinates: [coordinates] }};
+    }}
+
+    async function reloadAfterAreaEdit(message) {{
+      setBanner('ok', message);
+      resetAreaDraft();
+      await loadRecordMapSnapshot();
+      enterAreaEditMode(activeAreaTool || 'WORK_AREA');
+    }}
+
+    async function saveDraftArea() {{
+      try {{
+        if (!selectedMissionIsSavedEditable()) {{
+          throw new Error(selectedMissionEditableMessage());
+        }}
+        const geometry = draftGeometry();
+        if (activeAreaTool === 'STATION') {{
+          const data = await postJson(`/api/v1/missions/${{encodeURIComponent(selectedMapId)}}/station`, {{
+            station: {{
+              name: areaNameInput.value || 'Station',
+              enabled: true,
+              ...geometry,
+            }},
+          }});
+          await reloadAfterAreaEdit(data.message || 'Station saved');
+          return;
+        }}
+        const body = {{
+          zone_id: editingZoneId,
+          name: areaNameInput.value,
+          type: activeAreaTool,
+          enabled: true,
+          geometry,
+        }};
+        const path = editingZoneId
+          ? `/api/v1/missions/${{encodeURIComponent(selectedMapId)}}/zones/${{encodeURIComponent(editingZoneId)}}`
+          : `/api/v1/missions/${{encodeURIComponent(selectedMapId)}}/zones`;
+        const data = await postJson(path, body);
+        await reloadAfterAreaEdit(data.message || 'Area saved');
+      }} catch (error) {{
+        setBanner('error', error.message || 'Area save failed');
+        setAreaEditMessage(error.message || 'Area save failed');
+      }}
+    }}
+
+    async function deleteDraftArea() {{
+      if (!editingZoneId) {{
+        resetAreaDraft();
+        setAreaEditMessage('Draft area cleared.');
+        return;
+      }}
+      try {{
+        const data = await postJson(
+          `/api/v1/missions/${{encodeURIComponent(selectedMapId)}}/zones/${{encodeURIComponent(editingZoneId)}}/delete`,
+          {{}}
+        );
+        await reloadAfterAreaEdit(data.message || 'Area deleted');
+      }} catch (error) {{
+        setBanner('error', error.message || 'Area delete failed');
+      }}
+    }}
+
+    document.getElementById('open-nav-button').addEventListener('click', () => openDrawer(navDrawer));
+    document.getElementById('close-nav-button').addEventListener('click', closeDrawers);
+    document.getElementById('mission-title-button').addEventListener('click', () => openDrawer(missionDrawer));
+    document.getElementById('close-mission-drawer-button').addEventListener('click', closeDrawers);
+    drawerBackdrop.addEventListener('click', closeDrawers);
+    document.getElementById('mission-menu-button').addEventListener('click', () => {{
+      closeDrawers();
+      missionActionMenu.classList.toggle('open');
+    }});
+    document.getElementById('open-area-edit-button').addEventListener('click', () => enterAreaEditMode('WORK_AREA'));
+    document.getElementById('open-map-edit-button').addEventListener('click', () => openSideSheet(mapEditSheet));
+    document.getElementById('open-path-edit-button').addEventListener('click', () => openSideSheet(pathEditSheet));
+    document.getElementById('open-mission-settings-button').addEventListener('click', () => openSideSheet(missionSettingsSheet));
+    document.getElementById('open-advanced-button').addEventListener('click', () => openSideSheet(advancedSheet));
+    for (const button of document.querySelectorAll('.close-side-sheet-button')) {{
+      button.addEventListener('click', closeOverlayPanels);
+    }}
+    document.getElementById('fit-mission-button').addEventListener('click', fitSelectedMission);
+    document.getElementById('exit-run-review-button').addEventListener('click', exitRunReview);
+    mapComboButton.addEventListener('click', () => openDrawer(missionDrawer));
+    for (const button of document.querySelectorAll('[data-area-tool]')) {{
+      button.addEventListener('click', () => {{
+        resetAreaDraft();
+        enterAreaEditMode(button.dataset.areaTool || 'WORK_AREA');
+      }});
+    }}
+    document.getElementById('cancel-area-edit-button').addEventListener('click', exitAreaEditMode);
+    document.getElementById('cancel-area-button').addEventListener('click', resetAreaDraft);
+    saveAreaButton.addEventListener('click', saveDraftArea);
+    deleteAreaButton.addEventListener('click', deleteDraftArea);
+    map.on('click', (event) => {{
+      if (!areaEditMode || !activeAreaTool || !selectedMissionIsSavedEditable()) {{
+        return;
+      }}
+      if (activeAreaTool === 'STATION') {{
+        draftAreaPoints = [{{ lat: event.latlng.lat, lng: event.latlng.lng }}];
+      }} else {{
+        draftAreaPoints.push({{ lat: event.latlng.lat, lng: event.latlng.lng }});
+      }}
+      redrawDraftArea();
     }});
 
-    mapNameInput.addEventListener('focus', () => {{
-      if (!selectedMapId && mapNameInput.value.trim() === latestRecordingLabel) {{
-        mapNameInput.value = '';
-        mapNameTouched = true;
-      }}
-    }});
+    mapNameInput.addEventListener('focus', () => {{}});
 
     mapNameInput.addEventListener('input', () => {{
       mapNameTouched = true;
+      missionSearchText = mapNameInput.value;
+      populateMapSelect();
+      updateMissionActionState();
+    }});
+
+    for (const chipButton of document.querySelectorAll('.filter-chip')) {{
+      chipButton.addEventListener('click', () => {{
+        missionStatusFilter = chipButton.dataset.filter || 'all';
+        for (const other of document.querySelectorAll('.filter-chip')) {{
+          other.classList.toggle('active', other === chipButton);
+        }}
+        populateMapSelect();
+      }});
+    }}
+
+    document.getElementById('sheet-handle-button').addEventListener('click', () => {{
+      if (missionBottomSheet.classList.contains('expanded')) {{
+        setSheetState('collapsed');
+      }} else if (missionBottomSheet.classList.contains('medium')) {{
+        setSheetState('expanded');
+      }} else {{
+        setSheetState('medium');
+      }}
+    }});
+    document.getElementById('mission-tab-button').addEventListener('click', () => {{
+      document.getElementById('mission-tab-button').classList.add('active');
+      document.getElementById('runs-tab-button').classList.remove('active');
+      document.getElementById('mission-tab-panel').classList.remove('hidden');
+      document.getElementById('runs-tab-panel').classList.add('hidden');
+      setSheetState('medium');
+    }});
+    document.getElementById('runs-tab-button').addEventListener('click', () => {{
+      document.getElementById('runs-tab-button').classList.add('active');
+      document.getElementById('mission-tab-button').classList.remove('active');
+      document.getElementById('runs-tab-panel').classList.remove('hidden');
+      document.getElementById('mission-tab-panel').classList.add('hidden');
+      setSheetState('medium');
     }});
 
     saveMapButton.addEventListener('click', async () => {{
-      const mapName = mapNameInput.value.trim();
-      if (!mapName || (!selectedMapId && mapName === latestRecordingLabel)) {{
-        setBanner('error', 'Enter a map name before saving.');
+      const suggested = selectedMapId === 'RecordMap' ? '' : `${{selectedMapId}} Copy`;
+      const mapName = String(window.prompt('Save as mission', suggested) || '').trim();
+      if (!mapName || mapName === latestRecordingLabel) {{
+        setBanner('error', 'Enter a mission name before saving.');
+        return;
+      }}
+      if (defaultMissionIds.has(selectedMapId)) {{
+        setBanner('error', 'This mission is read-only and cannot be saved over.');
         return;
       }}
       const sourceEntry = selectedMap();
+      const source = selectedMapId === 'RecordMap' ? 'latest_recorded_map' : 'saved_map';
       saveMapButton.disabled = true;
       saveMapButton.textContent = 'Saving...';
-      latestMapMessage.textContent = `Saving map '${{mapName}}'...`;
+      latestMapMessage.textContent = `Saving mission '${{mapName}}'...`;
       try {{
         const data = await postJson('/api/v1/maps/save', {{
           map_id: mapName,
           name: mapName,
-          source: sourceEntry ? 'saved_map' : 'latest_recorded_map',
-          source_map_id: sourceEntry?.map_id || '',
+          source,
+          source_map_id: source === 'saved_map' ? (sourceEntry?.map_id || selectedMapId) : '',
           sweep_pattern: selectedPattern(),
           start_position: {{ percent: Number(startPositionInput.value) }},
           end_position: useEndPositionInput.checked ? {{ percent: Number(endPositionInput.value) }} : null,
@@ -2707,32 +4225,152 @@ class MissionFrontendRenderer:
         mapNameInput.value = data.map?.name || data.map?.map_id || mapName;
         mapNameTouched = false;
         lastAppliedSourceMapId = selectedMapId;
-        setBanner('ok', data.message || `Map '${{mapName}}' saved`);
+        setBanner('ok', data.message || `Mission '${{mapName}}' saved`);
       }} catch (error) {{
-        setBanner('error', error.message || 'Save map request failed');
-        latestMapMessage.textContent = error.message || 'Save map request failed';
+        setBanner('error', error.message || 'Save mission request failed');
+        latestMapMessage.textContent = error.message || 'Save mission request failed';
       }} finally {{
         saveMapButton.disabled = false;
-        saveMapButton.textContent = 'Save Map';
+        saveMapButton.textContent = 'Save As Mission';
         await loadRecordMapSnapshot().catch((error) => {{
           latestMapMessage.textContent = error.message || 'Failed to reload saved maps.';
         }});
       }}
     }});
 
-    document.getElementById('delete-map-button').addEventListener('click', async () => {{
-      if (!selectedMapId) {{
-        setBanner('error', 'Select a saved map before deleting.');
+    renameMissionButton.addEventListener('click', async () => {{
+      const newMissionName = String(window.prompt('Rename mission', selectedMapId) || '').trim();
+      if (!selectedMissionIsSavedEditable()) {{
+        setBanner('error', 'Only saved missions can be renamed.');
+        return;
+      }}
+      if (!newMissionName || newMissionName === selectedMapId) {{
+        setBanner('error', 'Enter a new mission name before renaming.');
+        return;
+      }}
+      renameMissionButton.disabled = true;
+      renameMissionButton.textContent = 'Renaming...';
+      try {{
+        const data = await postJson('/api/v1/missions/rename', {{
+          mission_id: selectedMapId,
+          new_mission_id: newMissionName,
+        }});
+        setSelectedMapId(data.map?.map_id || data.mission_id || newMissionName);
+        mapNameInput.value = '';
+        missionSearchText = '';
+        mapNameTouched = false;
+        setBanner('ok', data.message || 'Mission renamed');
+      }} catch (error) {{
+        setBanner('error', error.message || 'Rename mission request failed');
+      }} finally {{
+        renameMissionButton.disabled = false;
+        renameMissionButton.textContent = 'Rename';
+        await loadRecordMapSnapshot();
+      }}
+    }});
+
+    deleteMapButton.addEventListener('click', async () => {{
+      if (!selectedMissionIsSavedEditable()) {{
+        setBanner('error', 'Only saved missions can be deleted.');
         return;
       }}
       const data = await postJson('/api/v1/maps/delete', {{ map_id: selectedMapId }});
-      setBanner(data.success ? 'ok' : 'error', data.message || 'Delete map request completed');
+      setBanner(data.success ? 'ok' : 'error', data.message || 'Delete mission request completed');
       if (data.success) {{
-        setSelectedMapId('');
+        setSelectedMapId('RecordMap');
         mapNameInput.value = latestRecordingLabel;
         mapNameTouched = false;
         lastAppliedSourceMapId = selectedMapId;
       }}
+      await loadRecordMapSnapshot();
+    }});
+
+    recordRosbagToggle.addEventListener('change', () => {{
+      if (!selectedMapId) {{
+        recordRosbagToggle.checked = false;
+        return;
+      }}
+      saveRecordRosbagPreference(selectedMapId, recordRosbagToggle.checked);
+    }});
+
+    startMissionButton.addEventListener('click', async () => {{
+      if (!selectedMapId) {{
+        setBanner('error', 'Select a mission before starting it.');
+        return;
+      }}
+      updateMissionSummary();
+      startConfirmationSummary.innerHTML = [
+        detailRow('Mission', selectedSourceDisplayName()),
+        detailRow('Status', missionUiStatus(selectedMap())),
+        detailRow('Estimated work', missionMetrics(selectedMap())),
+      ].join('');
+      recordRosbagToggle.checked = loadRecordRosbagPreference(selectedMapId);
+      startConfirmationSheet.classList.remove('hidden');
+      newMissionSheet.classList.add('hidden');
+      modalBackdrop.classList.add('show');
+    }});
+
+    function closeModal() {{
+      modalBackdrop.classList.remove('show');
+      startConfirmationSheet.classList.remove('hidden');
+      newMissionSheet.classList.add('hidden');
+    }}
+
+    document.getElementById('cancel-start-button').addEventListener('click', closeModal);
+    document.getElementById('cancel-start-x-button').addEventListener('click', closeModal);
+    document.getElementById('new-mission-button').addEventListener('click', () => {{
+      closeDrawers();
+      startConfirmationSheet.classList.add('hidden');
+      newMissionSheet.classList.remove('hidden');
+      modalBackdrop.classList.add('show');
+    }});
+    document.getElementById('cancel-new-mission-button').addEventListener('click', closeModal);
+    modalBackdrop.addEventListener('click', (event) => {{
+      if (event.target === modalBackdrop) {{
+        closeModal();
+      }}
+    }});
+
+    confirmStartMissionButton.addEventListener('click', async () => {{
+      if (!selectedMapId) {{
+        setBanner('error', 'Select a mission before starting it.');
+        return;
+      }}
+      saveRecordRosbagPreference(selectedMapId, recordRosbagToggle.checked);
+      const response = await fetch(`/api/v1/missions/${{encodeURIComponent(selectedMapId)}}/execute`, {{
+        method: 'POST',
+        headers: {{ 'Content-Type': 'application/json' }},
+        body: JSON.stringify({{ record_rosbag: recordRosbagToggle.checked }})
+      }});
+      const data = await response.json();
+      setBanner(data.success ? 'ok' : 'error', data.message || 'Mission request completed');
+      closeModal();
+    }});
+
+    document.getElementById('download-mission-button').addEventListener('click', () => {{
+      if (!selectedMapId) {{
+        setBanner('error', 'Select a mission before downloading.');
+        return;
+      }}
+      window.location.href = `/api/v1/missions/${{encodeURIComponent(selectedMapId)}}/download`;
+    }});
+
+    document.getElementById('upload-file').addEventListener('change', async (event) => {{
+      const file = event.target.files && event.target.files[0];
+      if (!file) {{
+        return;
+      }}
+      document.getElementById('upload-json').value = await file.text();
+    }});
+
+    document.getElementById('upload-button').addEventListener('click', async () => {{
+      const data = await postJson('/api/v1/missions/upload-vda5050', {{
+        mission_id: document.getElementById('upload-mission-id').value,
+        mission_json: document.getElementById('upload-json').value,
+        overwrite_existing: document.getElementById('upload-overwrite').checked,
+      }});
+      setBanner(data.success ? 'ok' : 'error', data.message || 'Upload completed');
+      closeModal();
       await loadRecordMapSnapshot();
     }});
 
@@ -2747,20 +4385,20 @@ class MissionFrontendRenderer:
       try {{
         let data;
         if (state === 'running' || state === 'pause_requested') {{
-          gaussianBuildStatus.textContent = 'Stopping 3D map build...';
+          gaussianBuildStatus.textContent = 'Stopping 3D environment build...';
           data = await postJson('/api/v1/gaussian-splats/pause', {{
             build_id: currentGaussianBuildId,
             mode: 'user_pause'
           }});
         }} else if (scopedStatus?.can_resume || ['paused', 'partial', 'failed'].includes(state)) {{
-          gaussianBuildStatus.textContent = 'Resuming 3D map build...';
+          gaussianBuildStatus.textContent = 'Resuming 3D environment build...';
           data = await postJson('/api/v1/gaussian-splats/resume', {{
             build_id: currentGaussianBuildId,
             additional_iterations_per_tile: 0,
             auto_stop_enabled: false
           }});
         }} else {{
-          gaussianBuildStatus.textContent = 'Starting 3D map build...';
+          gaussianBuildStatus.textContent = 'Starting 3D environment build...';
           const snapshot = await loadRecordMapSnapshot();
           const latest = snapshot.latest_recorded_map || {{}};
           const mapEntry = selectedMap();
@@ -2775,12 +4413,12 @@ class MissionFrontendRenderer:
         if (data.status) {{
           updateGaussianControls(data.status);
         }}
-        setBanner(data.success ? 'ok' : 'error', data.message || '3D map build request completed');
-        gaussianBuildStatus.textContent = data.status ? formatGaussianStatus(data.status) : (data.message || '3D map build request completed');
+        setBanner(data.success ? 'ok' : 'error', data.message || '3D environment build request completed');
+        gaussianBuildStatus.textContent = data.status ? formatGaussianStatus(data.status) : (data.message || '3D environment build request completed');
         await refreshGaussianStatus();
       }} catch (error) {{
-        setBanner('error', error.message || '3D map build request failed');
-        gaussianBuildStatus.textContent = error.message || '3D map build request failed';
+        setBanner('error', error.message || '3D environment build request failed');
+        gaussianBuildStatus.textContent = error.message || '3D environment build request failed';
       }} finally {{
         gaussianRequestInFlight = false;
         updateGaussianControls(latestGaussianStatus);
@@ -2790,8 +4428,8 @@ class MissionFrontendRenderer:
     document.getElementById('save-button').addEventListener('click', async () => {{
       ensureDefaultPatternSelection();
       const mapEntry = selectedMap();
-      if (!mapEntry) {{
-        setBanner('error', 'Select a saved map before saving path edits.');
+      if (!selectedMissionIsSavedEditable()) {{
+        setBanner('error', 'Path edits can only be saved to saved missions.');
         return;
       }}
       const data = await postJson('/api/v1/maps/save', {{
@@ -2847,6 +4485,7 @@ class MissionFrontendRenderer:
       recordMapElement.style.display = '';
       splatViewElement.style.display = 'none';
       mapLayerControl.style.display = '';
+      updateLayerPanelMode();
       gaussianOverlaySummary.style.display = 'none';
       window.setTimeout(() => map.invalidateSize(), 0);
     }});
@@ -2856,14 +4495,15 @@ class MissionFrontendRenderer:
       view2dButton.classList.add('secondary');
       recordMapElement.style.display = 'none';
       splatViewElement.style.display = 'block';
-      mapLayerControl.style.display = 'none';
-      mapLayerControl.classList.remove('open');
+      mapLayerControl.style.display = '';
+      updateLayerPanelMode();
       gaussianOverlaySummary.style.display = '';
       renderSplatPreview(lastMapSnapshot);
-      setBanner('ok', '3D view uses the saved tiled Gaussian splat manifest when available.');
+      setBanner('ok', '3D view uses the saved 3D environment artifacts when available.');
     }});
 
     ensureDefaultPatternSelection();
+    updateLayerPanelMode();
     refreshGaussianStatus().catch((error) => {{
       latestGaussianStatus = {{
         state: 'unknown',
@@ -2918,20 +4558,23 @@ class MissionFrontendRenderer:
       --line: rgba(253, 202, 15, 0.22);
     }}
     * {{ box-sizing: border-box; }}
+    html, body {{
+      width: 100vw;
+      height: 100dvh;
+      overflow: hidden;
+    }}
     body {{
       margin: 0;
-      min-height: 100vh;
       font-family: "Avenir Next", "Segoe UI", sans-serif;
       color: var(--ink);
-      background:
-        radial-gradient(circle at top left, rgba(253, 202, 15, 0.18), transparent 26%),
-        linear-gradient(180deg, var(--bg) 0%, var(--bg-alt) 100%);
+      background: linear-gradient(180deg, var(--bg) 0%, var(--bg-alt) 100%);
       touch-action: manipulation;
     }}
     main {{
-      max-width: 1180px;
-      margin: 0 auto;
-      padding: 24px;
+      width: 100vw;
+      height: 100dvh;
+      overflow: hidden;
+      padding: calc(72px + env(safe-area-inset-top)) 14px calc(14px + env(safe-area-inset-bottom));
     }}
     .card {{
       background: var(--card);
@@ -2948,23 +4591,100 @@ class MissionFrontendRenderer:
       font-family: "Avenir Next Condensed", "Franklin Gothic Medium", "Arial Narrow", sans-serif;
     }}
     h1 {{ color: var(--accent); }}
-    .nav {{
-      display: flex;
+    .app-topbar {{
+      position: fixed;
+      top: calc(10px + env(safe-area-inset-top));
+      left: calc(10px + env(safe-area-inset-left));
+      right: calc(10px + env(safe-area-inset-right));
+      z-index: 700;
+      display: grid;
+      grid-template-columns: 46px minmax(0, 1fr) auto auto;
       gap: 10px;
-      flex-wrap: wrap;
-      margin-top: 14px;
+      align-items: center;
+      min-height: 52px;
+      padding: 5px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(24, 27, 29, 0.84);
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.32);
+      backdrop-filter: blur(8px);
+    }}
+    .app-topbar h1 {{
+      overflow: hidden;
+      margin: 0;
+      color: var(--accent);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 1.08rem;
+    }}
+    .topbar-status {{
+      display: inline-flex;
+      align-items: center;
+      min-height: 34px;
+      border-radius: 999px;
+      padding: 6px 10px;
+      background: rgba(253, 202, 15, 0.12);
+      color: var(--accent);
+      font-weight: 700;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+    }}
+    .icon-button {{
+      width: 46px;
+      padding: 0;
+      color: var(--ink);
+      background: rgba(18, 20, 21, 0.76);
+      border: 1px solid var(--line);
+      font-size: 1.24rem;
+      letter-spacing: 0;
+      text-transform: none;
+    }}
+    .drawer-backdrop {{
+      position: fixed;
+      inset: 0;
+      z-index: 850;
+      display: none;
+      background: rgba(0, 0, 0, 0.42);
+    }}
+    .drawer-backdrop.show {{ display: block; }}
+    .nav {{
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      z-index: 900;
+      display: grid;
+      align-content: start;
+      gap: 9px;
+      width: min(90vw, 390px);
+      padding: calc(18px + env(safe-area-inset-top)) 18px calc(18px + env(safe-area-inset-bottom));
+      overflow-y: auto;
+      background: rgba(42, 46, 48, 0.96);
+      border-right: 1px solid var(--line);
+      box-shadow: 0 18px 42px rgba(0, 0, 0, 0.36);
+      transform: translateX(-105%);
+      transition: transform 180ms ease;
+      backdrop-filter: blur(8px);
+    }}
+    .nav.open {{
+      transform: translateX(0);
     }}
     .nav-link {{
-      display: inline-block;
+      display: block;
       text-decoration: none;
       color: var(--ink);
       border: 1px solid var(--line);
-      border-radius: 999px;
-      padding: 8px 14px;
-      background: rgba(52, 53, 53, 0.72);
+      border-radius: 8px;
+      padding: 12px;
+      background: rgba(18, 20, 21, 0.58);
       font-size: 0.92rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
+      text-transform: none;
+      letter-spacing: 0;
+    }}
+    .nav-list {{
+      display: grid;
+      gap: 9px;
+      margin-top: 14px;
     }}
     .teleop-layout {{
       display: grid;
@@ -2978,7 +4698,9 @@ class MissionFrontendRenderer:
     .teleop-stage {{
       position: relative;
       overflow: hidden;
-      margin-top: 18px;
+      height: 100%;
+      margin-top: 0;
+      border-radius: 18px;
     }}
     .teleop-stage::before {{
       content: "";
@@ -3175,7 +4897,7 @@ class MissionFrontendRenderer:
       box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.28);
     }}
     .status-row {{
-      display: flex;
+      display: none;
       gap: 12px;
       flex-wrap: wrap;
       margin-top: 14px;
@@ -3186,10 +4908,16 @@ class MissionFrontendRenderer:
       font-weight: 700;
     }}
     .banner {{
-      margin-top: 14px;
+      position: fixed;
+      top: calc(76px + env(safe-area-inset-top));
+      left: 50%;
+      z-index: 980;
+      width: min(92vw, 520px);
+      transform: translateX(-50%);
       padding: 12px 14px;
       border-radius: 12px;
       display: none;
+      font-weight: 700;
     }}
     .banner.show {{ display: block; }}
     .banner.ok {{ background: rgba(15, 118, 110, 0.12); color: var(--accent-strong); }}
@@ -3204,6 +4932,13 @@ class MissionFrontendRenderer:
       50% {{ opacity: 1; }}
     }}
     @media (max-width: 820px) {{
+      .app-topbar {{
+        grid-template-columns: 46px minmax(0, 1fr) auto;
+      }}
+      #teleop-topbar-stop {{
+        grid-column: 1 / -1;
+        width: 100%;
+      }}
       .teleop-layout {{ grid-template-columns: 1fr; }}
       .teleop-layout.one-stick {{ grid-template-columns: 1fr; }}
       .center-controls {{ grid-row: 1; }}
@@ -3217,19 +4952,29 @@ class MissionFrontendRenderer:
 </head>
 <body>
   <main>
-    <section class="card">
+    <header class="app-topbar" aria-label="Teleop controls">
+      <button id="open-nav-button" class="icon-button" type="button" aria-label="Open navigation">&#9776;</button>
       <h1>Teleop</h1>
-      <div id="banner" class="banner"></div>
-      <div class="nav">
+      <span id="fsm-state" class="topbar-status">CONNECTING</span>
+      <span id="battery-summary" class="topbar-status">--</span>
+      <button id="teleop-topbar-stop" class="stop" type="button" disabled>Stop</button>
+    </header>
+    <div id="banner" class="banner" role="status" aria-live="polite"></div>
+    <div id="drawer-backdrop" class="drawer-backdrop"></div>
+    <nav id="nav-drawer" class="nav" aria-label="Application navigation">
+      <h2>O-ROBOTICS</h2>
+      <div class="muted">Robot controls</div>
+      <div class="nav-list">
         <a class="nav-link" href="/">Dashboard</a>
         <a class="nav-link" href="/calendar">Calendar</a>
         <a class="nav-link" href="/missions">Missions</a>
         <a class="nav-link" href="/teleop">Teleop</a>
-        <a class="nav-link" href="/map">Map</a>
         <a class="nav-link" href="/developer">Developer</a>
       </div>
+    </nav>
+    <section class="card" style="display: none;">
       <div class="status-row">
-        <div>FSM: <span id="fsm-state" class="status-value">--</span></div>
+        <div>State: <span class="status-value">--</span></div>
         <div>Profile: <span id="fsm-profile" class="status-value">--</span></div>
         <div>Mission: <span id="active-mission" class="status-value">--</span></div>
       </div>
@@ -3279,6 +5024,9 @@ class MissionFrontendRenderer:
     const teleopStartButton = document.getElementById('teleop-start-button');
     const recordMapStartButton = document.getElementById('record-map-start-button');
     const teleopToggleButton = document.getElementById('teleop-toggle-button');
+    const teleopTopbarStopButton = document.getElementById('teleop-topbar-stop');
+    const navDrawer = document.getElementById('nav-drawer');
+    const drawerBackdrop = document.getElementById('drawer-backdrop');
     const twoStickButton = document.getElementById('two-stick-button');
     const lightsButton = document.getElementById('lights-button');
     const cameraButton = document.getElementById('camera-button');
@@ -3539,7 +5287,13 @@ class MissionFrontendRenderer:
         [220, 225].includes(Number(fsm.current_profile)) ||
         ['Teleop', 'RecordMap'].includes(active.mission_id)
       );
-      document.getElementById('fsm-state').textContent = display.current_state || fsm.current_state || 'Unknown';
+      document.getElementById('fsm-state').textContent = teleopReady
+        ? (activeTeleopMode === 'record_map' ? 'RECORDING MAP' : 'TELEOP ACTIVE')
+        : (display.current_state || fsm.current_state || 'READY');
+      document.getElementById('battery-summary').textContent =
+        data.battery?.percentage !== null && data.battery?.percentage !== undefined
+          ? `${{Math.round(Number(data.battery.percentage) * 100)}}%`
+          : '--';
       document.getElementById('fsm-profile').textContent = formatProfileValue(
         display.current_profile !== undefined && display.current_profile !== null ? display.current_profile : fsm.current_profile
       );
@@ -3549,6 +5303,8 @@ class MissionFrontendRenderer:
       }} else {{
         renderButton();
       }}
+      teleopTopbarStopButton.disabled = !teleopReady || transitionBusy;
+      teleopTopbarStopButton.style.display = teleopReady || transitionBusy ? '' : 'none';
       updateCameraState();
     }}
 
@@ -3588,6 +5344,17 @@ class MissionFrontendRenderer:
       }} finally {{
         await loadStatus();
       }}
+    }});
+    teleopTopbarStopButton.addEventListener('click', () => {{
+      teleopToggleButton.click();
+    }});
+    document.getElementById('open-nav-button').addEventListener('click', () => {{
+      navDrawer.classList.add('open');
+      drawerBackdrop.classList.add('show');
+    }});
+    drawerBackdrop.addEventListener('click', () => {{
+      navDrawer.classList.remove('open');
+      drawerBackdrop.classList.remove('show');
     }});
     lightsButton.addEventListener('click', async () => {{
       const nextEnabled = !lightsEnabled;
@@ -3645,6 +5412,9 @@ class MissionFrontendRenderer:
 """
 
     def render_missions_html(self) -> str:
+        return self.render_map_html()
+
+    def render_legacy_missions_html(self) -> str:
         title = escape(self._site_title)
         return f"""<!DOCTYPE html>
 <html lang="en">
@@ -3682,7 +5452,7 @@ class MissionFrontendRenderer:
     main {{
       max-width: 1200px;
       margin: 0 auto;
-      padding: 24px;
+      padding: calc(82px + env(safe-area-inset-top)) 24px 24px;
     }}
     .card {{
       background: var(--card);
@@ -3874,7 +5644,6 @@ class MissionFrontendRenderer:
         <a class="nav-link" href="/calendar">Calendar</a>
         <a class="nav-link" href="/missions">Missions</a>
         <a class="nav-link" href="/teleop">Teleop</a>
-        <a class="nav-link" href="/map">Map</a>
         <a class="nav-link" href="/developer">Developer</a>
       </div>
       <div class="hero-actions">
@@ -4363,12 +6132,12 @@ class MissionFrontendRenderer:
       const response = await fetch('/api/v1/map-data', {{ cache: 'no-store' }});
       const data = await response.json();
       mapDataCache = data;
-      if (['RecordMap', 'Teleop'].includes(selectedMissionId)) {{
+      if (['Teleop'].includes(selectedMissionId)) {{
         selectedMissionId = '';
       }}
       if (!selectedMissionId) {{
         const firstPreviewable = (data.missions || []).find(
-          (mission) => !['RecordMap', 'Teleop'].includes(mission.mission_id)
+          (mission) => !['Teleop'].includes(mission.mission_id)
         );
         if (firstPreviewable) {{
           selectedMissionId = firstPreviewable.mission_id;
@@ -4382,7 +6151,7 @@ class MissionFrontendRenderer:
       missionList.innerHTML = '';
 
       const defaultMissionOrder = ['SpotSweep', '3x3Sweep'];
-      const hiddenMissionIds = new Set(['RecordMap', 'Teleop']);
+      const hiddenMissionIds = new Set(['Teleop']);
       const missions = (missionsCache || []).filter((mission) => !hiddenMissionIds.has(mission.mission_id));
       const defaultMissionMap = new Map(missions.map((mission) => [mission.mission_id, mission]));
       const defaultMissions = defaultMissionOrder
@@ -4401,11 +6170,12 @@ class MissionFrontendRenderer:
         group.innerHTML = `<h3 class="mission-group-title">${{title}}</h3>`;
 
         for (const mission of groupMissions) {{
+          const missionTitle = mission.mission_id === 'RecordMap' ? 'Latest Recording' : mission.mission_id;
           const item = document.createElement('div');
           item.className = 'mission';
           item.innerHTML = `
             <div>
-              <strong>${{mission.mission_id}}</strong><br>
+              <strong>${{missionTitle}}</strong><br>
               <span class="muted">${{mission.is_manual ? 'Manual' : 'Autonomous'}} | Type: ${{mission.mission_type || '-'}} | Mode: ${{mission.execution_mode || '-'}} | RUNNING profile: ${{mission.running_profile_id}} | Artifacts: ${{mission.artifacts_ready ? 'ready' : 'pending build'}}</span>
             </div>
             <div class="mission-actions">
@@ -4437,14 +6207,14 @@ class MissionFrontendRenderer:
         selectedMissionId = window.localStorage.getItem(missionSelectionStorageKey()) || '';
       }}
       if (
-        ['RecordMap', 'Teleop'].includes(selectedMissionId) ||
+        ['Teleop'].includes(selectedMissionId) ||
         !missionsCache.some((mission) => mission.mission_id === selectedMissionId)
       ) {{
         selectedMissionId = '';
       }}
       if (!selectedMissionId) {{
         const firstPreviewable = missionsCache.find(
-          (mission) => !['RecordMap', 'Teleop'].includes(mission.mission_id)
+          (mission) => !['Teleop'].includes(mission.mission_id)
         ) || null;
         if (firstPreviewable) {{
           selectedMissionId = firstPreviewable.mission_id;
@@ -4537,6 +6307,8 @@ class MissionFrontendRenderer:
       --panel: rgba(88, 92, 94, 0.48);
       --ink: #f5f1df;
       --muted: #c4bb98;
+      --accent: #fdca0f;
+      --accent-strong: #ffe06b;
       --line: rgba(253, 202, 15, 0.22);
     }}
     body {{
@@ -4568,38 +6340,110 @@ class MissionFrontendRenderer:
     h1 {{
       color: var(--accent);
     }}
-    .nav {{
-      display: flex;
+    .app-topbar {{
+      position: fixed;
+      top: calc(10px + env(safe-area-inset-top));
+      left: calc(10px + env(safe-area-inset-left));
+      right: calc(10px + env(safe-area-inset-right));
+      z-index: 700;
+      display: grid;
+      grid-template-columns: 46px minmax(0, 1fr) auto;
       gap: 10px;
-      flex-wrap: wrap;
-      margin-top: 14px;
+      align-items: center;
+      min-height: 52px;
+      padding: 5px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(24, 27, 29, 0.84);
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.32);
+      backdrop-filter: blur(8px);
+    }}
+    .app-topbar h1 {{
+      overflow: hidden;
+      margin: 0;
+      color: var(--accent);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 1.08rem;
+    }}
+    .topbar-status {{
+      display: inline-flex;
+      align-items: center;
+      min-height: 34px;
+      border-radius: 999px;
+      padding: 6px 10px;
+      background: rgba(253, 202, 15, 0.12);
+      color: var(--accent);
+      font-weight: 700;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+    }}
+    .icon-button {{
+      width: 46px;
+      padding: 0;
+      color: var(--ink);
+      background: rgba(18, 20, 21, 0.76);
+      border: 1px solid var(--line);
+      font-size: 1.24rem;
+      letter-spacing: 0;
+      text-transform: none;
+    }}
+    .drawer-backdrop {{
+      position: fixed;
+      inset: 0;
+      z-index: 850;
+      display: none;
+      background: rgba(0, 0, 0, 0.42);
+    }}
+    .drawer-backdrop.show {{ display: block; }}
+    .nav {{
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      z-index: 900;
+      display: grid;
+      align-content: start;
+      gap: 9px;
+      width: min(90vw, 390px);
+      padding: calc(18px + env(safe-area-inset-top)) 18px calc(18px + env(safe-area-inset-bottom));
+      overflow-y: auto;
+      background: rgba(42, 46, 48, 0.96);
+      border-right: 1px solid var(--line);
+      box-shadow: 0 18px 42px rgba(0, 0, 0, 0.36);
+      transform: translateX(-105%);
+      transition: transform 180ms ease;
+      backdrop-filter: blur(8px);
+    }}
+    .nav.open {{
+      transform: translateX(0);
     }}
     .nav-link {{
-      display: inline-block;
+      display: block;
       text-decoration: none;
       color: var(--ink);
       border: 1px solid var(--line);
-      border-radius: 999px;
-      padding: 8px 14px;
-      background: rgba(52, 53, 53, 0.72);
+      border-radius: 8px;
+      padding: 12px;
+      background: rgba(18, 20, 21, 0.58);
       font-size: 0.92rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
+      text-transform: none;
+      letter-spacing: 0;
     }}
     .log-list {{
       display: grid;
-      gap: 12px;
+      gap: 6px;
       margin-top: 14px;
     }}
     .toggle-list {{
       display: grid;
-      gap: 10px;
+      gap: 8px;
       margin-top: 14px;
     }}
     .toggle-item {{
       border: 1px solid var(--line);
-      border-radius: 14px;
-      padding: 12px;
+      border-radius: 8px;
+      padding: 10px 12px;
       background: var(--panel);
       display: flex;
       justify-content: space-between;
@@ -4625,9 +6469,13 @@ class MissionFrontendRenderer:
     }}
     .log-entry {{
       border: 1px solid var(--line);
-      border-radius: 14px;
-      padding: 12px;
+      border-radius: 8px;
+      padding: 8px 10px;
       background: var(--panel);
+      display: grid;
+      grid-template-columns: 96px minmax(120px, 220px) minmax(0, 1fr);
+      gap: 12px;
+      align-items: start;
     }}
     .log-entry.warn {{
       border-color: rgba(180, 83, 9, 0.35);
@@ -4642,43 +6490,100 @@ class MissionFrontendRenderer:
     }}
     pre {{
       margin: 0;
+      max-height: 58vh;
+      overflow: auto;
       white-space: pre-wrap;
       word-break: break-word;
       font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
       color: var(--ink);
     }}
     .muted {{ color: var(--muted); }}
+    button {{
+      border: 0;
+      border-radius: 999px;
+      min-height: 44px;
+      padding: 10px 14px;
+      cursor: pointer;
+      color: #08100a;
+      background: var(--accent);
+      font: inherit;
+      font-weight: 700;
+    }}
+    .developer-tabs {{
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 18px;
+    }}
+    .developer-tab {{
+      color: var(--ink);
+      background: rgba(18, 20, 21, 0.58);
+      border: 1px solid var(--line);
+    }}
+    .developer-tab.active {{
+      color: #08100a;
+      background: var(--accent);
+    }}
+    .developer-panel {{ display: none; margin-top: 18px; }}
+    .developer-panel.active {{ display: block; }}
+    .toggle-group {{
+      margin-top: 16px;
+      color: var(--accent);
+      font-size: 0.86rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }}
+    @media (max-width: 720px) {{
+      main {{ padding: 14px; }}
+      .log-entry {{ grid-template-columns: 1fr; gap: 4px; }}
+    }}
   </style>
 </head>
 <body>
+  <header class="app-topbar" aria-label="Developer controls">
+    <button id="open-nav-button" class="icon-button" type="button" aria-label="Open navigation">&#9776;</button>
+    <h1>Developer</h1>
+    <span id="developer-topbar-status" class="topbar-status">Engineering</span>
+  </header>
+  <div id="drawer-backdrop" class="drawer-backdrop"></div>
+  <nav id="nav-drawer" class="nav" aria-label="Application navigation">
+    <h2>O-ROBOTICS</h2>
+    <div class="muted">Engineering views</div>
+    <a class="nav-link" href="/">Dashboard</a>
+    <a class="nav-link" href="/calendar">Calendar</a>
+    <a class="nav-link" href="/missions">Missions</a>
+    <a class="nav-link" href="/teleop">Teleop</a>
+    <a class="nav-link" href="/developer">Developer</a>
+  </nav>
   <main>
     <section class="card">
       <h1>Developer</h1>
       <div class="muted">Inspect recent ROS warning/error logs and the raw web status payload.</div>
-      <div class="nav">
-        <a class="nav-link" href="/">Dashboard</a>
-        <a class="nav-link" href="/calendar">Calendar</a>
-        <a class="nav-link" href="/missions">Missions</a>
-        <a class="nav-link" href="/teleop">Teleop</a>
-        <a class="nav-link" href="/map">Map</a>
-        <a class="nav-link" href="/developer">Developer</a>
-      </div>
     </section>
 
-    <section class="card" style="margin-top: 18px;">
-      <h2>System Log</h2>
+    <div class="developer-tabs" role="tablist" aria-label="Developer views">
+      <button class="developer-tab active" type="button" data-tab="logs">Logs</button>
+      <button class="developer-tab" type="button" data-tab="profile">Mission profile</button>
+      <button class="developer-tab" type="button" data-tab="raw">Raw status</button>
+    </div>
+
+    <section id="developer-panel-logs" class="card developer-panel active">
+      <h2>System log</h2>
       <div class="muted">Shows recent `WARN`, `ERROR`, and `FATAL` messages from ROS.</div>
       <div id="log-list" class="log-list"></div>
     </section>
 
-    <section class="card" style="margin-top: 18px;">
-      <h2>Layer Toggles</h2>
+    <section id="developer-panel-profile" class="card developer-panel">
+      <h2>Mission profile</h2>
       <div id="developer-selected-mission" class="muted">Selected mission: none</div>
       <div id="layer-toggle-list" class="toggle-list"></div>
     </section>
 
-    <section class="card" style="margin-top: 18px;">
-      <h2>Raw Status</h2>
+    <section id="developer-panel-raw" class="card developer-panel">
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+        <h2>Raw status</h2>
+        <button id="copy-raw-status" type="button">Copy JSON</button>
+      </div>
       <pre id="raw-status">{{}}</pre>
     </section>
   </main>
@@ -4688,6 +6593,16 @@ class MissionFrontendRenderer:
     const rawStatus = document.getElementById('raw-status');
     const selectedMissionElement = document.getElementById('developer-selected-mission');
     const layerToggleList = document.getElementById('layer-toggle-list');
+    const developerTabs = [...document.querySelectorAll('.developer-tab')];
+    const developerPanels = [...document.querySelectorAll('.developer-panel')];
+    const navDrawer = document.getElementById('nav-drawer');
+    const drawerBackdrop = document.getElementById('drawer-backdrop');
+    const layerGroups = [
+      ['Hardware', ['use_amr_sweeper_ros2_control', 'use_amr_sweeper_battery', 'use_amr_sweeper_system_info', 'use_amr_sweeper_usb_cameras', 'use_amr_sweeper_depth_camera', 'use_amr_sweeper_imu', 'use_amr_sweeper_gnss', 'use_ntrip_client']],
+      ['Controllers', ['use_amr_sweeper_drive_controller', 'use_amr_sweeper_tool_controller', 'use_amr_sweeper_teleop', 'use_amr_sweeper_sweeping_controller', 'use_amr_sweeper_attitude_controller', 'use_amr_sweeper_collision_detector', 'use_amr_sweeper_safety_controller', 'use_joy_node']],
+      ['Navigation', ['use_amr_sweeper_visual_odometry', 'use_amr_sweeper_localization', 'use_amr_sweeper_mapping', 'use_amr_sweeper_navigation']],
+      ['Mission', ['use_gaussian', 'auto_start_mission']],
+    ];
     const layerToggleDefinitions = [
       ['use_amr_sweeper_ros2_control', 'ROS2 Control'],
       ['use_amr_sweeper_battery', 'Battery'],
@@ -4795,7 +6710,14 @@ class MissionFrontendRenderer:
 
       selectedMissionElement.textContent = `Selected mission: ${{mission.mission_id}}`;
       const overrides = layerOverridesForMission(mission);
-      for (const [key, label] of layerToggleDefinitions) {{
+      const labelsByKey = new Map(layerToggleDefinitions);
+      for (const [groupName, keys] of layerGroups) {{
+        const groupHeading = document.createElement('div');
+        groupHeading.className = 'toggle-group';
+        groupHeading.textContent = groupName;
+        layerToggleList.appendChild(groupHeading);
+        for (const key of keys) {{
+        const label = labelsByKey.get(key) || key;
         const item = document.createElement('div');
         item.className = 'toggle-item';
         const enabled = Boolean(overrides[key]);
@@ -4817,6 +6739,7 @@ class MissionFrontendRenderer:
           renderLayerToggles();
         }});
         layerToggleList.appendChild(item);
+        }}
       }}
     }}
 
@@ -4840,12 +6763,36 @@ class MissionFrontendRenderer:
           const item = document.createElement('div');
           item.className = `log-entry ${{String(entry.level || '').toLowerCase()}}`;
           item.innerHTML = `
-            <div class="log-meta">${{entry.level || 'WARN'}} | ${{entry.name || '-'}} | line ${{entry.line ?? '-'}} </div>
+            <div class="log-meta">${{entry.time || entry.stamp || '--'}}<br>${{entry.level || 'WARN'}}</div>
+            <div><strong>${{entry.name || '-'}}</strong><br><span class="muted">line ${{entry.line ?? '-'}}</span></div>
             <div>${{entry.msg || ''}}</div>
           `;
           logList.appendChild(item);
         }}
       }}
+
+    for (const tab of developerTabs) {{
+      tab.addEventListener('click', () => {{
+        const target = tab.dataset.tab || 'logs';
+        for (const other of developerTabs) {{
+          other.classList.toggle('active', other === tab);
+        }}
+        for (const panel of developerPanels) {{
+          panel.classList.toggle('active', panel.id === `developer-panel-${{target}}`);
+        }}
+      }});
+    }}
+    document.getElementById('open-nav-button').addEventListener('click', () => {{
+      navDrawer.classList.add('open');
+      drawerBackdrop.classList.add('show');
+    }});
+    drawerBackdrop.addEventListener('click', () => {{
+      navDrawer.classList.remove('open');
+      drawerBackdrop.classList.remove('show');
+    }});
+    document.getElementById('copy-raw-status').addEventListener('click', async () => {{
+      await navigator.clipboard.writeText(rawStatus.textContent || '{{}}');
+    }});
 
       rawStatus.textContent = JSON.stringify(data, null, 2);
     }}
@@ -5001,17 +6948,14 @@ class MissionFrontendHttpNode(Node, MissionFrontendRenderer):
                 if parsed.path == "/calendar":
                     self._send_html(node.render_calendar_html())
                     return
-                if parsed.path == "/map":
-                    self._send_html(node.render_map_html())
-                    return
                 if parsed.path == "/missions":
-                    self._send_html(node.render_missions_html())
+                    self._send_html(node.render_map_html())
                     return
                 if parsed.path == "/developer":
                     self._send_html(node.render_developer_html())
                     return
                 if parsed.path == "/record-map":
-                    self._send_redirect("/map")
+                    self._send_redirect("/missions")
                     return
                 if parsed.path == "/teleop":
                     self._send_html(node.render_teleop_html())
@@ -5114,6 +7058,23 @@ class MissionFrontendHttpNode(Node, MissionFrontendRenderer):
                     request_payload["mission_id"] = mission_id
                     return {"action": "EXECUTE_MISSION", "payload": request_payload}
 
+                if self.command == "POST" and parsed.path.startswith("/api/v1/missions/"):
+                    parts = [urllib.parse.unquote(part) for part in parsed.path.strip("/").split("/")]
+                    if len(parts) >= 5 and parts[:3] == ["api", "v1", "missions"]:
+                        mission_id = parts[3]
+                        request_payload = dict(payload)
+                        request_payload["mission_id"] = mission_id
+                        if len(parts) == 5 and parts[4] == "zones":
+                            return {"action": "CREATE_MISSION_ZONE", "payload": request_payload}
+                        if len(parts) == 5 and parts[4] == "station":
+                            return {"action": "SET_MISSION_STATION", "payload": request_payload}
+                        if len(parts) == 6 and parts[4] == "zones":
+                            request_payload["zone_id"] = parts[5]
+                            return {"action": "UPDATE_MISSION_ZONE", "payload": request_payload}
+                        if len(parts) == 7 and parts[4] == "zones" and parts[6] == "delete":
+                            request_payload["zone_id"] = parts[5]
+                            return {"action": "DELETE_MISSION_ZONE", "payload": request_payload}
+
                 post_routes = {
                     "/api/v1/missions/upload-vda5050": "UPLOAD_VDA5050_MISSION",
                     "/api/v1/mission/stop": "STOP_MISSION",
@@ -5126,6 +7087,7 @@ class MissionFrontendHttpNode(Node, MissionFrontendRenderer):
                     "/api/v1/teleop/lights": "SET_TELEOP_LIGHTS",
                     "/api/v1/maps/save": "SAVE_MAP",
                     "/api/v1/maps/delete": "DELETE_MAP",
+                    "/api/v1/missions/rename": "RENAME_MISSION",
                     "/api/v1/gaussian-splats/build": "BUILD_GAUSSIAN_SPLAT",
                     "/api/v1/gaussian-splats/pause": "PAUSE_GAUSSIAN_SPLAT",
                     "/api/v1/gaussian-splats/resume": "RESUME_GAUSSIAN_SPLAT",

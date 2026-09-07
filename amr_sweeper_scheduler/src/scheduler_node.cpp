@@ -1660,7 +1660,7 @@ std::string SchedulerNode::resolved_actual_schedule_log_path() const
   if (use_sim_time_) {
     return resolve_path("missions/simulations/simulation_schedule.ics").string();
   }
-  return resolve_path("missions/logs/actual_schedule.ics").string();
+  return resolve_path("missions/logs/logged_events.ics").string();
 }
 
 bool SchedulerNode::mission_json_or_folder_exists(const std::string & mission_id) const

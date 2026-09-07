@@ -20,6 +20,7 @@
 #include <map>
 #include <optional>
 #include <random>
+#include <regex>
 #include <set>
 #include <sstream>
 #include <string>
@@ -58,12 +59,17 @@ constexpr char kLocalScheduledMissionType[] = "vda5050_scheduled_mission_local";
 constexpr char kZigzagSweepPattern[] = "zigzag";
 constexpr char kRandomSweepPattern[] = "random";
 constexpr char kSpiralSweepPattern[] = "spiral";
+constexpr char kRecordMapMissionId[] = "RecordMap";
+constexpr char kMission2dMapDirectoryName[] = "_2D_map";
+constexpr char kMission3dMapDirectoryName[] = "_3D_map";
+constexpr char kMissionPathDirectoryName[] = "_Path";
 constexpr char kLatestRecordedMapDirectoryName[] = "latest_recorded_map";
 constexpr char kLatestRecordedMapMetadataFile[] = "latest_recorded_map.json";
 constexpr char kLatestRecordedMapRouteStem[] = "latest_recorded_map_path";
 constexpr char kLatestRecordedMapStaticCostmapStem[] = "latest_recorded_map_static_costmap";
 constexpr char kLatestRecordedMapNavSatStem[] = "latest_recorded_map_navsat";
-constexpr char kActualScheduleLogFilename[] = "log.ics";
+constexpr char kMissionMetadataFilename[] = "mission.json";
+constexpr char kActualScheduleLogFilename[] = "logged_events.ics";
 constexpr char kSimulationActualScheduleLogFilename[] = "simulation_schedule.ics";
 constexpr char kDepthCameraScanTopic[] = "/amr_sweeper/depth_camera/scan";
 constexpr char kDepthCameraInfoTopic[] = "/amr_sweeper/depth_camera/depth/camera_info";
@@ -183,6 +189,109 @@ bool hasSuffix(const std::string & value, const std::string & suffix)
 {
   return value.size() >= suffix.size() &&
          value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+std::filesystem::path mission2dMapDirectory(const std::filesystem::path & mission_directory)
+{
+  return mission_directory / kMission2dMapDirectoryName;
+}
+
+std::filesystem::path mission3dMapDirectory(const std::filesystem::path & mission_directory)
+{
+  return mission_directory / kMission3dMapDirectoryName;
+}
+
+std::filesystem::path missionPathDirectory(const std::filesystem::path & mission_directory)
+{
+  return mission_directory / kMissionPathDirectoryName;
+}
+
+std::filesystem::path firstExistingPath(const std::vector<std::filesystem::path> & candidates)
+{
+  for (const auto & candidate : candidates) {
+    if (!candidate.empty() && std::filesystem::exists(candidate)) {
+      return candidate;
+    }
+  }
+  return candidates.empty() ? std::filesystem::path{} : candidates.front();
+}
+
+bool isTimestampDirectoryName(const std::string & name)
+{
+  static const std::regex timestamp_pattern(R"(^\d{8}T\d{6}Z$)");
+  return std::regex_match(name, timestamp_pattern);
+}
+
+std::uintmax_t directorySizeBytes(const std::filesystem::path & directory)
+{
+  std::uintmax_t total = 0U;
+  std::error_code error;
+  for (std::filesystem::recursive_directory_iterator iterator(
+         directory,
+         std::filesystem::directory_options::skip_permission_denied,
+         error);
+       iterator != std::filesystem::recursive_directory_iterator();
+       iterator.increment(error))
+  {
+    if (error) {
+      error.clear();
+      continue;
+    }
+    if (!iterator->is_regular_file(error)) {
+      error.clear();
+      continue;
+    }
+    const auto size = iterator->file_size(error);
+    if (!error) {
+      total += size;
+    } else {
+      error.clear();
+    }
+  }
+  return total;
+}
+
+void copyDirectoryTree(
+  const std::filesystem::path & source,
+  const std::filesystem::path & destination)
+{
+  std::error_code error;
+  if (!std::filesystem::exists(source, error) || !std::filesystem::is_directory(source, error)) {
+    return;
+  }
+  std::filesystem::remove_all(destination, error);
+  error.clear();
+  std::filesystem::create_directories(destination, error);
+  error.clear();
+  std::filesystem::copy(
+    source,
+    destination,
+    std::filesystem::copy_options::recursive |
+    std::filesystem::copy_options::overwrite_existing,
+    error);
+}
+
+std::string extractCalendarEvents(const std::string & calendar_text)
+{
+  std::ostringstream events;
+  std::size_t search_from = 0U;
+  while (true) {
+    const auto begin = calendar_text.find("BEGIN:VEVENT", search_from);
+    if (begin == std::string::npos) {
+      break;
+    }
+    const auto end = calendar_text.find("END:VEVENT", begin);
+    if (end == std::string::npos) {
+      break;
+    }
+    const auto block_end = calendar_text.find('\n', end);
+    const auto length = (block_end == std::string::npos) ?
+      calendar_text.size() - begin :
+      block_end + 1U - begin;
+    events << calendar_text.substr(begin, length);
+    search_from = begin + length;
+  }
+  return events.str();
 }
 
 std::filesystem::path resolveExecutionContextPath(
@@ -2083,6 +2192,10 @@ MissionExecutorNode::MissionExecutorNode(const rclcpp::NodeOptions & options)
   promote_runtime_costmap_on_completed_mission_ = declare_parameter<bool>(
     "promote_runtime_costmap_on_completed_mission",
     true);
+  record_map_run_retention_max_bytes_ = static_cast<std::uintmax_t>(
+    declare_parameter<int64_t>(
+      "record_map_run_retention_max_bytes",
+      21474836480LL));
 
   client_callback_group_ = create_callback_group(rclcpp::CallbackGroupType::Reentrant);
   mission_parser_parameter_client_ =
@@ -2285,6 +2398,16 @@ void MissionExecutorNode::handleUploadVda5050Mission(
     std::filesystem::remove(artifact_folder / (mission_id + "_vda5050" + mission_file_extension_));
     std::filesystem::remove(artifact_folder / "zoneSet.json");
     std::filesystem::remove(artifact_folder / "map_georeference.json");
+    std::filesystem::remove(
+      mission2dMapDirectory(artifact_folder) / (mission_id + "_static_costmap.yaml"));
+    std::filesystem::remove(
+      mission2dMapDirectory(artifact_folder) / (mission_id + "_static_costmap.pgm"));
+    std::filesystem::remove(
+      missionPathDirectory(artifact_folder) / (mission_id + "_path_planned.geojson"));
+    std::filesystem::remove(
+      missionPathDirectory(artifact_folder) / (mission_id + "_vda5050" + mission_file_extension_));
+    std::filesystem::remove(mission2dMapDirectory(artifact_folder) / "zoneSet.json");
+    std::filesystem::remove(mission2dMapDirectory(artifact_folder) / "map_georeference.json");
 
     const auto mission = classifyMissionFile(mission_file);
     if (!mission) {
@@ -2310,8 +2433,17 @@ void MissionExecutorNode::handleCreateRecordedMission(
 {
   try {
     const std::filesystem::path latest_directory =
-      resolveMissionsLogDirectory() / kLatestRecordedMapDirectoryName;
-    const std::filesystem::path latest_metadata_file = latest_directory / kLatestRecordedMapMetadataFile;
+      resolveMissionsLogDirectory() / kRecordMapMissionId;
+    std::filesystem::path latest_metadata_file = latest_directory / kMissionMetadataFilename;
+    if (!std::filesystem::exists(latest_metadata_file)) {
+      const auto legacy_latest_directory =
+        resolveMissionsLogDirectory() / kLatestRecordedMapDirectoryName;
+      const auto legacy_latest_metadata_file =
+        legacy_latest_directory / kLatestRecordedMapMetadataFile;
+      if (std::filesystem::exists(legacy_latest_metadata_file)) {
+        latest_metadata_file = legacy_latest_metadata_file;
+      }
+    }
     if (!std::filesystem::exists(latest_metadata_file)) {
       throw std::runtime_error("No latest recorded map is available yet");
     }
@@ -2401,6 +2533,13 @@ void MissionExecutorNode::handleCreateRecordedMission(
     }
 
     std::filesystem::create_directories(mission_folder);
+    const std::filesystem::path mission_bundle_folder = resolveMissionsLogDirectory() / mission_id;
+    const std::filesystem::path mission_bundle_path_directory = missionPathDirectory(mission_bundle_folder);
+    const std::filesystem::path mission_bundle_2d_map_directory = mission2dMapDirectory(mission_bundle_folder);
+    const std::filesystem::path mission_bundle_3d_map_directory = mission3dMapDirectory(mission_bundle_folder);
+    std::filesystem::create_directories(mission_bundle_path_directory);
+    std::filesystem::create_directories(mission_bundle_2d_map_directory);
+    std::filesystem::create_directories(mission_bundle_3d_map_directory);
     const std::string timestamp = formatUtcTimestamp(now);
     const nlohmann::json order_document = buildVda5050OrderDocument(mission_id, timestamp, route);
     const nlohmann::json zone_set_document =
@@ -2411,6 +2550,91 @@ void MissionExecutorNode::handleCreateRecordedMission(
     writeJsonDocumentAtomic(mission_folder / "zoneSet.json", zone_set_document);
     writeJsonDocumentAtomic(mission_folder / "map_georeference.json", map_georeference_document);
     validateVda5050Package(mission_folder);
+
+    const std::filesystem::path bundle_mission_file =
+      mission_bundle_path_directory / (mission_id + "_vda5050" + mission_file_extension_);
+    const std::filesystem::path bundle_route_file =
+      mission_bundle_path_directory / (mission_id + "_path_planned.geojson");
+    const std::filesystem::path bundle_costmap_yaml =
+      mission_bundle_2d_map_directory / (mission_id + "_static_costmap.yaml");
+    const std::filesystem::path bundle_costmap_image =
+      mission_bundle_2d_map_directory / (mission_id + "_static_costmap.pgm");
+    writeJsonDocumentAtomic(bundle_mission_file, order_document);
+    writeJsonDocumentAtomic(mission_bundle_2d_map_directory / "zoneSet.json", zone_set_document);
+    writeJsonDocumentAtomic(
+      mission_bundle_2d_map_directory / "map_georeference.json",
+      map_georeference_document);
+    nlohmann::json route_coordinates = nlohmann::json::array();
+    for (const auto & point : route) {
+      route_coordinates.push_back({point.x, point.y});
+    }
+    writeJsonDocumentAtomic(
+      bundle_route_file,
+      buildLocalPathGeoJson(route_coordinates, mission_id + "_path_planned"));
+    std::filesystem::copy_file(
+      static_costmap_yaml_file,
+      bundle_costmap_yaml,
+      std::filesystem::copy_options::overwrite_existing);
+    std::filesystem::copy_file(
+      static_costmap_image_file,
+      bundle_costmap_image,
+      std::filesystem::copy_options::overwrite_existing);
+    rewriteCostmapYamlImageReference(bundle_costmap_yaml, bundle_costmap_image);
+    const std::filesystem::path source_gaussian_manifest(
+      latest_metadata.value("gaussian_manifest_file", std::string{}));
+    if (!source_gaussian_manifest.empty() && std::filesystem::exists(source_gaussian_manifest)) {
+      copyDirectoryTree(
+        source_gaussian_manifest.parent_path(),
+        mission_bundle_3d_map_directory / "gaussian");
+      const auto bundle_gaussian_manifest =
+        mission_bundle_3d_map_directory / "gaussian" / "manifest.json";
+      if (std::filesystem::exists(bundle_gaussian_manifest)) {
+        auto gaussian_manifest = loadJsonDocument(bundle_gaussian_manifest);
+        gaussian_manifest["output_directory"] = bundle_gaussian_manifest.parent_path().string();
+        gaussian_manifest["gaussian_manifest_file"] = bundle_gaussian_manifest.string();
+        writeJsonDocumentAtomic(bundle_gaussian_manifest, gaussian_manifest);
+      }
+    }
+    const std::filesystem::path source_gaussian_splat_manifest(
+      latest_metadata.value("gaussian_splat_manifest_file", std::string{}));
+    if (!source_gaussian_splat_manifest.empty() &&
+      std::filesystem::exists(source_gaussian_splat_manifest))
+    {
+      copyDirectoryTree(
+        source_gaussian_splat_manifest.parent_path(),
+        mission_bundle_3d_map_directory / "gaussian_splat");
+      const auto bundle_gaussian_splat_manifest =
+        mission_bundle_3d_map_directory / "gaussian_splat" / "gaussian_splat_manifest.json";
+      if (std::filesystem::exists(bundle_gaussian_splat_manifest)) {
+        auto splat_manifest = loadJsonDocument(bundle_gaussian_splat_manifest);
+        splat_manifest["artifact_directory"] = bundle_gaussian_splat_manifest.parent_path().string();
+        splat_manifest["source_capture_manifest_file"] =
+          (mission_bundle_3d_map_directory / "gaussian" / "manifest.json").string();
+        writeJsonDocumentAtomic(bundle_gaussian_splat_manifest, splat_manifest);
+      }
+    }
+    writeJsonDocumentAtomic(
+      mission_bundle_folder / kMissionMetadataFilename,
+      {
+        {"mission_id", mission_id},
+        {"map_id", mission_id},
+        {"map_name", mission_id},
+        {"source_mission_id", kRecordMapMissionId},
+        {"source_latest_recorded_map_file", latest_metadata_file.string()},
+        {"source_run_started_at", latest_metadata.value("run_started_at", std::string{})},
+        {"recorded_work_area_route_file", bundle_route_file.string()},
+        {"mission_route_file", bundle_route_file.string()},
+        {"recorded_work_area_static_costmap_yaml", bundle_costmap_yaml.string()},
+        {"recorded_work_area_static_costmap_image", bundle_costmap_image.string()},
+        {"mission_static_costmap_yaml", bundle_costmap_yaml.string()},
+        {"mission_static_costmap_image", bundle_costmap_image.string()},
+        {"gaussian_manifest_file", (mission_bundle_3d_map_directory / "gaussian" / "manifest.json").string()},
+        {"gaussian_splat_manifest_file", (mission_bundle_3d_map_directory / "gaussian_splat" / "gaussian_splat_manifest.json").string()},
+        {"sweep_pattern", applied_pattern},
+        {"updated_at", formatUtcTimestamp(now)},
+        {"geo_transform", latest_metadata.value("geo_transform", nlohmann::json::object())},
+        {"recorded_obstacle_count", latest_metadata.value("recorded_obstacle_count", 0)},
+        {"recorded_obstacle_points", latest_metadata.value("recorded_obstacle_points", nlohmann::json::array())}});
 
     response->success = true;
     response->message = "Recorded mission created";
@@ -3057,6 +3281,12 @@ std::optional<ManualMissionInfo> MissionExecutorNode::findStagedScheduledMission
 std::filesystem::path MissionExecutorNode::missionFolderPath(
   const std::filesystem::path & mission_path) const
 {
+  if (mission_path.has_parent_path() &&
+    mission_path.parent_path().filename() == kMissionPathDirectoryName &&
+    mission_path.parent_path().has_parent_path())
+  {
+    return mission_path.parent_path().parent_path();
+  }
   return mission_path.parent_path();
 }
 
@@ -3070,6 +3300,9 @@ std::filesystem::path MissionExecutorNode::artifactsDirectoryForMission(
       const std::filesystem::path missions_database_directory = resolveMissionsFromDbDirectory();
       if (mission_path.filename() == "order.json" && parent.parent_path() == missions_database_directory) {
         return resolveMissionsLogDirectory() / mission.mission_id;
+      }
+      if (parent.filename() == kMissionPathDirectoryName && parent.has_parent_path()) {
+        return parent.parent_path();
       }
       if (parent != missions_database_directory &&
         !(parent.filename() == "simulations" && parent.parent_path() == missions_database_directory))
@@ -3086,6 +3319,12 @@ std::string MissionExecutorNode::missionStemForPath(const std::filesystem::path 
 {
   if (mission_path.filename() == "order.json" && mission_path.has_parent_path()) {
     return mission_path.parent_path().filename().string();
+  }
+  if (mission_path.has_parent_path() &&
+    mission_path.parent_path().filename() == kMissionPathDirectoryName &&
+    mission_path.parent_path().has_parent_path())
+  {
+    return mission_path.parent_path().parent_path().filename().string();
   }
   const std::filesystem::path missions_database_directory = resolveMissionsFromDbDirectory();
   if (mission_path.has_parent_path() && mission_path.parent_path() != missions_database_directory) {
@@ -3115,14 +3354,19 @@ std::filesystem::path MissionExecutorNode::resolveMissionRoutePath(
   const std::filesystem::path & mission_file) const
 {
   const std::filesystem::path mission_folder = artifactsDirectoryForMission(mission);
+  const std::string route_basename = missionRouteBasename(mission_file);
   const std::filesystem::path planned_route =
-    mission_folder / (missionRouteBasename(mission_file) + ".geojson");
+    firstExistingPath({
+      missionPathDirectory(mission_folder) / (route_basename + ".geojson"),
+      mission_folder / (route_basename + ".geojson")});
   if (std::filesystem::exists(planned_route)) {
     return planned_route;
   }
 
   const std::filesystem::path builtin_route =
-    mission_folder / (missionStemForPath(mission_file) + "_path.geojson");
+    firstExistingPath({
+      missionPathDirectory(mission_folder) / (missionStemForPath(mission_file) + "_path.geojson"),
+      mission_folder / (missionStemForPath(mission_file) + "_path.geojson")});
   if (std::filesystem::exists(builtin_route)) {
     return builtin_route;
   }
@@ -3157,7 +3401,9 @@ std::optional<std::filesystem::path> MissionExecutorNode::newestScheduledArtifac
       continue;
     }
     const std::filesystem::path staged_mission_file =
-      entry.path() / (stem + "_vda5050" + mission_file_extension_);
+      firstExistingPath({
+        missionPathDirectory(entry.path()) / (stem + "_vda5050" + mission_file_extension_),
+        entry.path() / (stem + "_vda5050" + mission_file_extension_)});
     if (!std::filesystem::exists(staged_mission_file, error)) {
       error.clear();
       continue;
@@ -3178,7 +3424,10 @@ ManualMissionInfo MissionExecutorNode::resolveExecutableMissionSource(const Manu
 
   const std::filesystem::path canonical_history_directory = missionHistoryDirectory(mission);
   const std::filesystem::path canonical_history_mission_file =
-    canonical_history_directory / (mission.mission_id + "_vda5050" + mission_file_extension_);
+    firstExistingPath({
+      missionPathDirectory(canonical_history_directory) /
+        (mission.mission_id + "_vda5050" + mission_file_extension_),
+      canonical_history_directory / (mission.mission_id + "_vda5050" + mission_file_extension_)});
   if (std::filesystem::exists(canonical_history_mission_file)) {
     ManualMissionInfo resolved = mission;
     resolved.mission_path = canonical_history_mission_file.string();
@@ -3231,7 +3480,9 @@ ManualMissionInfo MissionExecutorNode::resolveExecutableMissionSource(const Manu
 
   const std::string staged_stem = staged_directory->filename().string();
   const std::filesystem::path staged_mission_file =
-    *staged_directory / (staged_stem + "_vda5050" + mission_file_extension_);
+    firstExistingPath({
+      missionPathDirectory(*staged_directory) / (staged_stem + "_vda5050" + mission_file_extension_),
+      *staged_directory / (staged_stem + "_vda5050" + mission_file_extension_)});
   if (!std::filesystem::exists(staged_mission_file)) {
     return mission;
   }
@@ -3314,10 +3565,15 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
   namespace fs = std::filesystem;
   const std::filesystem::path mission_file(mission.mission_path);
   const std::filesystem::path source_mission_folder = artifactsDirectoryForMission(mission);
+  const std::string source_static_costmap_basename = missionStaticCostmapBasename(mission_file);
   const std::filesystem::path mission_static_costmap_yaml =
-    source_mission_folder / (missionStaticCostmapBasename(mission_file) + ".yaml");
+    firstExistingPath({
+      mission2dMapDirectory(source_mission_folder) / (source_static_costmap_basename + ".yaml"),
+      source_mission_folder / (source_static_costmap_basename + ".yaml")});
   const std::filesystem::path mission_static_costmap_image =
-    source_mission_folder / (missionStaticCostmapBasename(mission_file) + ".pgm");
+    firstExistingPath({
+      mission2dMapDirectory(source_mission_folder) / (source_static_costmap_basename + ".pgm"),
+      source_mission_folder / (source_static_costmap_basename + ".pgm")});
   const std::filesystem::path mission_route = resolveMissionRoutePath(mission, mission_file);
 
   if (!fs::exists(mission_file) ||
@@ -3387,17 +3643,28 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
   }
 
   const fs::path mission_run_directory = mission_history_directory / run_timestamp;
-  fs::create_directories(mission_run_directory);
+  const fs::path history_path_directory = missionPathDirectory(mission_history_directory);
+  const fs::path history_2d_map_directory = mission2dMapDirectory(mission_history_directory);
+  const fs::path history_3d_map_directory = mission3dMapDirectory(mission_history_directory);
+  const fs::path run_path_directory = missionPathDirectory(mission_run_directory);
+  const fs::path run_2d_map_directory = mission2dMapDirectory(mission_run_directory);
+  const fs::path run_3d_map_directory = mission3dMapDirectory(mission_run_directory);
+  fs::create_directories(run_path_directory);
+  fs::create_directories(run_2d_map_directory);
+  fs::create_directories(run_3d_map_directory);
+  fs::create_directories(history_path_directory);
+  fs::create_directories(history_2d_map_directory);
+  fs::create_directories(history_3d_map_directory);
   const std::string run_artifact_stem = missionRunArtifactStem(mission.mission_id, run_timestamp);
 
   const fs::path history_mission_file =
-    mission_history_directory / (mission.mission_id + "_vda5050" + mission_file_extension_);
+    history_path_directory / (mission.mission_id + "_vda5050" + mission_file_extension_);
   const fs::path history_static_costmap_yaml =
-    mission_history_directory / (mission.mission_id + "_static_costmap.yaml");
+    history_2d_map_directory / (mission.mission_id + "_static_costmap.yaml");
   const fs::path history_static_costmap_image =
-    mission_history_directory / (mission.mission_id + "_static_costmap.pgm");
+    history_2d_map_directory / (mission.mission_id + "_static_costmap.pgm");
   const fs::path history_route =
-    mission_history_directory / (mission.mission_id + "_path_planned.geojson");
+    history_path_directory / (mission.mission_id + "_path_planned.geojson");
   if (mission_file != history_mission_file) {
     fs::copy_file(mission_file, history_mission_file, fs::copy_options::overwrite_existing);
   }
@@ -3419,20 +3686,20 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
   }
 
   const fs::path run_mission_file =
-    mission_run_directory / (run_artifact_stem + "_vda5050" + mission_file_extension_);
+    run_path_directory / (run_artifact_stem + "_vda5050" + mission_file_extension_);
   const fs::path run_static_costmap_yaml =
-    mission_run_directory / (run_artifact_stem + "_static_costmap.yaml");
+    run_2d_map_directory / (run_artifact_stem + "_static_costmap.yaml");
   const fs::path run_static_costmap_image =
-    mission_run_directory / (run_artifact_stem + "_static_costmap.pgm");
+    run_2d_map_directory / (run_artifact_stem + "_static_costmap.pgm");
   const fs::path run_route =
-    mission_run_directory / (run_artifact_stem + "_path_planned.geojson");
+    run_path_directory / (run_artifact_stem + "_path_planned.geojson");
   const fs::path actual_path_file =
-    mission_run_directory / (run_artifact_stem + "_path_actual.geojson");
+    run_path_directory / (run_artifact_stem + "_path_actual.geojson");
   const fs::path actual_path_navsat_file =
-    mission_run_directory / (run_artifact_stem + "_path_navsat.geojson");
-  const fs::path gaussian_output_directory = mission_run_directory / "gaussian";
+    run_path_directory / (run_artifact_stem + "_path_navsat.geojson");
+  const fs::path gaussian_output_directory = run_3d_map_directory / "gaussian";
   const fs::path gaussian_manifest_file = gaussian_output_directory / "manifest.json";
-  const fs::path captured_images_directory = mission_run_directory / "captured_images";
+  const fs::path captured_images_directory = run_3d_map_directory / "captured_images";
   const fs::path collected_artifacts_directory = mission_run_directory / "artifacts";
 
   fs::copy_file(history_mission_file, run_mission_file, fs::copy_options::overwrite_existing);
@@ -3467,10 +3734,16 @@ PreparedMissionContext MissionExecutorNode::prepareMissionArtifacts(
     {"execution_mode", mission.execution_mode},
     {"mission_file", run_mission_file.string()},
     {"mission_folder", mission_history_directory.string()},
+    {"mission_2d_map_directory", run_2d_map_directory.string()},
+    {"mission_3d_map_directory", run_3d_map_directory.string()},
+    {"mission_path_directory", run_path_directory.string()},
     {"mission_route_file", run_route.string()},
     {"mission_static_costmap_yaml", run_static_costmap_yaml.string()},
     {"saved_static_costmap_yaml", run_static_costmap_yaml.string()},
     {"mission_run_directory", mission_run_directory.string()},
+    {"persistent_mission_2d_map_directory", history_2d_map_directory.string()},
+    {"persistent_mission_3d_map_directory", history_3d_map_directory.string()},
+    {"persistent_mission_path_directory", history_path_directory.string()},
     {"persistent_mission_file", history_mission_file.string()},
     {"persistent_mission_route_file", history_route.string()},
     {"persistent_mission_static_costmap_yaml", history_static_costmap_yaml.string()},
@@ -3678,6 +3951,7 @@ bool MissionExecutorNode::finalizeMissionExecution(
   promoteRuntimeCostmapArtifacts(*context_document, request);
   refreshLocalPathGeoReferenceFromArtifacts(*context_document);
   writeLatestRecordedMapSnapshot(*context_document);
+  enforceRecordMapRunRetention(*context_document);
   recordMissionExecutionEnd(*context_document, request);
   stopMissionRosbagRecording();
   clearActiveMissionState();
@@ -3888,7 +4162,9 @@ void MissionExecutorNode::updateRecordMapArtifacts(nlohmann::json & context_docu
     route_stream << std::setw(2) << buildPerimeterGeoJson(perimeter_points) << '\n';
   }
 
-  const std::filesystem::path history_route_file = mission_folder / mission_route_file.filename();
+  const std::filesystem::path history_route_file =
+    missionPathDirectory(mission_folder) / mission_route_file.filename();
+  std::filesystem::create_directories(history_route_file.parent_path());
   if (history_route_file != mission_route_file) {
     std::ofstream route_stream(history_route_file, std::ios::trunc);
     if (!route_stream.is_open()) {
@@ -3898,7 +4174,8 @@ void MissionExecutorNode::updateRecordMapArtifacts(nlohmann::json & context_docu
   }
 
   const std::filesystem::path history_static_costmap_yaml =
-    mission_folder / mission_static_costmap_yaml.filename();
+    mission2dMapDirectory(mission_folder) / mission_static_costmap_yaml.filename();
+  std::filesystem::create_directories(history_static_costmap_yaml.parent_path());
   const std::filesystem::path history_static_costmap_image =
     history_static_costmap_yaml.parent_path() /
     (history_static_costmap_yaml.stem().string() + ".pgm");
@@ -3929,7 +4206,7 @@ void MissionExecutorNode::writeLatestRecordedMapSnapshot(const nlohmann::json & 
   const std::string mission_id = context_document.value("mission_id", std::string{});
   if (execution_mode != kManualMappingExecutionMode ||
     mission_type != kBuiltinManualMappingMissionType ||
-    mission_id != "RecordMap")
+    mission_id != kRecordMapMissionId)
   {
     return;
   }
@@ -3971,15 +4248,24 @@ void MissionExecutorNode::writeLatestRecordedMapSnapshot(const nlohmann::json & 
       extractGeoLineStringCoordinates(loadJsonDocument(navsat_route_file)));
   }
 
-  const auto latest_directory = resolveMissionsLogDirectory() / kLatestRecordedMapDirectoryName;
-  const auto latest_metadata_file = latest_directory / kLatestRecordedMapMetadataFile;
-  const auto latest_route_file = latest_directory / (std::string(kLatestRecordedMapRouteStem) + ".geojson");
+  const auto latest_directory = resolveMissionsLogDirectory() / kRecordMapMissionId;
+  const auto latest_2d_map_directory = mission2dMapDirectory(latest_directory);
+  const auto latest_3d_map_directory = mission3dMapDirectory(latest_directory);
+  const auto latest_path_directory = missionPathDirectory(latest_directory);
+  const auto latest_metadata_file = latest_directory / kMissionMetadataFilename;
+  const auto latest_route_file =
+    latest_path_directory / (std::string(kRecordMapMissionId) + "_path_planned.geojson");
   const auto latest_static_costmap_yaml_file =
-    latest_directory / (std::string(kLatestRecordedMapStaticCostmapStem) + ".yaml");
+    latest_2d_map_directory / (std::string(kRecordMapMissionId) + "_static_costmap.yaml");
   const auto latest_static_costmap_image_file =
-    latest_directory / (std::string(kLatestRecordedMapStaticCostmapStem) + ".pgm");
-  const auto latest_navsat_file = latest_directory / (std::string(kLatestRecordedMapNavSatStem) + ".geojson");
-  std::filesystem::create_directories(latest_directory);
+    latest_2d_map_directory / (std::string(kRecordMapMissionId) + "_static_costmap.pgm");
+  const auto latest_actual_path_file =
+    latest_path_directory / (std::string(kRecordMapMissionId) + "_path_actual.geojson");
+  const auto latest_navsat_file =
+    latest_path_directory / (std::string(kRecordMapMissionId) + "_path_navsat.geojson");
+  std::filesystem::create_directories(latest_2d_map_directory);
+  std::filesystem::create_directories(latest_3d_map_directory);
+  std::filesystem::create_directories(latest_path_directory);
 
   {
     std::ofstream route_stream(latest_route_file, std::ios::trunc);
@@ -4006,15 +4292,43 @@ void MissionExecutorNode::writeLatestRecordedMapSnapshot(const nlohmann::json & 
       latest_navsat_file,
       std::filesystem::copy_options::overwrite_existing);
   }
+  std::filesystem::copy_file(
+    actual_path_file,
+    latest_actual_path_file,
+    std::filesystem::copy_options::overwrite_existing);
+
+  const auto run_3d_map_directory = mission3dMapDirectory(
+    std::filesystem::path(context_document.value("mission_run_directory", std::string{})));
+  copyDirectoryTree(run_3d_map_directory / "gaussian", latest_3d_map_directory / "gaussian");
+  copyDirectoryTree(run_3d_map_directory / "gaussian_splat", latest_3d_map_directory / "gaussian_splat");
+  const auto latest_gaussian_manifest_file = latest_3d_map_directory / "gaussian" / "manifest.json";
+  const auto latest_gaussian_splat_manifest_file =
+    latest_3d_map_directory / "gaussian_splat" / "gaussian_splat_manifest.json";
+  if (std::filesystem::exists(latest_gaussian_manifest_file)) {
+    auto gaussian_manifest = loadJsonDocument(latest_gaussian_manifest_file);
+    gaussian_manifest["output_directory"] = latest_gaussian_manifest_file.parent_path().string();
+    gaussian_manifest["gaussian_manifest_file"] = latest_gaussian_manifest_file.string();
+    writeJsonDocumentAtomic(latest_gaussian_manifest_file, gaussian_manifest);
+  }
+  if (std::filesystem::exists(latest_gaussian_splat_manifest_file)) {
+    auto splat_manifest = loadJsonDocument(latest_gaussian_splat_manifest_file);
+    splat_manifest["artifact_directory"] = latest_gaussian_splat_manifest_file.parent_path().string();
+    splat_manifest["source_capture_manifest_file"] = latest_gaussian_manifest_file.string();
+    writeJsonDocumentAtomic(latest_gaussian_splat_manifest_file, splat_manifest);
+  }
 
   nlohmann::json latest_metadata{
     {"mission_id", mission_id},
+    {"map_id", mission_id},
+    {"map_name", "Latest Recording"},
     {"run_started_at", run_started_at},
     {"recorded_work_area_route_file", latest_route_file.string()},
     {"recorded_work_area_static_costmap_yaml", latest_static_costmap_yaml_file.string()},
     {"recorded_work_area_static_costmap_image", latest_static_costmap_image_file.string()},
+    {"actual_path_file", latest_actual_path_file.string()},
     {"recorded_work_area_navsat_file", std::filesystem::exists(latest_navsat_file) ? latest_navsat_file.string() : std::string{}},
-    {"gaussian_manifest_file", std::filesystem::exists(gaussian_manifest_file) ? gaussian_manifest_file.string() : std::string{}},
+    {"gaussian_manifest_file", std::filesystem::exists(latest_gaussian_manifest_file) ? latest_gaussian_manifest_file.string() : (std::filesystem::exists(gaussian_manifest_file) ? gaussian_manifest_file.string() : std::string{})},
+    {"gaussian_splat_manifest_file", std::filesystem::exists(latest_gaussian_splat_manifest_file) ? latest_gaussian_splat_manifest_file.string() : std::string{}},
     {"recorded_obstacle_count", context_document.value("recorded_obstacle_count", 0)},
     {"recorded_obstacle_points", context_document.value("recorded_obstacle_points", nlohmann::json::array())},
     {"geo_transform", {
@@ -4032,6 +4346,88 @@ void MissionExecutorNode::writeLatestRecordedMapSnapshot(const nlohmann::json & 
     throw std::runtime_error("Failed to write latest recorded map metadata");
   }
   metadata_stream << std::setw(2) << latest_metadata << '\n';
+}
+
+void MissionExecutorNode::enforceRecordMapRunRetention(nlohmann::json & context_document) const
+{
+  const std::string mission_id = context_document.value("mission_id", std::string{});
+  if (mission_id != kRecordMapMissionId || record_map_run_retention_max_bytes_ == 0U) {
+    return;
+  }
+
+  const std::filesystem::path record_map_directory = resolveMissionsLogDirectory() / kRecordMapMissionId;
+  const std::filesystem::path active_run_directory(
+    context_document.value("mission_run_directory", std::string{}));
+  std::error_code error;
+  if (!std::filesystem::exists(record_map_directory, error) ||
+    !std::filesystem::is_directory(record_map_directory, error))
+  {
+    return;
+  }
+
+  struct RunDirectory
+  {
+    std::filesystem::path path;
+    std::uintmax_t size{0U};
+  };
+  std::vector<RunDirectory> runs;
+  std::uintmax_t bytes_before = 0U;
+  for (const auto & entry : std::filesystem::directory_iterator(record_map_directory, error)) {
+    if (error) {
+      error.clear();
+      continue;
+    }
+    if (!entry.is_directory(error)) {
+      error.clear();
+      continue;
+    }
+    const auto directory_name = entry.path().filename().string();
+    if (!isTimestampDirectoryName(directory_name)) {
+      continue;
+    }
+    const auto run_size = directorySizeBytes(entry.path());
+    runs.push_back({entry.path(), run_size});
+    bytes_before += run_size;
+  }
+
+  std::sort(
+    runs.begin(),
+    runs.end(),
+    [](const RunDirectory & lhs, const RunDirectory & rhs) {
+      return lhs.path.filename().string() < rhs.path.filename().string();
+    });
+
+  std::uintmax_t bytes_after = bytes_before;
+  nlohmann::json deleted_directories = nlohmann::json::array();
+  for (const auto & run : runs) {
+    if (bytes_after <= record_map_run_retention_max_bytes_) {
+      break;
+    }
+    if (!active_run_directory.empty() &&
+      std::filesystem::equivalent(run.path, active_run_directory, error))
+    {
+      error.clear();
+      continue;
+    }
+    std::filesystem::remove_all(run.path, error);
+    if (error) {
+      RCLCPP_WARN(
+        get_logger(),
+        "Failed to delete RecordMap retained run folder %s: %s",
+        run.path.string().c_str(),
+        error.message().c_str());
+      error.clear();
+      continue;
+    }
+    bytes_after = bytes_after > run.size ? bytes_after - run.size : 0U;
+    deleted_directories.push_back(run.path.filename().string());
+  }
+
+  context_document["record_map_retention"] = {
+    {"max_bytes", record_map_run_retention_max_bytes_},
+    {"bytes_before_cleanup", bytes_before},
+    {"bytes_after_cleanup", bytes_after},
+    {"deleted_folders", deleted_directories}};
 }
 
 void MissionExecutorNode::refreshActiveMissionState(const nlohmann::json & context_document)
@@ -4081,29 +4477,24 @@ void MissionExecutorNode::recordMissionExecutionStart(
   {
     schedule_path_string = context_document.at("schedule_log_path").get<std::string>();
   }
-  if (schedule_path_string.empty()) {
-    return;
+  std::string schedule_text;
+  if (!schedule_path_string.empty()) {
+    const std::filesystem::path schedule_path(schedule_path_string);
+    if (std::filesystem::exists(schedule_path)) {
+      std::ifstream input_stream(schedule_path);
+      if (input_stream.is_open()) {
+        std::ostringstream buffer;
+        buffer << input_stream.rdbuf();
+        schedule_text = buffer.str();
+      }
+    }
   }
-
-  const std::filesystem::path schedule_path(schedule_path_string);
-  if (!std::filesystem::exists(schedule_path)) {
-    return;
-  }
-
-  std::ifstream input_stream(schedule_path);
-  if (!input_stream.is_open()) {
-    return;
-  }
-  std::ostringstream buffer;
-  buffer << input_stream.rdbuf();
-  std::string schedule_text = buffer.str();
-  const std::string timezone = discoverScheduleTimezone(schedule_text);
   const auto now = std::chrono::system_clock::now();
   const std::string actual_start_utc = formatUtcTimestamp(now);
   const std::string actual_start_local = formatLocalTimestamp(now);
   std::string event_uid;
 
-  if (!request.mission_window_start.empty()) {
+  if (!request.mission_window_start.empty() && !schedule_text.empty()) {
     const std::string mission_tag = "X-MISSION-ID:" + mission.mission_id;
     const std::string start_tag = request.mission_window_start;
     std::string start_tag_utc;
@@ -4129,48 +4520,11 @@ void MissionExecutorNode::recordMissionExecutionStart(
           const auto uid_end = schedule_text.find('\n', uid_position);
           event_uid = schedule_text.substr(uid_position + 4, uid_end - (uid_position + 4));
         }
-        const std::string runtime_line = "X-ACTUAL-START-UTC:" + actual_start_utc + "\n";
-        if (schedule_text.find(runtime_line, event_begin) == std::string::npos ||
-          schedule_text.find(runtime_line, event_begin) > event_end)
-        {
-          schedule_text.insert(event_end, runtime_line);
-        }
-        const std::string status_line = std::string("X-RUNTIME-STATUS:") + kRuntimeStatusStarted + "\n";
-        if (schedule_text.find(status_line, event_begin) == std::string::npos ||
-          schedule_text.find(status_line, event_begin) > event_end)
-        {
-          schedule_text.insert(event_end, status_line);
-        }
       }
     }
   } else {
     event_uid = "manual-" + sanitizeUidToken(mission.mission_id) + "-" + sanitizeUidToken(actual_start_utc);
-    std::ostringstream event_stream;
-    event_stream
-      << "BEGIN:VEVENT\n"
-      << "UID:" << event_uid << "\n"
-      << "DTSTART;TZID=" << timezone << ":" << actual_start_local << "\n"
-      << "DURATION:PT0S\n"
-      << "SUMMARY:Manual mission execution " << mission.mission_id << "\n"
-      << "X-ROBOT-ID:" << robot_id_ << "\n"
-      << "X-SCHEDULE-TYPE:WORK\n"
-      << "X-MISSION-ID:" << mission.mission_id << "\n"
-      << "X-ACTUAL-START-UTC:" << actual_start_utc << "\n"
-      << "X-RUNTIME-STATUS:" << kRuntimeStatusStarted << "\n"
-      << "END:VEVENT\n";
-
-    const auto calendar_end = schedule_text.rfind("END:VCALENDAR");
-    if (calendar_end == std::string::npos) {
-      return;
-    }
-    schedule_text.insert(calendar_end, event_stream.str());
   }
-
-  std::ofstream output_stream(schedule_path, std::ios::trunc);
-  if (!output_stream.is_open()) {
-    return;
-  }
-  output_stream << schedule_text;
 
   const std::filesystem::path actual_schedule_path =
     ensureActualScheduleLogPath(resolveScheduleSourcePath());
@@ -4215,7 +4569,7 @@ void MissionExecutorNode::recordMissionExecutionStart(
   }
 
   context_document["schedule_event_uid"] = event_uid;
-  context_document["schedule_log_path"] = schedule_path.string();
+  context_document["schedule_log_path"] = schedule_path_string;
   context_document["actual_start_utc"] = actual_start_utc;
   context_document["runtime_status"] = kRuntimeStatusStarted;
   try {
@@ -4260,93 +4614,6 @@ void MissionExecutorNode::recordMissionExecutionEnd(
     context_document.value("execution_context_file", std::string{}));
   if (!context_path.empty()) {
     writeJsonDocumentAtomic(context_path, context_document);
-  }
-
-  std::string schedule_path_string = resolveScheduleSourcePath().string();
-  if (schedule_path_string.empty()) {
-    schedule_path_string = context_document.value("schedule_log_path", std::string{});
-  }
-  if (!schedule_path_string.empty()) {
-    const std::filesystem::path schedule_path(schedule_path_string);
-    if (std::filesystem::exists(schedule_path)) {
-      std::ifstream input_stream(schedule_path);
-      if (input_stream.is_open()) {
-        std::ostringstream buffer;
-        buffer << input_stream.rdbuf();
-        std::string schedule_text = buffer.str();
-
-        const std::string event_uid = context_document.value("schedule_event_uid", std::string{});
-        const std::string mission_id = context_document.value("mission_id", std::string{});
-        const std::string mission_window_start =
-          context_document.value("mission_window_start", std::string{});
-        const auto event_anchor = !event_uid.empty() ?
-          schedule_text.find("UID:" + event_uid) : std::string::npos;
-        std::size_t event_begin = std::string::npos;
-        std::size_t event_end = std::string::npos;
-        if (event_anchor != std::string::npos) {
-          event_begin = schedule_text.rfind("BEGIN:VEVENT", event_anchor);
-          event_end = schedule_text.find("END:VEVENT", event_anchor);
-        } else if (!mission_id.empty()) {
-          const auto mission_anchor = schedule_text.find("X-MISSION-ID:" + mission_id);
-          if (mission_anchor != std::string::npos) {
-            event_begin = schedule_text.rfind("BEGIN:VEVENT", mission_anchor);
-            event_end = schedule_text.find("END:VEVENT", mission_anchor);
-            if (event_begin != std::string::npos && !mission_window_start.empty()) {
-              auto local_start_anchor = schedule_text.find(mission_window_start, event_begin);
-              std::size_t utc_start_anchor = std::string::npos;
-              try {
-                const std::string mission_window_start_utc =
-                  localTimestampToUtcTimestamp(mission_window_start);
-                utc_start_anchor = schedule_text.find(mission_window_start_utc, event_begin);
-              } catch (const std::exception &) {
-                utc_start_anchor = std::string::npos;
-              }
-              const bool matching_start =
-                (local_start_anchor != std::string::npos && local_start_anchor < event_end) ||
-                (utc_start_anchor != std::string::npos && utc_start_anchor < event_end);
-              if (!matching_start) {
-                event_begin = std::string::npos;
-                event_end = std::string::npos;
-              }
-            }
-          }
-        }
-
-        if (event_begin != std::string::npos && event_end != std::string::npos) {
-          auto insert_or_replace_line = [&schedule_text, event_begin, &event_end](
-              const std::string & prefix, const std::string & line) {
-              const auto position = schedule_text.find(prefix, event_begin);
-              if (position != std::string::npos && position < event_end) {
-                const auto line_end = schedule_text.find('\n', position);
-                const std::size_t replace_end =
-                  line_end == std::string::npos ? event_end : line_end + 1;
-                const std::size_t replace_length = replace_end - position;
-                schedule_text.replace(position, replace_length, line);
-                event_end = event_end + line.size() - replace_length;
-              } else {
-                schedule_text.insert(event_end, line);
-                event_end += line.size();
-              }
-            };
-
-          insert_or_replace_line("X-ACTUAL-END-UTC:", "X-ACTUAL-END-UTC:" + actual_end_utc + "\n");
-          insert_or_replace_line(
-            "X-ACTUAL-DURATION-SECONDS:",
-            "X-ACTUAL-DURATION-SECONDS:" +
-              std::to_string(static_cast<long long>(actual_duration_seconds)) + "\n");
-          insert_or_replace_line(
-            "X-ACTUAL-PATH-LENGTH-METERS:",
-            "X-ACTUAL-PATH-LENGTH-METERS:" + std::to_string(actual_path_length_meters) + "\n");
-          insert_or_replace_line("X-RUNTIME-STATUS:", "X-RUNTIME-STATUS:" + runtime_status + "\n");
-          insert_or_replace_line("X-END-REASON:", "X-END-REASON:" + request.reason + "\n");
-
-          std::ofstream output_stream(schedule_path, std::ios::trunc);
-          if (output_stream.is_open()) {
-            output_stream << schedule_text;
-          }
-        }
-      }
-    }
   }
 
   std::string actual_schedule_path_string =
@@ -4511,11 +4778,18 @@ bool MissionExecutorNode::missionArtifactsReady(const ManualMissionInfo & missio
   const ManualMissionInfo executable_mission = resolveExecutableMissionSource(mission);
   const std::filesystem::path mission_file(executable_mission.mission_path);
   const std::filesystem::path mission_folder = artifactsDirectoryForMission(executable_mission);
+  const std::string costmap_basename = missionStaticCostmapBasename(mission_file);
+  const auto costmap_yaml =
+    firstExistingPath({
+      mission2dMapDirectory(mission_folder) / (costmap_basename + ".yaml"),
+      mission_folder / (costmap_basename + ".yaml")});
+  const auto costmap_image =
+    firstExistingPath({
+      mission2dMapDirectory(mission_folder) / (costmap_basename + ".pgm"),
+      mission_folder / (costmap_basename + ".pgm")});
   return std::filesystem::exists(mission_file) &&
-         std::filesystem::exists(
-           mission_folder / (missionStaticCostmapBasename(mission_file) + ".yaml")) &&
-         std::filesystem::exists(
-           mission_folder / (missionStaticCostmapBasename(mission_file) + ".pgm")) &&
+         std::filesystem::exists(costmap_yaml) &&
+         std::filesystem::exists(costmap_image) &&
          std::filesystem::exists(resolveMissionRoutePath(executable_mission, mission_file));
 }
 
@@ -5176,22 +5450,6 @@ std::filesystem::path MissionExecutorNode::ensureActualScheduleLogPath(
     return actual_schedule_path;
   }
 
-  if (!use_simulation_) {
-    for (const auto & legacy_filename : {"schedule.ics", "actual_schedule.ics"}) {
-      const std::filesystem::path legacy_schedule_path =
-        actual_schedule_log_directory / legacy_filename;
-      if (!std::filesystem::exists(legacy_schedule_path)) {
-        continue;
-      }
-      std::error_code rename_error;
-      std::filesystem::rename(legacy_schedule_path, actual_schedule_path, rename_error);
-      if (!rename_error) {
-        return actual_schedule_path;
-      }
-      break;
-    }
-  }
-
   std::string timezone = "UTC";
   if (!schedule_source_path.empty() && std::filesystem::exists(schedule_source_path)) {
     std::ifstream input_stream(schedule_source_path);
@@ -5199,6 +5457,31 @@ std::filesystem::path MissionExecutorNode::ensureActualScheduleLogPath(
       std::ostringstream buffer;
       buffer << input_stream.rdbuf();
       timezone = discoverScheduleTimezone(buffer.str());
+    }
+  }
+
+  std::string merged_legacy_events;
+  if (!use_simulation_) {
+    for (const auto & legacy_filename : {"actual_schedule.ics", "log.ics", "schedule.ics"}) {
+      const std::filesystem::path legacy_schedule_path =
+        actual_schedule_log_directory / legacy_filename;
+      if (!std::filesystem::exists(legacy_schedule_path)) {
+        continue;
+      }
+      std::ifstream legacy_stream(legacy_schedule_path);
+      if (!legacy_stream.is_open()) {
+        continue;
+      }
+      std::ostringstream legacy_buffer;
+      legacy_buffer << legacy_stream.rdbuf();
+      const auto legacy_text = legacy_buffer.str();
+      merged_legacy_events += extractCalendarEvents(legacy_text);
+      const std::string legacy_timezone = discoverScheduleTimezone(legacy_text);
+      if (timezone == "UTC" && !legacy_timezone.empty()) {
+        timezone = legacy_timezone;
+      }
+      std::error_code remove_error;
+      std::filesystem::remove(legacy_schedule_path, remove_error);
     }
   }
 
@@ -5213,6 +5496,7 @@ std::filesystem::path MissionExecutorNode::ensureActualScheduleLogPath(
     << "CALSCALE:GREGORIAN\n"
     << "X-WR-CALNAME:AMR Sweeper Actual Mission Log\n"
     << "X-WR-TIMEZONE:" << timezone << "\n"
+    << merged_legacy_events
     << "END:VCALENDAR\n";
   return actual_schedule_path;
 }

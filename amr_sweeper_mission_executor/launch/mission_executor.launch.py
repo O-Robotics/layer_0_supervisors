@@ -22,6 +22,7 @@ def generate_launch_description():
     record_mission_rosbag = LaunchConfiguration("record_mission_rosbag")
     rosbag_directory = LaunchConfiguration("rosbag_directory")
     rosbag_topics_file = LaunchConfiguration("rosbag_topics_file")
+    record_map_run_retention_max_bytes = LaunchConfiguration("record_map_run_retention_max_bytes")
     manual_mission_inactivity_timeout_seconds = LaunchConfiguration("manual_mission_inactivity_timeout_seconds")
     idling_profile_id = LaunchConfiguration("idling_profile_id")
     mission_parser_node_name = LaunchConfiguration("mission_parser_node_name")
@@ -47,6 +48,7 @@ def generate_launch_description():
         DeclareLaunchArgument("teleop_odometry_topic", default_value="drive_controller/odom"),
         DeclareLaunchArgument("manual_mapping_odometry_topic", default_value="localization/odometry_fused"),
         DeclareLaunchArgument("record_mission_rosbag", default_value="false"),
+        DeclareLaunchArgument("record_map_run_retention_max_bytes", default_value="21474836480"),
         DeclareLaunchArgument("rosbag_directory", default_value="missions/logs"),
         DeclareLaunchArgument(
             "rosbag_topics_file",
@@ -78,6 +80,7 @@ def generate_launch_description():
                 "teleop_odometry_topic": teleop_odometry_topic,
                 "manual_mapping_odometry_topic": manual_mapping_odometry_topic,
                 "record_mission_rosbag": record_mission_rosbag,
+                "record_map_run_retention_max_bytes": record_map_run_retention_max_bytes,
                 "rosbag_directory": rosbag_directory,
                 "rosbag_topics_file": rosbag_topics_file,
                 "manual_mission_inactivity_timeout_seconds": manual_mission_inactivity_timeout_seconds,

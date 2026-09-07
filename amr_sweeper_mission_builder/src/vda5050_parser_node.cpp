@@ -40,6 +40,9 @@ namespace amr_sweeper_mission_builder
 namespace
 {
 
+constexpr char kMission2dMapDirectoryName[] = "_2D_map";
+constexpr char kMissionPathDirectoryName[] = "_Path";
+
 bool isValidVda5050MissionDocument(const nlohmann::json & document)
 {
   return document.is_object() &&
@@ -1066,12 +1069,35 @@ std::filesystem::path Vda5050MissionParser::packageOrderPath(
 std::filesystem::path Vda5050MissionParser::packageZoneSetPath(
   const std::filesystem::path & order_path)
 {
+  const auto parent = order_path.parent_path();
+  if (parent.filename() == kMissionPathDirectoryName && parent.has_parent_path()) {
+    const auto canonical = parent.parent_path() / kMission2dMapDirectoryName / "zoneSet.json";
+    if (std::filesystem::exists(canonical)) {
+      return canonical;
+    }
+  }
+  const auto canonical = parent / kMission2dMapDirectoryName / "zoneSet.json";
+  if (std::filesystem::exists(canonical)) {
+    return canonical;
+  }
   return order_path.parent_path() / "zoneSet.json";
 }
 
 std::filesystem::path Vda5050MissionParser::packageMapGeoreferencePath(
   const std::filesystem::path & order_path)
 {
+  const auto parent = order_path.parent_path();
+  if (parent.filename() == kMissionPathDirectoryName && parent.has_parent_path()) {
+    const auto canonical =
+      parent.parent_path() / kMission2dMapDirectoryName / "map_georeference.json";
+    if (std::filesystem::exists(canonical)) {
+      return canonical;
+    }
+  }
+  const auto canonical = parent / kMission2dMapDirectoryName / "map_georeference.json";
+  if (std::filesystem::exists(canonical)) {
+    return canonical;
+  }
   return order_path.parent_path() / "map_georeference.json";
 }
 
@@ -1269,25 +1295,50 @@ std::filesystem::path MissionParserNode::stageMissionFile(
 {
   const MissionIdentity identity = mission_parser_->inspectMissionIdentity(mission_path.string());
   const std::filesystem::path mission_folder = resolveMissionsLogDirectory() / identity.order_id;
+  const std::filesystem::path mission_2d_map_directory =
+    mission_folder / kMission2dMapDirectoryName;
+  const std::filesystem::path mission_path_directory =
+    mission_folder / kMissionPathDirectoryName;
   const std::filesystem::path staged_path =
-    mission_folder / (identity.order_id + "_vda5050" + mission_file_extension_);
-  std::filesystem::create_directories(mission_folder);
+    mission_path_directory / (identity.order_id + "_vda5050" + mission_file_extension_);
+  std::filesystem::create_directories(mission_2d_map_directory);
+  std::filesystem::create_directories(mission_path_directory);
   if (isZipMissionPackage(mission_path)) {
     const auto documents = readVda5050MissionPackage(mission_path);
     writeJsonDocumentAtomic(staged_path, documents.order);
-    writeJsonDocumentAtomic(mission_folder / "map_georeference.json", documents.map_georeference);
+    writeJsonDocumentAtomic(
+      mission_2d_map_directory / "map_georeference.json",
+      documents.map_georeference);
+    writeJsonDocumentAtomic(
+      mission_path_directory / "map_georeference.json",
+      documents.map_georeference);
     if (documents.zone_set.has_value()) {
-      writeJsonDocumentAtomic(mission_folder / "zoneSet.json", *documents.zone_set);
+      writeJsonDocumentAtomic(mission_2d_map_directory / "zoneSet.json", *documents.zone_set);
+      writeJsonDocumentAtomic(mission_path_directory / "zoneSet.json", *documents.zone_set);
     } else {
-      std::filesystem::remove(mission_folder / "zoneSet.json");
+      std::filesystem::remove(mission_2d_map_directory / "zoneSet.json");
+      std::filesystem::remove(mission_path_directory / "zoneSet.json");
     }
     const auto source_stamp = currentMissionStamp(mission_path);
     std::error_code stamp_error;
     std::filesystem::last_write_time(staged_path, source_stamp, stamp_error);
-    std::filesystem::last_write_time(mission_folder / "map_georeference.json", source_stamp,
-        stamp_error);
+    std::filesystem::last_write_time(
+      mission_2d_map_directory / "map_georeference.json",
+      source_stamp,
+      stamp_error);
+    std::filesystem::last_write_time(
+      mission_path_directory / "map_georeference.json",
+      source_stamp,
+      stamp_error);
     if (documents.zone_set.has_value()) {
-      std::filesystem::last_write_time(mission_folder / "zoneSet.json", source_stamp, stamp_error);
+      std::filesystem::last_write_time(
+        mission_2d_map_directory / "zoneSet.json",
+        source_stamp,
+        stamp_error);
+      std::filesystem::last_write_time(
+        mission_path_directory / "zoneSet.json",
+        source_stamp,
+        stamp_error);
     }
     return staged_path;
   }
@@ -1322,15 +1373,21 @@ std::filesystem::path MissionParserNode::stageMissionFile(
     std::filesystem::last_write_time(staged_path, source_stamp, stamp_error);
   }
 
-  const auto copy_support_file = [&mission_folder](const std::filesystem::path & source_path) {
+  const auto copy_support_file =
+    [&mission_2d_map_directory,
+      &mission_path_directory](const std::filesystem::path & source_path) {
       if (!std::filesystem::exists(source_path) || !std::filesystem::is_regular_file(source_path)) {
         return;
       }
-      const auto destination_path = mission_folder / source_path.filename();
-      std::filesystem::copy_file(
-        source_path,
-        destination_path,
-        std::filesystem::copy_options::overwrite_existing);
+      for (const auto & destination_directory : {mission_2d_map_directory,
+          mission_path_directory})
+      {
+        const auto destination_path = destination_directory / source_path.filename();
+        std::filesystem::copy_file(
+          source_path,
+          destination_path,
+          std::filesystem::copy_options::overwrite_existing);
+      }
     };
   copy_support_file(Vda5050MissionParser::packageZoneSetPath(source_order_path));
   copy_support_file(Vda5050MissionParser::packageMapGeoreferencePath(source_order_path));
@@ -1357,14 +1414,20 @@ bool MissionParserNode::buildArtifactsForMission(const std::filesystem::path & m
 
     const std::filesystem::path missions_directory = resolvePath(missions_directory_);
     const std::filesystem::path mission_directory = missionFolderPath(staged_mission_path);
+    const std::filesystem::path mission_2d_map_directory =
+      mission_directory / kMission2dMapDirectoryName;
+    const std::filesystem::path mission_path_directory =
+      mission_directory / kMissionPathDirectoryName;
+    std::filesystem::create_directories(mission_2d_map_directory);
+    std::filesystem::create_directories(mission_path_directory);
     const std::string static_costmap_basename =
       staticCostmapBasenameForMission(staged_mission_path);
     const std::string coverage_basename = coverageBasenameForMission(staged_mission_path);
-    const std::filesystem::path mission_image_path = mission_directory /
+    const std::filesystem::path mission_image_path = mission_2d_map_directory /
       (static_costmap_basename + ".pgm");
-    const std::filesystem::path mission_yaml_path = mission_directory /
+    const std::filesystem::path mission_yaml_path = mission_2d_map_directory /
       (static_costmap_basename + ".yaml");
-    const std::filesystem::path mission_coverage_path = mission_directory /
+    const std::filesystem::path mission_coverage_path = mission_path_directory /
       (coverage_basename + ".geojson");
 
     mission_parser_->saveGlobalCostmapArtifacts(
@@ -1463,11 +1526,23 @@ std::filesystem::file_time_type MissionParserNode::currentMissionStamp(
 std::filesystem::path MissionParserNode::missionFolderPath(
   const std::filesystem::path & mission_path) const
 {
+  if (mission_path.has_parent_path() &&
+    mission_path.parent_path().filename() == kMissionPathDirectoryName &&
+    mission_path.parent_path().has_parent_path())
+  {
+    return mission_path.parent_path().parent_path();
+  }
   return mission_path.parent_path();
 }
 
 std::string MissionParserNode::missionStemForPath(const std::filesystem::path & mission_path) const
 {
+  if (mission_path.has_parent_path() &&
+    mission_path.parent_path().filename() == kMissionPathDirectoryName &&
+    mission_path.parent_path().has_parent_path())
+  {
+    return mission_path.parent_path().parent_path().filename().string();
+  }
   const std::filesystem::path missions_directory = resolvePath(missions_directory_);
   if (mission_path.has_parent_path() && mission_path.parent_path() != missions_directory) {
     const std::filesystem::path parent = mission_path.parent_path();

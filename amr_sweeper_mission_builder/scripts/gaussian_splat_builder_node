@@ -726,7 +726,11 @@ class GaussianSplatBuilderNode(Node):
         if request.gaussian_manifest_file.strip():
             return self._resolve_path(request.gaussian_manifest_file)
         if request.mission_execution_directory.strip():
-            return self._resolve_path(request.mission_execution_directory) / "gaussian" / "manifest.json"
+            mission_execution_directory = self._resolve_path(request.mission_execution_directory)
+            canonical_manifest = mission_execution_directory / "_3D_map" / "gaussian" / "manifest.json"
+            if canonical_manifest.exists():
+                return canonical_manifest
+            return mission_execution_directory / "gaussian" / "manifest.json"
         if request.mission_id.strip():
             return self._newest_capture_manifest_for_mission(request.mission_id.strip())
         raise RuntimeError(

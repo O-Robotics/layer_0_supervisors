@@ -22,6 +22,7 @@ from datetime import datetime, timedelta, timezone
 import errno
 from http import HTTPStatus
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -118,6 +119,31 @@ MISSION_LAYER_OVERRIDE_FALLBACKS = {
 }
 
 TELEOP_MISSION_ID = "Teleop"
+RECORD_MAP_MISSION_ID = "RecordMap"
+MISSION_2D_MAP_DIR = "_2D_map"
+MISSION_3D_MAP_DIR = "_3D_map"
+MISSION_PATH_DIR = "_Path"
+MISSION_METADATA_FILE = "mission.json"
+LEGACY_LATEST_RECORDED_MAP_DIR = "latest_recorded_map"
+LEGACY_LATEST_RECORDED_MAP_METADATA = "latest_recorded_map.json"
+SEMANTIC_ZONE_TYPES = {"WORK_AREA", "NO_GO", "TRANSIT", "STATION"}
+SEMANTIC_TO_VDA_ZONE_TYPE = {
+    "WORK_AREA": "RELEASE",
+    "NO_GO": "BLOCKED",
+    "TRANSIT": "DIRECTED",
+    "STATION": "ACTION",
+}
+DEFAULT_MISSION_SETTINGS = {
+    "pattern": "zigzag",
+    "robot_speed": "standard",
+    "sweep_intensity": "standard",
+    "edge_sweep": True,
+    "tool": {
+        "enabled": True,
+        "mode": "standard",
+    },
+    "zone_overrides": {},
+}
 TELEOP_PROFILE_ID = 220
 TELEOP_DRIVE_LINEAR_SCALE = 0.5
 TELEOP_DRIVE_ANGULAR_SCALE = 0.785
@@ -151,6 +177,36 @@ def _metadata_relative_path(value: Any, metadata_file: Path) -> Path | None:
     if path.is_absolute():
         return path
     return metadata_file.parent / path
+
+
+def _mission_metadata_file(mission_directory: Path) -> Path:
+    canonical = mission_directory / MISSION_METADATA_FILE
+    if canonical.exists():
+        return canonical
+    legacy = mission_directory / "map.json"
+    if legacy.exists():
+        return legacy
+    return canonical
+
+
+def _mission_artifact_destination(mission_directory: Path, key: str, filename: str) -> Path:
+    if key in {
+        "recorded_work_area_static_costmap_yaml",
+        "recorded_work_area_static_costmap_image",
+        "mission_static_costmap_yaml",
+        "mission_static_costmap_image",
+        "saved_static_costmap_yaml",
+    }:
+        return mission_directory / MISSION_2D_MAP_DIR / filename
+    if key in {
+        "recorded_work_area_route_file",
+        "recorded_work_area_navsat_file",
+        "actual_path_file",
+        "actual_path_navsat_file",
+        "mission_route_file",
+    }:
+        return mission_directory / MISSION_PATH_DIR / filename
+    return mission_directory / filename
 
 
 def _existing_paths(candidates: list[Path]) -> list[Path]:
@@ -793,6 +849,16 @@ class MissionBackendNode(Node):
                 return self._ipc_backend_response(self.save_map(payload))
             if action == "DELETE_MAP":
                 return self._ipc_backend_response(self.delete_map(payload))
+            if action == "RENAME_MISSION":
+                return self._ipc_backend_response(self.rename_mission(payload))
+            if action == "CREATE_MISSION_ZONE":
+                return self._ipc_backend_response(self.create_mission_zone(payload))
+            if action == "UPDATE_MISSION_ZONE":
+                return self._ipc_backend_response(self.update_mission_zone(payload))
+            if action == "DELETE_MISSION_ZONE":
+                return self._ipc_backend_response(self.delete_mission_zone(payload))
+            if action == "SET_MISSION_STATION":
+                return self._ipc_backend_response(self.set_mission_station(payload))
             if action == "GET_RECORD_MAP":
                 return self._ipc_backend_response(self.record_map_snapshot())
             if action == "START_RECORD_MAP":
@@ -966,6 +1032,13 @@ class MissionBackendNode(Node):
             self._recent_logs.clear()
 
     def list_executable_missions(self) -> dict[str, Any]:
+        if not self._list_missions_client.service_is_ready():
+            return {
+                "success": True,
+                "message": f"Service '{self._list_missions_service}' is not ready; showing local mission artifacts.",
+                "missions": [],
+                "service_ready": False,
+            }
         response = self._call_service(
             self._list_missions_client,
             ListExecutableMissions.Request(),
@@ -1000,6 +1073,7 @@ class MissionBackendNode(Node):
             "success": bool(response.success),
             "message": response.message,
             "missions": missions,
+            "service_ready": True,
         }
 
     def execute_manual_mission(self, mission_id: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -1366,17 +1440,23 @@ class MissionBackendNode(Node):
         request_payload = dict(payload)
         map_id = self._sanitize_map_id(str(request_payload.get("map_id", "")))
         if map_id:
+            logs_directory = _resolve_path(self._missions_log_directory)
             maps_directory = _resolve_path(self._maps_directory)
-            map_directory = (maps_directory / map_id).resolve()
-            maps_root = maps_directory.resolve()
-            if maps_root not in map_directory.parents or not map_directory.exists():
+            map_directory = (logs_directory / map_id).resolve()
+            root = logs_directory.resolve()
+            if root not in map_directory.parents or not map_directory.exists():
+                map_directory = (maps_directory / map_id).resolve()
+                root = maps_directory.resolve()
+            if root not in map_directory.parents or not map_directory.exists():
                 raise RuntimeError(f"Map '{map_id}' was not found")
-            metadata_file = map_directory / "map.json"
+            metadata_file = _mission_metadata_file(map_directory)
             metadata = json.loads(metadata_file.read_text(encoding="utf-8")) if metadata_file.exists() else {}
             manifest_value = str(metadata.get("gaussian_manifest_file", "") or "")
             manifest = _metadata_relative_path(manifest_value, metadata_file) if manifest_value else None
             if not manifest or not manifest.exists():
-                fallback = map_directory / "gaussian" / "manifest.json"
+                fallback = map_directory / MISSION_3D_MAP_DIR / "gaussian" / "manifest.json"
+                if not fallback.exists():
+                    fallback = map_directory / "gaussian" / "manifest.json"
                 manifest = fallback if fallback.exists() else None
             if not manifest or not manifest.exists() or not manifest.is_file():
                 raise RuntimeError(
@@ -1432,6 +1512,16 @@ class MissionBackendNode(Node):
         }
 
     def gaussian_splat_status(self) -> dict[str, Any]:
+        if not self._gaussian_splat_status_client.service_is_ready():
+            return {
+                "success": True,
+                "builder_service_success": False,
+                "service_ready": False,
+                "status": {
+                    "state": "unavailable",
+                    "message": f"Service '{self._gaussian_splat_status_service}' is not ready.",
+                },
+            }
         response = self._call_service(
             self._gaussian_splat_status_client,
             Trigger.Request(),
@@ -1445,6 +1535,7 @@ class MissionBackendNode(Node):
         return {
             "success": True,
             "builder_service_success": bool(response.success),
+            "service_ready": True,
             "status": status,
         }
 
@@ -1838,6 +1929,8 @@ class MissionBackendNode(Node):
         actual_schedule_log_directory = _resolve_path(self._actual_schedule_log_directory)
         missions_log_directory = _resolve_path(self._missions_log_directory)
         for candidate in (
+            missions_log_directory / "logged_events.ics",
+            actual_schedule_log_directory / "logged_events.ics",
             missions_log_directory / "log.ics",
             actual_schedule_log_directory / "log.ics",
             actual_schedule_log_directory / "simulation_schedule.ics",
@@ -2475,7 +2568,7 @@ class MissionBackendNode(Node):
 
         active_execution = self._discover_active_execution() or {}
         active_recording = (
-            active_execution.get("mission_id") == "RecordMap" and
+            active_execution.get("mission_id") == RECORD_MAP_MISSION_ID and
             active_execution.get("active", True) is not False
         )
         active_navsat_geojson = None
@@ -2493,8 +2586,14 @@ class MissionBackendNode(Node):
             except Exception:
                 active_navsat_geojson = None
 
-        latest_directory = _resolve_path(self._missions_log_directory) / "latest_recorded_map"
-        latest_metadata_file = latest_directory / "latest_recorded_map.json"
+        latest_directory = _resolve_path(self._missions_log_directory) / RECORD_MAP_MISSION_ID
+        latest_metadata_file = _mission_metadata_file(latest_directory)
+        if not latest_metadata_file.exists():
+            legacy_directory = _resolve_path(self._missions_log_directory) / LEGACY_LATEST_RECORDED_MAP_DIR
+            legacy_metadata_file = legacy_directory / LEGACY_LATEST_RECORDED_MAP_METADATA
+            if legacy_metadata_file.exists():
+                latest_directory = legacy_directory
+                latest_metadata_file = legacy_metadata_file
         latest_metadata = None
         latest_route_geojson = None
         latest_navsat_geojson = None
@@ -2544,8 +2643,11 @@ class MissionBackendNode(Node):
         }
 
     def _latest_gaussian_capture_manifest_file(self) -> str:
-        latest_directory = _resolve_path(self._missions_log_directory) / "latest_recorded_map"
-        latest_metadata_file = latest_directory / "latest_recorded_map.json"
+        latest_directory = _resolve_path(self._missions_log_directory) / RECORD_MAP_MISSION_ID
+        latest_metadata_file = _mission_metadata_file(latest_directory)
+        if not latest_metadata_file.exists():
+            latest_directory = _resolve_path(self._missions_log_directory) / LEGACY_LATEST_RECORDED_MAP_DIR
+            latest_metadata_file = latest_directory / LEGACY_LATEST_RECORDED_MAP_METADATA
         if latest_metadata_file.exists():
             try:
                 latest_metadata = json.loads(latest_metadata_file.read_text(encoding="utf-8"))
@@ -2579,8 +2681,8 @@ class MissionBackendNode(Node):
         manifest = Path(str(artifact_manifest_file))
         if not manifest.exists():
             return
-        latest_directory = _resolve_path(self._missions_log_directory) / "latest_recorded_map"
-        latest_metadata_file = latest_directory / "latest_recorded_map.json"
+        latest_directory = _resolve_path(self._missions_log_directory) / RECORD_MAP_MISSION_ID
+        latest_metadata_file = _mission_metadata_file(latest_directory)
         if not latest_metadata_file.exists():
             return
         try:
@@ -2594,8 +2696,12 @@ class MissionBackendNode(Node):
         manifest = Path(str(artifact_manifest_file))
         if not manifest.exists():
             return
-        map_directory = _resolve_path(self._maps_directory) / self._sanitize_map_id(map_id)
-        metadata_file = map_directory / "map.json"
+        safe_map_id = self._sanitize_map_id(map_id)
+        map_directory = _resolve_path(self._missions_log_directory) / safe_map_id
+        metadata_file = _mission_metadata_file(map_directory)
+        if not metadata_file.exists():
+            map_directory = _resolve_path(self._maps_directory) / safe_map_id
+            metadata_file = _mission_metadata_file(map_directory)
         if not metadata_file.exists():
             return
         try:
@@ -2677,6 +2783,8 @@ class MissionBackendNode(Node):
             route_geojson = None
             route_path = mission_file.parent / f"{mission_id}_path.geojson"
             if not route_path.exists():
+                route_path = missions_log_directory / mission_id / MISSION_PATH_DIR / f"{mission_id}_path_planned.geojson"
+            if not route_path.exists():
                 route_path = missions_log_directory / mission_id / f"{mission_id}_path_planned.geojson"
             if route_path.exists():
                 route_geojson = self._load_geojson_feature_collection(route_path)
@@ -2688,6 +2796,7 @@ class MissionBackendNode(Node):
                     "mission_file": str(mission_file),
                     "route_geojson": route_geojson,
                     "route_available": route_geojson is not None,
+                    "run_history": self._mission_run_history(mission_id),
                 }
             )
 
@@ -2708,8 +2817,18 @@ class MissionBackendNode(Node):
     def maps_snapshot(self) -> dict[str, Any]:
         maps_directory = _resolve_path(self._maps_directory)
         maps_directory.mkdir(parents=True, exist_ok=True)
+        missions_log_directory = _resolve_path(self._missions_log_directory)
+        missions_log_directory.mkdir(parents=True, exist_ok=True)
         maps: list[dict[str, Any]] = []
-        for metadata_file in sorted(maps_directory.glob("*/map.json")):
+        metadata_files = [
+            *missions_log_directory.glob(f"*/{MISSION_METADATA_FILE}"),
+            *maps_directory.glob("*/map.json"),
+        ]
+        seen_ids: set[str] = set()
+        for metadata_file in sorted(metadata_files):
+            if metadata_file.parent.name in seen_ids:
+                continue
+            seen_ids.add(metadata_file.parent.name)
             try:
                 metadata = json.loads(metadata_file.read_text(encoding="utf-8"))
             except Exception as exc:  # noqa: BLE001
@@ -2725,6 +2844,7 @@ class MissionBackendNode(Node):
                     "map_id": metadata_file.parent.name,
                     "name": metadata_file.parent.name,
                     "directory": str(metadata_file.parent),
+                    "run_history": self._mission_run_history(metadata_file.parent.name),
                     "error": str(exc),
                 })
 
@@ -2742,13 +2862,56 @@ class MissionBackendNode(Node):
             "default_pattern": latest_snapshot.get("default_pattern", "zigzag"),
         }
 
+    def _mission_run_history(self, mission_id: str, limit: int = 25) -> list[dict[str, Any]]:
+        safe_mission_id = self._sanitize_map_id(str(mission_id))
+        if not safe_mission_id:
+            return []
+        mission_directory = _resolve_path(self._missions_log_directory) / safe_mission_id
+        if not mission_directory.exists() or not mission_directory.is_dir():
+            return []
+        runs: list[dict[str, Any]] = []
+        for run_directory in sorted(mission_directory.iterdir(), reverse=True):
+            if not run_directory.is_dir() or run_directory.name.startswith("_"):
+                continue
+            context_files = sorted(run_directory.glob("*_context.json"))
+            if not context_files:
+                continue
+            context_file = context_files[-1]
+            try:
+                context = json.loads(context_file.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            actual_path = self._optional_path(context.get("actual_path_file"))
+            actual_navsat = self._optional_path(context.get("actual_path_navsat_file"))
+            planned_path = self._optional_path(context.get("mission_route_file"))
+            run = {
+                "run_id": run_directory.name,
+                "run_started_at": str(context.get("run_started_at") or run_directory.name),
+                "status": str(context.get("status") or context.get("outcome") or "Completed"),
+                "context_file": str(context_file),
+                "actual_path_file": str(actual_path) if actual_path else "",
+                "actual_path_navsat_file": str(actual_navsat) if actual_navsat else "",
+                "mission_route_file": str(planned_path) if planned_path else "",
+                "actual_path_length_meters": context.get("actual_path_length_meters", 0.0),
+            }
+            if actual_path:
+                run["actual_path_geojson"] = self._load_geojson_feature_collection(actual_path)
+            if actual_navsat:
+                run["actual_path_navsat_geojson"] = self._load_geojson_feature_collection(actual_navsat)
+            if planned_path:
+                run["planned_path_geojson"] = self._load_geojson_feature_collection(planned_path)
+            runs.append(run)
+            if len(runs) >= limit:
+                break
+        return runs
+
     def save_map(self, payload: dict[str, Any]) -> dict[str, Any]:
         map_id = self._sanitize_map_id(str(payload.get("map_id") or payload.get("name") or ""))
         if not map_id:
             return {"success": False, "message": "map_id or name is required"}
         maps_directory = _resolve_path(self._maps_directory)
-        map_directory = maps_directory / map_id
-        maps_root = maps_directory.resolve()
+        missions_log_directory = _resolve_path(self._missions_log_directory)
+        map_directory = missions_log_directory / map_id
         overwrite = bool(payload.get("overwrite_existing", True))
         if map_directory.exists() and not overwrite:
             return {"success": False, "message": f"Map '{map_id}' already exists"}
@@ -2757,10 +2920,14 @@ class MissionBackendNode(Node):
         source_map_id = self._sanitize_map_id(str(payload.get("source_map_id", "")))
         source_metadata: dict[str, Any] = {}
         if source in {"saved_map", "metadata"} and source_map_id:
-            source_directory = (maps_directory / source_map_id).resolve()
-            if maps_root not in source_directory.parents or not source_directory.exists():
+            source_directory = (missions_log_directory / source_map_id).resolve()
+            source_root = missions_log_directory.resolve()
+            if source_root not in source_directory.parents or not source_directory.exists():
+                source_directory = (maps_directory / source_map_id).resolve()
+                source_root = maps_directory.resolve()
+            if source_root not in source_directory.parents or not source_directory.exists():
                 return {"success": False, "message": f"Source map '{source_map_id}' was not found"}
-            source_metadata_file = source_directory / "map.json"
+            source_metadata_file = _mission_metadata_file(source_directory)
             if source_metadata_file.exists():
                 try:
                     source_metadata = json.loads(source_metadata_file.read_text(encoding="utf-8"))
@@ -2768,7 +2935,7 @@ class MissionBackendNode(Node):
                     source_metadata = {}
 
         map_directory.mkdir(parents=True, exist_ok=True)
-        existing_metadata_file = map_directory / "map.json"
+        existing_metadata_file = _mission_metadata_file(map_directory)
         existing_metadata: dict[str, Any] = {}
         if existing_metadata_file.exists():
             try:
@@ -2794,11 +2961,11 @@ class MissionBackendNode(Node):
         elif source == "saved_map" and source_map_id:
             self._copy_saved_map_into_map_directory(source_map_id, map_directory, map_id, metadata)
 
-        metadata_file = map_directory / "map.json"
+        metadata_file = map_directory / MISSION_METADATA_FILE
         metadata_file.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
         return {
             "success": True,
-            "message": f"Map '{map_id}' saved",
+            "message": f"Mission '{map_id}' saved",
             "map": self._map_payload_from_metadata(map_directory, metadata),
         }
 
@@ -2807,26 +2974,448 @@ class MissionBackendNode(Node):
         if not map_id:
             return {"success": False, "message": "map_id is required"}
         maps_directory = _resolve_path(self._maps_directory)
-        map_directory = (maps_directory / map_id).resolve()
-        maps_root = maps_directory.resolve()
+        missions_log_directory = _resolve_path(self._missions_log_directory)
+        map_directory = (missions_log_directory / map_id).resolve()
+        maps_root = missions_log_directory.resolve()
+        if maps_root not in map_directory.parents or not map_directory.exists():
+            map_directory = (maps_directory / map_id).resolve()
+            maps_root = maps_directory.resolve()
         if maps_root not in map_directory.parents:
-            return {"success": False, "message": "Refusing to delete outside maps directory"}
+            return {"success": False, "message": "Refusing to delete outside mission/map directories"}
         if not map_directory.exists():
-            return {"success": False, "message": f"Map '{map_id}' was not found"}
+            return {"success": False, "message": f"Mission '{map_id}' was not found"}
+        if map_id in {RECORD_MAP_MISSION_ID, TELEOP_MISSION_ID, "SpotSweep", "3x3Sweep"}:
+            return {"success": False, "message": f"Mission '{map_id}' is read-only and cannot be deleted"}
         shutil.rmtree(map_directory)
-        return {"success": True, "message": f"Map '{map_id}' deleted", "map_id": map_id}
+        return {"success": True, "message": f"Mission '{map_id}' deleted", "map_id": map_id}
+
+    def rename_mission(self, payload: dict[str, Any]) -> dict[str, Any]:
+        old_id = self._sanitize_map_id(str(payload.get("mission_id") or payload.get("map_id") or ""))
+        new_id = self._sanitize_map_id(str(payload.get("new_mission_id") or payload.get("new_map_id") or ""))
+        if not old_id or not new_id:
+            return {"success": False, "message": "mission_id and new_mission_id are required"}
+        if old_id in {RECORD_MAP_MISSION_ID, TELEOP_MISSION_ID, "SpotSweep", "3x3Sweep"}:
+            return {"success": False, "message": f"Mission '{old_id}' is read-only and cannot be renamed"}
+        if old_id == new_id:
+            return {"success": False, "message": "Choose a different mission name before renaming"}
+
+        missions_log_directory = _resolve_path(self._missions_log_directory)
+        root = missions_log_directory.resolve()
+        old_directory = (missions_log_directory / old_id).resolve()
+        new_directory = (missions_log_directory / new_id).resolve()
+        if root not in old_directory.parents or root not in new_directory.parents:
+            return {"success": False, "message": "Refusing to rename outside missions log directory"}
+        if not old_directory.exists():
+            return {"success": False, "message": f"Mission '{old_id}' was not found"}
+        if not _mission_metadata_file(old_directory).exists():
+            return {"success": False, "message": f"Mission '{old_id}' is not a saved mission bundle"}
+        if new_directory.exists():
+            return {"success": False, "message": f"Mission '{new_id}' already exists"}
+
+        old_directory.rename(new_directory)
+        metadata_file = _mission_metadata_file(new_directory)
+        metadata: dict[str, Any] = {}
+        try:
+            metadata = json.loads(metadata_file.read_text(encoding="utf-8"))
+        except Exception:
+            metadata = {}
+
+        self._rename_mission_artifact_prefixes(new_directory, old_id, new_id)
+        metadata = self._rewrite_mission_reference_values(metadata, old_id, new_id, old_directory, new_directory)
+        metadata["map_id"] = new_id
+        metadata["mission_id"] = new_id
+        metadata["name"] = new_id
+        metadata["updated_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        self._rewrite_mission_metadata_artifact_paths(metadata, new_directory, old_id, new_id)
+        metadata_file.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
+        return {
+            "success": True,
+            "message": f"Mission '{old_id}' renamed to '{new_id}'",
+            "mission_id": new_id,
+            "map": self._map_payload_from_metadata(new_directory, metadata),
+        }
+
+    def create_mission_zone(self, payload: dict[str, Any]) -> dict[str, Any]:
+        mission_directory, metadata = self._editable_mission_bundle_from_payload(payload)
+        zone = self._validated_semantic_zone(payload, existing_zone_id=None)
+        zone_set = self._load_or_create_zone_set(mission_directory, metadata)
+        zones = zone_set.setdefault("zoneSet", {}).setdefault("zones", [])
+        if any(str(existing.get("zoneId", "")) == zone["zoneId"] for existing in zones if isinstance(existing, dict)):
+            return {"success": False, "message": f"Area '{zone['zoneId']}' already exists"}
+        zones.append(zone)
+        self._write_zone_set(mission_directory, zone_set)
+        self._touch_mission_metadata(mission_directory, metadata)
+        return {
+            "success": True,
+            "message": f"{zone['name']} saved",
+            "map": self._map_payload_from_metadata(mission_directory, metadata),
+        }
+
+    def update_mission_zone(self, payload: dict[str, Any]) -> dict[str, Any]:
+        mission_directory, metadata = self._editable_mission_bundle_from_payload(payload)
+        zone_id = self._sanitize_zone_id(str(payload.get("zone_id") or payload.get("id") or ""))
+        if not zone_id:
+            return {"success": False, "message": "zone_id is required"}
+        zone_set = self._load_or_create_zone_set(mission_directory, metadata)
+        zones = zone_set.setdefault("zoneSet", {}).setdefault("zones", [])
+        for index, existing in enumerate(zones):
+            if isinstance(existing, dict) and str(existing.get("zoneId", "")) == zone_id:
+                zones[index] = self._validated_semantic_zone(payload, existing_zone_id=zone_id)
+                self._write_zone_set(mission_directory, zone_set)
+                self._touch_mission_metadata(mission_directory, metadata)
+                return {
+                    "success": True,
+                    "message": f"{zones[index]['name']} updated",
+                    "map": self._map_payload_from_metadata(mission_directory, metadata),
+                }
+        return {"success": False, "message": f"Area '{zone_id}' was not found"}
+
+    def delete_mission_zone(self, payload: dict[str, Any]) -> dict[str, Any]:
+        mission_directory, metadata = self._editable_mission_bundle_from_payload(payload)
+        zone_id = self._sanitize_zone_id(str(payload.get("zone_id") or payload.get("id") or ""))
+        if not zone_id:
+            return {"success": False, "message": "zone_id is required"}
+        zone_set = self._load_or_create_zone_set(mission_directory, metadata)
+        zones = zone_set.setdefault("zoneSet", {}).setdefault("zones", [])
+        next_zones = [
+            zone for zone in zones
+            if not (isinstance(zone, dict) and str(zone.get("zoneId", "")) == zone_id)
+        ]
+        if len(next_zones) == len(zones):
+            return {"success": False, "message": f"Area '{zone_id}' was not found"}
+        zone_set["zoneSet"]["zones"] = next_zones
+        self._write_zone_set(mission_directory, zone_set)
+        self._touch_mission_metadata(mission_directory, metadata)
+        return {
+            "success": True,
+            "message": "Area deleted",
+            "map": self._map_payload_from_metadata(mission_directory, metadata),
+        }
+
+    def set_mission_station(self, payload: dict[str, Any]) -> dict[str, Any]:
+        mission_directory, metadata = self._editable_mission_bundle_from_payload(payload)
+        station_payload = payload.get("station", payload)
+        if not isinstance(station_payload, dict):
+            return {"success": False, "message": "station object is required"}
+        raw_position = station_payload.get("position", station_payload)
+        if not isinstance(raw_position, dict):
+            return {"success": False, "message": "Station position is required"}
+        try:
+            x = float(raw_position.get("x"))
+            y = float(raw_position.get("y"))
+        except (TypeError, ValueError):
+            return {"success": False, "message": "Station position requires finite x and y"}
+        if not math.isfinite(x) or not math.isfinite(y):
+            return {"success": False, "message": "Station position requires finite x and y"}
+        heading = station_payload.get("heading")
+        if heading is not None:
+            try:
+                heading = float(heading)
+            except (TypeError, ValueError):
+                return {"success": False, "message": "Station heading must be a number"}
+            if not math.isfinite(heading):
+                return {"success": False, "message": "Station heading must be finite"}
+        metadata["station"] = {
+            "id": "station",
+            "name": str(station_payload.get("name") or "Station"),
+            "type": "STATION",
+            "enabled": bool(station_payload.get("enabled", True)),
+            "position": {"x": x, "y": y},
+        }
+        if heading is not None:
+            metadata["station"]["heading"] = heading
+        self._touch_mission_metadata(mission_directory, metadata)
+        return {
+            "success": True,
+            "message": "Station saved",
+            "map": self._map_payload_from_metadata(mission_directory, metadata),
+        }
+
+    def _editable_mission_bundle_from_payload(self, payload: dict[str, Any]) -> tuple[Path, dict[str, Any]]:
+        mission_id = self._sanitize_map_id(str(payload.get("mission_id") or payload.get("map_id") or ""))
+        if not mission_id:
+            raise ValueError("mission_id is required")
+        if mission_id in {RECORD_MAP_MISSION_ID, TELEOP_MISSION_ID, "SpotSweep", "3x3Sweep"}:
+            raise ValueError(f"Mission '{mission_id}' is read-only")
+        missions_log_directory = _resolve_path(self._missions_log_directory)
+        root = missions_log_directory.resolve()
+        mission_directory = (missions_log_directory / mission_id).resolve()
+        if root not in mission_directory.parents:
+            raise ValueError("Refusing to edit outside missions log directory")
+        metadata_file = _mission_metadata_file(mission_directory)
+        if not mission_directory.exists() or not metadata_file.exists():
+            raise ValueError(f"Mission '{mission_id}' is not a saved mission bundle")
+        try:
+            metadata = json.loads(metadata_file.read_text(encoding="utf-8"))
+        except Exception:
+            metadata = {}
+        metadata.setdefault("map_id", mission_id)
+        metadata.setdefault("mission_id", mission_id)
+        metadata.setdefault("name", mission_id)
+        return mission_directory, metadata
+
+    @staticmethod
+    def _sanitize_zone_id(value: str) -> str:
+        cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "_", value.strip())
+        return cleaned.strip("._-")
+
+    def _validated_semantic_zone(
+        self,
+        payload: dict[str, Any],
+        existing_zone_id: str | None,
+    ) -> dict[str, Any]:
+        raw_type = str(payload.get("type") or payload.get("semantic_type") or "").strip().upper()
+        if raw_type not in {"WORK_AREA", "NO_GO", "TRANSIT"}:
+            raise ValueError("Area type must be Work Area, No-Go Area, or Transit Path")
+        raw_name = str(payload.get("name") or "").strip()
+        zone_id = existing_zone_id or self._sanitize_zone_id(str(payload.get("zone_id") or payload.get("id") or raw_name))
+        if not zone_id:
+            zone_id = self._sanitize_zone_id(f"{raw_type.lower()}_{int(time.time())}")
+        name = raw_name or zone_id.replace("_", " ").title()
+        geometry = self._validated_zone_geometry(payload.get("geometry"), raw_type)
+        coordinates = geometry.get("coordinates", [])
+        vertices = []
+        points = coordinates[0] if geometry["type"] == "Polygon" else coordinates
+        for point in points:
+            vertices.append({"x": float(point[0]), "y": float(point[1])})
+        return {
+            "zoneId": zone_id,
+            "zoneType": SEMANTIC_TO_VDA_ZONE_TYPE[raw_type],
+            "semantic_type": raw_type,
+            "name": name,
+            "enabled": bool(payload.get("enabled", True)),
+            "geometry": geometry,
+            "vertices": vertices,
+        }
+
+    def _validated_zone_geometry(self, geometry: Any, semantic_type: str) -> dict[str, Any]:
+        if not isinstance(geometry, dict):
+            raise ValueError("Area geometry is required")
+        geometry_type = str(geometry.get("type") or "").strip()
+        expected = "LineString" if semantic_type == "TRANSIT" else "Polygon"
+        if geometry_type != expected:
+            raise ValueError(f"{semantic_type.replace('_', ' ').title()} requires {expected} geometry")
+        raw_coordinates = geometry.get("coordinates")
+        if expected == "Polygon":
+            if not isinstance(raw_coordinates, list) or not raw_coordinates or not isinstance(raw_coordinates[0], list):
+                raise ValueError("Polygon geometry requires a coordinate ring")
+            ring = self._validated_coordinate_list(raw_coordinates[0], min_points=3)
+            if ring[0] != ring[-1]:
+                ring.append(list(ring[0]))
+            if len(ring) < 4:
+                raise ValueError("Polygon requires at least three vertices")
+            if self._polygon_self_intersects(ring):
+                raise ValueError("Polygon cannot self-intersect")
+            return {"type": "Polygon", "coordinates": [ring]}
+        coordinates = self._validated_coordinate_list(raw_coordinates, min_points=2)
+        return {"type": "LineString", "coordinates": coordinates}
+
+    @staticmethod
+    def _validated_coordinate_list(raw_coordinates: Any, min_points: int) -> list[list[float]]:
+        if not isinstance(raw_coordinates, list) or len(raw_coordinates) < min_points:
+            raise ValueError(f"Geometry requires at least {min_points} points")
+        coordinates: list[list[float]] = []
+        for point in raw_coordinates:
+            if not isinstance(point, list) or len(point) < 2:
+                raise ValueError("Geometry points must be [x, y] arrays")
+            try:
+                x = float(point[0])
+                y = float(point[1])
+            except (TypeError, ValueError):
+                raise ValueError("Geometry points must contain finite x/y numbers") from None
+            if not math.isfinite(x) or not math.isfinite(y):
+                raise ValueError("Geometry points must contain finite x/y numbers")
+            coordinates.append([x, y])
+        return coordinates
+
+    @staticmethod
+    def _polygon_self_intersects(ring: list[list[float]]) -> bool:
+        def orientation(a: list[float], b: list[float], c: list[float]) -> float:
+            return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+
+        def intersects(a: list[float], b: list[float], c: list[float], d: list[float]) -> bool:
+            o1 = orientation(a, b, c)
+            o2 = orientation(a, b, d)
+            o3 = orientation(c, d, a)
+            o4 = orientation(c, d, b)
+            return (o1 * o2 < 0.0) and (o3 * o4 < 0.0)
+
+        segments = list(zip(ring[:-1], ring[1:]))
+        for left_index, (a, b) in enumerate(segments):
+            for right_index, (c, d) in enumerate(segments):
+                if abs(left_index - right_index) <= 1:
+                    continue
+                if left_index == 0 and right_index == len(segments) - 1:
+                    continue
+                if intersects(a, b, c, d):
+                    return True
+        return False
+
+    def _load_or_create_zone_set(self, mission_directory: Path, metadata: dict[str, Any]) -> dict[str, Any]:
+        zone_set_path = mission_directory / MISSION_2D_MAP_DIR / "zoneSet.json"
+        if zone_set_path.exists():
+            try:
+                document = json.loads(zone_set_path.read_text(encoding="utf-8"))
+                if isinstance(document, dict) and isinstance(document.get("zoneSet"), dict):
+                    document["zoneSet"].setdefault("zones", [])
+                    return document
+            except Exception:
+                pass
+        mission_id = str(metadata.get("mission_id") or metadata.get("map_id") or mission_directory.name)
+        return {
+            "headerId": 1,
+            "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "version": "3.0.0",
+            "manufacturer": "O-Robotics",
+            "serialNumber": "amr_sweeper",
+            "zoneSet": {
+                "mapId": str(metadata.get("map_id") or f"{mission_id}_map"),
+                "zoneSetId": f"{mission_id}_zones",
+                "zoneSetDescriptor": "Mission semantic areas",
+                "zones": [],
+            },
+        }
+
+    def _write_zone_set(self, mission_directory: Path, zone_set: dict[str, Any]) -> None:
+        zone_set["timestamp"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        for relative in [MISSION_2D_MAP_DIR, MISSION_PATH_DIR]:
+            target = mission_directory / relative / "zoneSet.json"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(json.dumps(zone_set, indent=2) + "\n", encoding="utf-8")
+
+    def _touch_mission_metadata(self, mission_directory: Path, metadata: dict[str, Any]) -> None:
+        metadata_file = mission_directory / MISSION_METADATA_FILE
+        settings = dict(DEFAULT_MISSION_SETTINGS)
+        existing_settings = metadata.get("mission_settings", {})
+        if isinstance(existing_settings, dict):
+            settings.update(existing_settings)
+            settings["tool"] = {
+                **DEFAULT_MISSION_SETTINGS["tool"],
+                **(existing_settings.get("tool", {}) if isinstance(existing_settings.get("tool"), dict) else {}),
+            }
+            settings["zone_overrides"] = (
+                existing_settings.get("zone_overrides", {})
+                if isinstance(existing_settings.get("zone_overrides"), dict)
+                else {}
+            )
+        metadata["mission_settings"] = settings
+        metadata["updated_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        metadata_file.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
+
+    def _rename_mission_artifact_prefixes(self, mission_directory: Path, old_id: str, new_id: str) -> None:
+        for child in sorted(mission_directory.rglob(f"{old_id}*"), key=lambda path: len(path.parts), reverse=True):
+            if child.name in {MISSION_METADATA_FILE, "map.json"}:
+                continue
+            target = child.with_name(f"{new_id}{child.name[len(old_id):]}")
+            if target.exists():
+                continue
+            child.rename(target)
+
+    def _rewrite_mission_reference_values(
+        self,
+        value: Any,
+        old_id: str,
+        new_id: str,
+        old_directory: Path,
+        new_directory: Path,
+    ) -> Any:
+        if isinstance(value, dict):
+            return {
+                key: self._rewrite_mission_reference_values(
+                    nested_value,
+                    old_id,
+                    new_id,
+                    old_directory,
+                    new_directory,
+                )
+                for key, nested_value in value.items()
+            }
+        if isinstance(value, list):
+            return [
+                self._rewrite_mission_reference_values(item, old_id, new_id, old_directory, new_directory)
+                for item in value
+            ]
+        if not isinstance(value, str):
+            return value
+        rewritten = value.replace(str(old_directory), str(new_directory))
+        rewritten = rewritten.replace(f"/{old_id}/", f"/{new_id}/")
+        rewritten = rewritten.replace(f"{old_id}_", f"{new_id}_")
+        rewritten = rewritten.replace(f"{old_id}.", f"{new_id}.")
+        return rewritten
+
+    def _rewrite_mission_metadata_artifact_paths(
+        self,
+        metadata: dict[str, Any],
+        mission_directory: Path,
+        old_id: str,
+        new_id: str,
+    ) -> None:
+        metadata_file = mission_directory / MISSION_METADATA_FILE
+        for yaml_key, image_key in [
+            ("recorded_work_area_static_costmap_yaml", "recorded_work_area_static_costmap_image"),
+            ("mission_static_costmap_yaml", "mission_static_costmap_image"),
+        ]:
+            yaml_path = _metadata_relative_path(metadata.get(yaml_key), metadata_file)
+            image_path = _metadata_relative_path(metadata.get(image_key), metadata_file)
+            if yaml_path and image_path and yaml_path.exists() and image_path.exists():
+                self._rewrite_costmap_yaml_image_reference(yaml_path, image_path)
+
+        gaussian_manifest = mission_directory / MISSION_3D_MAP_DIR / "gaussian" / "manifest.json"
+        if gaussian_manifest.exists():
+            try:
+                self._rewrite_saved_gaussian_capture_manifest(gaussian_manifest, gaussian_manifest.parent)
+                metadata["gaussian_manifest_file"] = str(gaussian_manifest)
+            except RuntimeError as exc:
+                metadata["gaussian_error"] = str(exc)
+
+        gaussian_splat_manifest = (
+            mission_directory / MISSION_3D_MAP_DIR / "gaussian_splat" / "gaussian_splat_manifest.json"
+        )
+        if gaussian_splat_manifest.exists():
+            self._rewrite_saved_gaussian_splat_manifest(
+                gaussian_splat_manifest,
+                gaussian_splat_manifest.parent,
+                gaussian_manifest if gaussian_manifest.exists() else None,
+            )
+            metadata["gaussian_splat_manifest_file"] = str(gaussian_splat_manifest)
+
+        vda5050_file = mission_directory / MISSION_PATH_DIR / f"{new_id}_vda5050.json"
+        if vda5050_file.exists():
+            try:
+                document = json.loads(vda5050_file.read_text(encoding="utf-8"))
+            except Exception:
+                return
+            if isinstance(document, dict):
+                if document.get("orderId") == old_id:
+                    document["orderId"] = new_id
+                document = self._rewrite_mission_reference_values(
+                    document,
+                    old_id,
+                    new_id,
+                    mission_directory / old_id,
+                    mission_directory,
+                )
+                vda5050_file.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
 
     def _copy_latest_recorded_map_into_map_directory(
         self,
         map_directory: Path,
         metadata: dict[str, Any],
     ) -> None:
-        latest_directory = _resolve_path(self._missions_log_directory) / "latest_recorded_map"
-        latest_metadata_file = latest_directory / "latest_recorded_map.json"
+        latest_directory = _resolve_path(self._missions_log_directory) / RECORD_MAP_MISSION_ID
+        latest_metadata_file = _mission_metadata_file(latest_directory)
+        if not latest_metadata_file.exists():
+            latest_directory = _resolve_path(self._missions_log_directory) / LEGACY_LATEST_RECORDED_MAP_DIR
+            latest_metadata_file = latest_directory / LEGACY_LATEST_RECORDED_MAP_METADATA
         if not latest_metadata_file.exists():
             raise RuntimeError("No latest recorded map is available to save")
         latest_metadata = json.loads(latest_metadata_file.read_text(encoding="utf-8"))
-        self._copy_directory_contents(latest_directory, map_directory, skip_names={"latest_recorded_map.json"})
+        self._copy_directory_contents(
+            latest_directory,
+            map_directory,
+            skip_names={LEGACY_LATEST_RECORDED_MAP_METADATA, MISSION_METADATA_FILE, "map.json"},
+        )
         self._copy_named_map_artifacts_from_metadata(
             latest_metadata,
             latest_metadata_file,
@@ -2839,7 +3428,7 @@ class MissionBackendNode(Node):
             latest_metadata_file,
         )
         if gaussian_manifest and gaussian_manifest.exists() and gaussian_manifest.is_file():
-            gaussian_directory = map_directory / "gaussian"
+            gaussian_directory = map_directory / MISSION_3D_MAP_DIR / "gaussian"
             if gaussian_directory.exists():
                 shutil.rmtree(gaussian_directory)
             shutil.copytree(gaussian_manifest.parent, gaussian_directory)
@@ -2855,12 +3444,16 @@ class MissionBackendNode(Node):
             latest_metadata_file,
         )
         if gaussian_splat_manifest and gaussian_splat_manifest.exists() and gaussian_splat_manifest.is_file():
-            gaussian_splat_directory = map_directory / "gaussian_splat"
+            gaussian_splat_directory = map_directory / MISSION_3D_MAP_DIR / "gaussian_splat"
             if gaussian_splat_directory.exists():
                 shutil.rmtree(gaussian_splat_directory)
             shutil.copytree(gaussian_splat_manifest.parent, gaussian_splat_directory)
-            metadata["gaussian_splat_manifest_file"] = str(
-                gaussian_splat_directory / "gaussian_splat_manifest.json"
+            saved_splat_manifest = gaussian_splat_directory / "gaussian_splat_manifest.json"
+            metadata["gaussian_splat_manifest_file"] = str(saved_splat_manifest)
+            self._rewrite_saved_gaussian_splat_manifest(
+                saved_splat_manifest,
+                gaussian_splat_directory,
+                Path(str(metadata.get("gaussian_manifest_file", ""))) if metadata.get("gaussian_manifest_file") else None,
             )
         metadata["source_latest_recorded_map_file"] = str(latest_metadata_file)
         metadata["source_mission_id"] = latest_metadata.get("mission_id", "")
@@ -2883,16 +3476,21 @@ class MissionBackendNode(Node):
         metadata: dict[str, Any],
     ) -> None:
         maps_directory = _resolve_path(self._maps_directory)
-        maps_root = maps_directory.resolve()
-        source_directory = (maps_directory / source_map_id).resolve()
+        missions_log_directory = _resolve_path(self._missions_log_directory)
+        source_directory = (missions_log_directory / source_map_id).resolve()
+        maps_root = missions_log_directory.resolve()
         destination_directory = map_directory.resolve()
+        if maps_root not in source_directory.parents or not source_directory.exists():
+            source_directory = (maps_directory / source_map_id).resolve()
+            maps_root = maps_directory.resolve()
         if maps_root not in source_directory.parents or not source_directory.exists():
             raise RuntimeError(f"Source map '{source_map_id}' was not found")
         if source_directory == destination_directory:
             return
-        if maps_root not in destination_directory.parents:
-            raise RuntimeError("Refusing to save map outside maps directory")
-        source_metadata_file = source_directory / "map.json"
+        destination_root = _resolve_path(self._missions_log_directory).resolve()
+        if destination_root not in destination_directory.parents:
+            raise RuntimeError("Refusing to save mission outside missions log directory")
+        source_metadata_file = _mission_metadata_file(source_directory)
         try:
             source_metadata = json.loads(source_metadata_file.read_text(encoding="utf-8"))
         except Exception:
@@ -2900,7 +3498,7 @@ class MissionBackendNode(Node):
 
         destination_directory.mkdir(parents=True, exist_ok=True)
         for child in destination_directory.iterdir():
-            if child.name == "map.json":
+            if child.name in {MISSION_METADATA_FILE, "map.json"}:
                 continue
             if child.is_dir():
                 shutil.rmtree(child)
@@ -2908,7 +3506,7 @@ class MissionBackendNode(Node):
                 child.unlink()
 
         for child in source_directory.iterdir():
-            if child.name == "map.json":
+            if child.name in {MISSION_METADATA_FILE, "map.json"}:
                 continue
             destination = destination_directory / child.name
             if child.is_dir():
@@ -2925,17 +3523,40 @@ class MissionBackendNode(Node):
             source_root=source_directory,
         )
 
-        gaussian_manifest = destination_directory / "gaussian" / "manifest.json"
+        gaussian_manifest = destination_directory / MISSION_3D_MAP_DIR / "gaussian" / "manifest.json"
+        legacy_gaussian_manifest = destination_directory / "gaussian" / "manifest.json"
+        if not gaussian_manifest.exists() and legacy_gaussian_manifest.exists():
+            gaussian_manifest.parent.parent.mkdir(parents=True, exist_ok=True)
+            if gaussian_manifest.parent.exists():
+                shutil.rmtree(gaussian_manifest.parent)
+            shutil.copytree(legacy_gaussian_manifest.parent, gaussian_manifest.parent)
+            shutil.rmtree(legacy_gaussian_manifest.parent)
         if gaussian_manifest.exists() and gaussian_manifest.is_file():
             if self._try_rewrite_saved_gaussian_capture_manifest(
                 gaussian_manifest,
-                destination_directory / "gaussian",
+                gaussian_manifest.parent,
                 metadata,
             ):
                 metadata["gaussian_manifest_file"] = str(gaussian_manifest)
-        gaussian_splat_manifest = destination_directory / "gaussian_splat" / "gaussian_splat_manifest.json"
+        gaussian_splat_manifest = (
+            destination_directory / MISSION_3D_MAP_DIR / "gaussian_splat" / "gaussian_splat_manifest.json"
+        )
+        legacy_gaussian_splat_manifest = (
+            destination_directory / "gaussian_splat" / "gaussian_splat_manifest.json"
+        )
+        if not gaussian_splat_manifest.exists() and legacy_gaussian_splat_manifest.exists():
+            gaussian_splat_manifest.parent.parent.mkdir(parents=True, exist_ok=True)
+            if gaussian_splat_manifest.parent.exists():
+                shutil.rmtree(gaussian_splat_manifest.parent)
+            shutil.copytree(legacy_gaussian_splat_manifest.parent, gaussian_splat_manifest.parent)
+            shutil.rmtree(legacy_gaussian_splat_manifest.parent)
         if gaussian_splat_manifest.exists() and gaussian_splat_manifest.is_file():
             metadata["gaussian_splat_manifest_file"] = str(gaussian_splat_manifest)
+            self._rewrite_saved_gaussian_splat_manifest(
+                gaussian_splat_manifest,
+                gaussian_splat_manifest.parent,
+                Path(str(metadata.get("gaussian_manifest_file", ""))) if metadata.get("gaussian_manifest_file") else None,
+            )
 
     @staticmethod
     def _copy_directory_contents(
@@ -2985,7 +3606,8 @@ class MissionBackendNode(Node):
             source_path = _metadata_relative_path(source_metadata.get(key, ""), source_metadata_file)
             if not source_path or not source_path.exists() or not source_path.is_file():
                 continue
-            destination = map_directory / filename
+            destination = _mission_artifact_destination(map_directory, key, filename)
+            destination.parent.mkdir(parents=True, exist_ok=True)
             if source_path.resolve() != destination.resolve():
                 shutil.copyfile(source_path, destination)
             metadata[key] = str(destination)
@@ -3033,6 +3655,23 @@ class MissionBackendNode(Node):
         document["gaussian_manifest_file"] = str(gaussian_manifest)
         gaussian_manifest.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
 
+    @staticmethod
+    def _rewrite_saved_gaussian_splat_manifest(
+        gaussian_splat_manifest: Path,
+        gaussian_splat_directory: Path,
+        capture_manifest: Path | None = None,
+    ) -> None:
+        try:
+            document = json.loads(gaussian_splat_manifest.read_text(encoding="utf-8"))
+        except Exception:
+            return
+        if not isinstance(document, dict):
+            return
+        document["artifact_directory"] = str(gaussian_splat_directory)
+        if capture_manifest is not None:
+            document["source_capture_manifest_file"] = str(capture_manifest)
+        gaussian_splat_manifest.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+
     def _try_rewrite_saved_gaussian_capture_manifest(
         self,
         gaussian_manifest: Path,
@@ -3052,10 +3691,15 @@ class MissionBackendNode(Node):
         payload.setdefault("map_id", map_directory.name)
         payload.setdefault("name", payload["map_id"])
         payload["directory"] = str(map_directory)
-        metadata_file = map_directory / "map.json"
+        payload["run_history"] = self._mission_run_history(str(payload.get("mission_id") or payload.get("map_id") or map_directory.name))
+        payload["mission_settings"] = self._normalized_mission_settings(payload.get("mission_settings"))
+        payload["station"] = payload.get("station") if isinstance(payload.get("station"), dict) else None
+        metadata_file = _mission_metadata_file(map_directory)
         route_path = _metadata_relative_path(payload.get("recorded_work_area_route_file"), metadata_file)
         navsat_path = _metadata_relative_path(payload.get("recorded_work_area_navsat_file"), metadata_file)
-        zone_set_path = map_directory / "zoneSet.json"
+        zone_set_path = map_directory / MISSION_2D_MAP_DIR / "zoneSet.json"
+        if not zone_set_path.exists():
+            zone_set_path = map_directory / "zoneSet.json"
         gaussian_manifest_file = str(payload.get("gaussian_manifest_file", ""))
         gaussian_splat_manifest_file = str(payload.get("gaussian_splat_manifest_file", ""))
         gaussian_manifest_path = _metadata_relative_path(gaussian_manifest_file, metadata_file)
@@ -3067,8 +3711,11 @@ class MissionBackendNode(Node):
         if zone_set_path.exists():
             try:
                 payload["zoneSet"] = json.loads(zone_set_path.read_text(encoding="utf-8"))
+                payload["semantic_zones"] = self._semantic_zones_from_zone_set(payload["zoneSet"])
             except Exception as exc:  # noqa: BLE001
                 payload["zoneSet_error"] = str(exc)
+        else:
+            payload["semantic_zones"] = []
         if gaussian_manifest_path and gaussian_manifest_path.is_file():
             try:
                 payload["gaussian_manifest"] = self._load_optional_json_object(gaussian_manifest_path)
@@ -3084,6 +3731,63 @@ class MissionBackendNode(Node):
         return payload
 
     @staticmethod
+    def _normalized_mission_settings(settings: Any) -> dict[str, Any]:
+        normalized = dict(DEFAULT_MISSION_SETTINGS)
+        normalized["tool"] = dict(DEFAULT_MISSION_SETTINGS["tool"])
+        normalized["zone_overrides"] = {}
+        if not isinstance(settings, dict):
+            return normalized
+        normalized.update({key: value for key, value in settings.items() if key not in {"tool", "zone_overrides"}})
+        if isinstance(settings.get("tool"), dict):
+            normalized["tool"].update(settings["tool"])
+        if isinstance(settings.get("zone_overrides"), dict):
+            normalized["zone_overrides"] = settings["zone_overrides"]
+        return normalized
+
+    @staticmethod
+    def _semantic_zones_from_zone_set(zone_set_document: Any) -> list[dict[str, Any]]:
+        if not isinstance(zone_set_document, dict):
+            return []
+        zone_set = zone_set_document.get("zoneSet")
+        if not isinstance(zone_set, dict):
+            return []
+        zones = []
+        for zone in zone_set.get("zones", []):
+            if not isinstance(zone, dict):
+                continue
+            semantic_type = str(zone.get("semantic_type") or "").strip().upper()
+            if not semantic_type:
+                semantic_type = "NO_GO" if zone.get("zoneType") == "BLOCKED" else "WORK_AREA"
+            if semantic_type not in SEMANTIC_ZONE_TYPES:
+                continue
+            geometry = zone.get("geometry")
+            if not isinstance(geometry, dict):
+                vertices = zone.get("vertices", [])
+                if isinstance(vertices, list) and len(vertices) >= 2:
+                    coordinates = [
+                        [float(vertex.get("x", 0.0)), float(vertex.get("y", 0.0))]
+                        for vertex in vertices
+                        if isinstance(vertex, dict)
+                    ]
+                    if semantic_type == "TRANSIT":
+                        geometry = {"type": "LineString", "coordinates": coordinates}
+                    elif len(coordinates) >= 3:
+                        if coordinates[0] != coordinates[-1]:
+                            coordinates.append(list(coordinates[0]))
+                        geometry = {"type": "Polygon", "coordinates": [coordinates]}
+            zones.append(
+                {
+                    "id": str(zone.get("zoneId") or ""),
+                    "name": str(zone.get("name") or zone.get("zoneId") or "Area"),
+                    "type": semantic_type,
+                    "enabled": bool(zone.get("enabled", True)),
+                    "geometry": geometry if isinstance(geometry, dict) else None,
+                    "zoneType": str(zone.get("zoneType") or ""),
+                }
+            )
+        return zones
+
+    @staticmethod
     def _sanitize_map_id(value: str) -> str:
         cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "_", value.strip())
         return cleaned.strip("._-")
@@ -3093,6 +3797,10 @@ class MissionBackendNode(Node):
             raise RuntimeError("mission_id is required")
 
         candidates: list[Path] = []
+        missions_log_directory = _resolve_path(self._missions_log_directory)
+        candidates.append(missions_log_directory / mission_id / MISSION_PATH_DIR / f"{mission_id}_vda5050.json")
+        candidates.append(missions_log_directory / mission_id / f"{mission_id}_vda5050.json")
+        candidates.append(missions_log_directory / mission_id / MISSION_PATH_DIR / f"{mission_id}.json")
         for missions_directory in [*_existing_paths([_resolve_path(self._missions_from_db_directory)]), *self._builtin_mission_directories()]:
             candidates.append(missions_directory / mission_id / "order.json")
             candidates.append(missions_directory / f"{mission_id}.json")
