@@ -5726,7 +5726,7 @@ class MissionFrontendRenderer:
       const startX = stick.x;
       const startY = stick.y;
       const distance = clamp(Math.hypot(startX, startY), 0, 1);
-      const durationMs = 500 * distance;
+      const durationMs = 250 * distance;
       stick.pointerId = null;
       cancelStickRelaxation(stick);
       if (durationMs <= 16) {{

@@ -253,7 +253,7 @@ class UnifiedMissionPageTest(unittest.TestCase):
         self.assertIn("speedReadout.style.left", html)
         self.assertIn("speedReadout.style.top", html)
         self.assertIn("function relaxStickToZero", html)
-        self.assertIn("const durationMs = 500 * distance", html)
+        self.assertIn("const durationMs = 250 * distance", html)
         self.assertIn("requestAnimationFrame(step)", html)
         self.assertIn("streamCommand();", html)
         self.assertIn("Drive Speed", html)
