@@ -5251,8 +5251,8 @@ class MissionFrontendRenderer:
     }}
     .speed-readout {{
       position: absolute;
-      left: 50%;
-      top: 14px;
+      left: 0;
+      top: 0;
       z-index: 4;
       display: none;
       transform: translateX(-50%);
@@ -5617,8 +5617,8 @@ class MissionFrontendRenderer:
     let cameraStreamActive = false;
     let commandInFlight = false;
     const sticks = {{
-      left: {{ x: 0, y: 0, shell: document.getElementById('left-stick'), knob: document.getElementById('left-knob'), pointerId: null }},
-      right: {{ x: 0, y: 0, shell: document.getElementById('right-stick'), knob: document.getElementById('right-knob'), pointerId: null }},
+      left: {{ x: 0, y: 0, shell: document.getElementById('left-stick'), knob: document.getElementById('left-knob'), pointerId: null, relaxFrame: 0 }},
+      right: {{ x: 0, y: 0, shell: document.getElementById('right-stick'), knob: document.getElementById('right-knob'), pointerId: null, relaxFrame: 0 }},
     }};
 
     function setBanner(kind, message) {{
@@ -5643,6 +5643,12 @@ class MissionFrontendRenderer:
       const travel = (shellRect.width * 0.5) - (shellRect.width * 0.155);
       stick.knob.style.transform = `translate(calc(-50% + ${{stick.x * travel}}px), calc(-50% + ${{-stick.y * travel}}px))`;
     }}
+    function cancelStickRelaxation(stick) {{
+      if (stick.relaxFrame) {{
+        window.cancelAnimationFrame(stick.relaxFrame);
+        stick.relaxFrame = 0;
+      }}
+    }}
     function renderScale(scale) {{
       const activeCount = Math.round(scale.value * scale.shell.children.length);
       [...scale.shell.children].forEach((segment, index) => {{
@@ -5660,6 +5666,12 @@ class MissionFrontendRenderer:
     function showSpeedReadout(scale) {{
       speedReadout.textContent = `${{scale.label}} ${{Math.round(scale.value * 100)}}%`;
       speedReadout.classList.add('show');
+      const scaleRect = scale.shell.getBoundingClientRect();
+      const stageRect = teleopStage.getBoundingClientRect();
+      const left = scaleRect.left + (scaleRect.width / 2) - stageRect.left;
+      const top = Math.max(10, scaleRect.top - stageRect.top - speedReadout.offsetHeight - 8);
+      speedReadout.style.left = `${{left}}px`;
+      speedReadout.style.top = `${{top}}px`;
     }}
     function hideSpeedReadout(scale) {{
       if (scale && scale.pointerId !== null) {{
@@ -5692,6 +5704,7 @@ class MissionFrontendRenderer:
       twoStickButton.textContent = twoStickEnabled ? 'On' : 'Off';
     }}
     function handlePointer(stick, event) {{
+      cancelStickRelaxation(stick);
       const rect = stick.shell.getBoundingClientRect();
       const radius = rect.width * 0.5;
       const rawX = (event.clientX - (rect.left + radius)) / radius;
@@ -5702,14 +5715,47 @@ class MissionFrontendRenderer:
       updateKnob(stick);
     }}
     function resetStick(stick) {{
+      cancelStickRelaxation(stick);
       stick.x = 0;
       stick.y = 0;
       stick.pointerId = null;
       updateKnob(stick);
       sendZeroCommand();
     }}
+    function relaxStickToZero(stick) {{
+      const startX = stick.x;
+      const startY = stick.y;
+      const distance = clamp(Math.hypot(startX, startY), 0, 1);
+      const durationMs = 500 * distance;
+      stick.pointerId = null;
+      cancelStickRelaxation(stick);
+      if (durationMs <= 16) {{
+        resetStick(stick);
+        return;
+      }}
+      const startedAt = performance.now();
+      function step(now) {{
+        const progress = clamp((now - startedAt) / durationMs, 0, 1);
+        const remaining = 1 - progress;
+        stick.x = startX * remaining;
+        stick.y = startY * remaining;
+        updateKnob(stick);
+        streamCommand();
+        if (progress < 1) {{
+          stick.relaxFrame = window.requestAnimationFrame(step);
+          return;
+        }}
+        stick.relaxFrame = 0;
+        stick.x = 0;
+        stick.y = 0;
+        updateKnob(stick);
+        sendZeroCommand();
+      }}
+      stick.relaxFrame = window.requestAnimationFrame(step);
+    }}
     for (const stick of Object.values(sticks)) {{
       stick.shell.addEventListener('pointerdown', (event) => {{
+        cancelStickRelaxation(stick);
         stick.pointerId = event.pointerId;
         stick.shell.setPointerCapture(event.pointerId);
         handlePointer(stick, event);
@@ -5719,8 +5765,8 @@ class MissionFrontendRenderer:
           handlePointer(stick, event);
         }}
       }});
-      stick.shell.addEventListener('pointerup', () => resetStick(stick));
-      stick.shell.addEventListener('pointercancel', () => resetStick(stick));
+      stick.shell.addEventListener('pointerup', () => relaxStickToZero(stick));
+      stick.shell.addEventListener('pointercancel', () => relaxStickToZero(stick));
       updateKnob(stick);
     }}
     for (const scale of Object.values(speedScales)) {{
