@@ -5357,6 +5357,9 @@ class MissionFrontendRenderer:
     .center-controls.active-mode .idle-start {{
       display: none;
     }}
+    .idle-start.needs-start {{
+      animation: start-button-pulse 0.95s ease-in-out 2;
+    }}
     .merged-button {{
       display: none;
       grid-column: 1 / -1;
@@ -5446,6 +5449,16 @@ class MissionFrontendRenderer:
     @keyframes pulse-fade {{
       0%, 100% {{ opacity: 0.45; }}
       50% {{ opacity: 1; }}
+    }}
+    @keyframes start-button-pulse {{
+      0%, 100% {{
+        transform: scale(1);
+        box-shadow: none;
+      }}
+      50% {{
+        transform: scale(1.035);
+        box-shadow: 0 0 0 5px rgba(253, 202, 15, 0.18);
+      }}
     }}
     @media (max-width: 820px) {{
       .teleop-layout {{ grid-template-columns: 1fr; }}
@@ -5650,6 +5663,16 @@ class MissionFrontendRenderer:
         stick.relaxFrame = 0;
       }}
     }}
+    function pulseStartButtons() {{
+      if (teleopReady || transitionBusy) {{
+        return;
+      }}
+      for (const button of [teleopStartButton, recordMapStartButton]) {{
+        button.classList.remove('needs-start');
+        void button.offsetWidth;
+        button.classList.add('needs-start');
+      }}
+    }}
     function renderScale(scale) {{
       const activeCount = Math.round(scale.value * scale.shell.children.length);
       [...scale.shell.children].forEach((segment, index) => {{
@@ -5757,6 +5780,7 @@ class MissionFrontendRenderer:
     for (const stick of Object.values(sticks)) {{
       stick.shell.addEventListener('pointerdown', (event) => {{
         cancelStickRelaxation(stick);
+        pulseStartButtons();
         stick.pointerId = event.pointerId;
         stick.shell.setPointerCapture(event.pointerId);
         handlePointer(stick, event);
