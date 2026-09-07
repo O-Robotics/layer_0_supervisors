@@ -91,17 +91,6 @@ class MissionFrontendRenderer:
       white-space: nowrap;
       font-size: 1.08rem;
     }}
-    .topbar-substatus {{
-      display: block;
-      overflow: hidden;
-      color: var(--muted);
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      font-size: 0.72rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-    }}
     .topbar-status, .battery-button {{
       display: inline-flex;
       align-items: center;
@@ -119,14 +108,6 @@ class MissionFrontendRenderer:
       text-overflow: ellipsis;
       text-transform: uppercase;
       white-space: nowrap;
-    }}
-    .topbar-status.connected {{
-      background: rgba(34, 197, 94, 0.13);
-      color: #86efac;
-    }}
-    .topbar-status.disconnected {{
-      background: rgba(239, 68, 68, 0.13);
-      color: #fca5a5;
     }}
     .battery-button {{
       border: 0;
@@ -184,6 +165,42 @@ class MissionFrontendRenderer:
       letter-spacing: 0;
       text-transform: none;
     }}
+    .live-strip {{
+      margin: 6px 0 12px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }}
+    .live-pill {{
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border-radius: 999px;
+      padding: 0;
+      background: transparent;
+      border: none;
+      font-size: 0.95rem;
+      color: var(--muted);
+    }}
+    .live-status-text.connected {{
+      color: #22c55e;
+    }}
+    .live-status-text.disconnected {{
+      color: #ef4444;
+    }}
+    .live-dot {{
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #ef4444;
+      box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.45);
+      animation: pulse 1.2s infinite;
+    }}
+    .live-dot.connected {{
+      background: #22c55e;
+      box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.45);
+    }}
     @media (max-width: 560px) {{
       .app-topbar {{
         grid-template-columns: 46px minmax(0, 1fr) minmax(54px, auto) minmax(48px, auto) minmax(0, auto);
@@ -209,9 +226,8 @@ class MissionFrontendRenderer:
     <button id="open-nav-button" class="icon-button" type="button" aria-label="Open navigation">&#9776;</button>
     <div class="topbar-title">
       <h1>{escaped_title}</h1>
-      <span id="topbar-page-state" class="topbar-substatus">Loading</span>
     </div>
-    <span id="topbar-connection" class="topbar-status">Connecting</span>
+    <span id="topbar-page-state" class="topbar-status">State</span>
     <button id="topbar-battery-button" class="battery-button" type="button" aria-expanded="false" aria-controls="battery-popover">--</button>
     <div class="topbar-action">{action_html}</div>
   </header>
@@ -225,12 +241,22 @@ class MissionFrontendRenderer:
     <div class="battery-detail-row"><span>Status</span><strong id="battery-detail-status">--</strong></div>
   </section>"""
 
+    def _render_drawer_status(self, label: str) -> str:
+        return f"""<div class="muted">{escape(label)}</div>
+    <div class="live-strip">
+      <div class="live-pill">
+        <span id="drawer-live-dot" class="live-dot"></span>
+        <span id="drawer-live-status" class="live-status-text">CONNECTING</span>
+      </div>
+    </div>"""
+
     def _shared_topbar_js(self) -> str:
         return """
-    const topbarConnection = document.getElementById('topbar-connection');
     const topbarPageState = document.getElementById('topbar-page-state');
     const topbarBatteryButton = document.getElementById('topbar-battery-button');
     const batteryPopover = document.getElementById('battery-popover');
+    const drawerLiveStatus = document.getElementById('drawer-live-status') || document.getElementById('live-status');
+    const drawerLiveDot = document.getElementById('drawer-live-dot') || document.getElementById('live-dot');
 
     function finiteNumber(value) {
       const number = Number(value);
@@ -289,17 +315,20 @@ class MissionFrontendRenderer:
       return `${present}${status === null ? '' : ` | ${labels[status] || `Status ${status}`}`}`;
     }
 
-    function updateTopbarFromStatus(data, pageState) {
+    function updateTopbarFromStatus(data, _pageState) {
       const fsm = data?.fsm_status || data?.fsm_state || {};
       const display = data?.fsm_display || {};
       const battery = data?.battery || {};
-      if (topbarConnection) {
-        topbarConnection.textContent = 'Connected';
-        topbarConnection.classList.add('connected');
-        topbarConnection.classList.remove('disconnected');
+      if (drawerLiveStatus) {
+        drawerLiveStatus.textContent = 'CONNECTED';
+        drawerLiveStatus.classList.add('connected');
+        drawerLiveStatus.classList.remove('disconnected');
+      }
+      if (drawerLiveDot) {
+        drawerLiveDot.classList.add('connected');
       }
       if (topbarPageState) {
-        topbarPageState.textContent = pageState || display.current_state || fsm.current_state || 'Ready';
+        topbarPageState.textContent = display.current_state || fsm.current_state || 'Ready';
       }
       if (topbarBatteryButton) {
         topbarBatteryButton.textContent = formatPercent(battery.percentage);
@@ -317,10 +346,13 @@ class MissionFrontendRenderer:
     }
 
     function markTopbarDisconnected() {
-      if (topbarConnection) {
-        topbarConnection.textContent = 'Disconnected';
-        topbarConnection.classList.add('disconnected');
-        topbarConnection.classList.remove('connected');
+      if (drawerLiveStatus) {
+        drawerLiveStatus.textContent = 'DISCONNECTED';
+        drawerLiveStatus.classList.add('disconnected');
+        drawerLiveStatus.classList.remove('connected');
+      }
+      if (drawerLiveDot) {
+        drawerLiveDot.classList.remove('connected');
       }
     }
 
@@ -745,12 +777,7 @@ class MissionFrontendRenderer:
   <div id="drawer-backdrop" class="drawer-backdrop"></div>
   <nav id="nav-drawer" class="nav" aria-label="Application navigation">
     <h2>O-ROBOTICS</h2>
-    <div class="live-strip">
-      <div class="live-pill">
-        <span id="live-dot" class="live-dot"></span>
-        <span id="live-status" class="live-status-text">CONNECTING</span>
-      </div>
-    </div>
+    {self._render_drawer_status("Robot dashboard")}
     <a class="nav-link" href="/">Dashboard</a>
     <a class="nav-link" href="/calendar">Calendar</a>
     <a class="nav-link" href="/missions">Missions</a>
@@ -926,11 +953,11 @@ class MissionFrontendRenderer:
       );
       lastStatusEpochMs = Date.now();
 
-      const liveStatus = document.getElementById('live-status');
+      const liveStatus = document.getElementById('drawer-live-status');
       liveStatus.textContent = 'CONNECTED';
       liveStatus.classList.add('connected');
       liveStatus.classList.remove('disconnected');
-      document.getElementById('live-dot').classList.add('connected');
+      document.getElementById('drawer-live-dot').classList.add('connected');
 
       const rawCurrentState = fsm.current_state || 'Unknown';
       const rawCurrentProfile = formatProfileValue(fsm.current_profile);
@@ -1062,19 +1089,19 @@ class MissionFrontendRenderer:
       try {{
         await loadStatus();
       }} catch (error) {{
-        const liveStatus = document.getElementById('live-status');
+        const liveStatus = document.getElementById('drawer-live-status');
         liveStatus.textContent = 'DISCONNECTED';
         liveStatus.classList.add('disconnected');
         liveStatus.classList.remove('connected');
-        document.getElementById('live-dot').classList.remove('connected');
+        document.getElementById('drawer-live-dot').classList.remove('connected');
         markTopbarDisconnected();
         setBanner('error', error.message || 'Failed to reach mission web server');
       }}
     }}
 
     function refreshHeartbeat() {{
-      const liveStatus = document.getElementById('live-status');
-      const liveDot = document.getElementById('live-dot');
+      const liveStatus = document.getElementById('drawer-live-status');
+      const liveDot = document.getElementById('drawer-live-dot');
       if (!lastStatusEpochMs) {{
         liveStatus.textContent = 'CONNECTING';
         liveStatus.classList.remove('connected', 'disconnected');
@@ -1100,11 +1127,11 @@ class MissionFrontendRenderer:
       try {{
         await loadStatus();
       }} catch (_error) {{
-        const liveStatus = document.getElementById('live-status');
+        const liveStatus = document.getElementById('drawer-live-status');
         liveStatus.textContent = 'DISCONNECTED';
         liveStatus.classList.add('disconnected');
         liveStatus.classList.remove('connected');
-        document.getElementById('live-dot').classList.remove('connected');
+        document.getElementById('drawer-live-dot').classList.remove('connected');
         markTopbarDisconnected();
       }}
     }}, 1000);
@@ -1574,7 +1601,7 @@ class MissionFrontendRenderer:
   <div id="drawer-backdrop" class="drawer-backdrop"></div>
   <nav id="nav-drawer" class="nav" aria-label="Application navigation">
     <h2>O-ROBOTICS</h2>
-    <div class="muted">Schedule planning</div>
+    {self._render_drawer_status("Schedule planning")}
     <a class="nav-link" href="/">Dashboard</a>
     <a class="nav-link" href="/calendar">Calendar</a>
     <a class="nav-link" href="/missions">Missions</a>
@@ -2759,6 +2786,7 @@ class MissionFrontendRenderer:
         <h2>Navigate</h2>
         <button id="close-nav-button" class="icon-button" type="button" aria-label="Close navigation">&times;</button>
       </div>
+      {self._render_drawer_status("Mission workspace")}
       <div class="nav-list">
         <a class="nav-link" href="/">Dashboard</a>
         <a class="nav-link" href="/calendar">Calendar</a>
@@ -3005,7 +3033,6 @@ class MissionFrontendRenderer:
     const mapNameInput = document.getElementById('map-name');
     const missionApp = document.getElementById('mission-app');
     const selectedMissionTitle = document.querySelector('.topbar-title h1');
-    const selectedMissionState = document.getElementById('topbar-page-state');
     const sheetMissionTitle = document.getElementById('sheet-mission-title');
     const sheetMissionMeta = document.getElementById('sheet-mission-meta');
     const missionBottomSheet = document.getElementById('mission-bottom-sheet');
@@ -4147,7 +4174,6 @@ class MissionFrontendRenderer:
       const status = missionUiStatus(entry);
       const metrics = missionMetrics(entry);
       selectedMissionTitle.textContent = 'Missions';
-      selectedMissionState.textContent = status;
       sheetMissionTitle.textContent = title;
       sheetMissionMeta.textContent = `${{status}} | ${{metrics}}`;
       missionDetailGrid.innerHTML = [
@@ -5043,7 +5069,7 @@ class MissionFrontendRenderer:
       width: 100vw;
       min-height: 100dvh;
       overflow-x: hidden;
-      padding: calc(72px + env(safe-area-inset-top)) 14px calc(88px + env(safe-area-inset-bottom));
+      padding: calc(72px + env(safe-area-inset-top)) 14px calc(18px + env(safe-area-inset-bottom));
     }}
     .card {{
       background: var(--card);
@@ -5411,26 +5437,22 @@ class MissionFrontendRenderer:
       }}
     }}
     .teleop-options-dock {{
-      position: fixed;
-      left: calc(12px + env(safe-area-inset-left));
-      right: calc(12px + env(safe-area-inset-right));
-      bottom: calc(12px + env(safe-area-inset-bottom));
-      z-index: 720;
+      position: relative;
+      z-index: 4;
       display: grid;
       justify-items: center;
-      pointer-events: none;
+      width: min(100%, 360px);
+      margin: 14px auto 0;
     }}
     .teleop-options-button {{
-      pointer-events: auto;
-      width: min(100%, 360px);
+      width: 100%;
       border: 1px solid var(--line);
       color: var(--ink);
       background: rgba(18, 20, 21, 0.92);
     }}
     .teleop-options-list {{
-      pointer-events: auto;
       display: none;
-      width: min(100%, 360px);
+      width: 100%;
       margin-bottom: 8px;
       padding: 10px;
       border: 1px solid var(--line);
@@ -5471,7 +5493,7 @@ class MissionFrontendRenderer:
     <div id="drawer-backdrop" class="drawer-backdrop"></div>
     <nav id="nav-drawer" class="nav" aria-label="Application navigation">
       <h2>O-ROBOTICS</h2>
-      <div class="muted">Robot controls</div>
+      {self._render_drawer_status("Robot controls")}
       <div class="nav-list">
         <a class="nav-link" href="/">Dashboard</a>
         <a class="nav-link" href="/calendar">Calendar</a>
@@ -7087,7 +7109,7 @@ class MissionFrontendRenderer:
   <div id="drawer-backdrop" class="drawer-backdrop"></div>
   <nav id="nav-drawer" class="nav" aria-label="Application navigation">
     <h2>O-ROBOTICS</h2>
-    <div class="muted">Engineering views</div>
+    {self._render_drawer_status("Engineering views")}
     <a class="nav-link" href="/">Dashboard</a>
     <a class="nav-link" href="/calendar">Calendar</a>
     <a class="nav-link" href="/missions">Missions</a>

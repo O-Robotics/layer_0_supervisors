@@ -224,8 +224,8 @@ class UnifiedMissionPageTest(unittest.TestCase):
         self.assertNotIn('id="safety-card"', dashboard_html)
         self.assertIn('id="system-status-card"', dashboard_html)
         self.assertIn('id="safety-control-panel"', dashboard_html)
-        self.assertEqual(dashboard_html.count('id="live-status"'), 1)
-        self.assertEqual(dashboard_html.count('id="live-dot"'), 1)
+        self.assertEqual(dashboard_html.count('id="drawer-live-status"'), 1)
+        self.assertEqual(dashboard_html.count('id="drawer-live-dot"'), 1)
         self.assertNotIn("window.alert", calendar_html)
         self.assertIn("function setBanner", calendar_html)
 
@@ -241,6 +241,8 @@ class UnifiedMissionPageTest(unittest.TestCase):
         self.assertIn('id="teleop-options-dock"', html)
         self.assertIn('id="teleop-options-list"', html)
         self.assertIn('aria-controls="teleop-options-list"', html)
+        self.assertIn('.teleop-options-dock {\n      position: relative;', html)
+        self.assertNotIn('.teleop-options-dock {\n      position: fixed;', html)
         self.assertIn('id="lights-button"', html)
         self.assertIn('id="camera-button"', html)
         self.assertIn('id="two-stick-button"', html)
@@ -250,7 +252,7 @@ class UnifiedMissionPageTest(unittest.TestCase):
         self.assertNotIn("FSM:", html)
         self.assertNotIn('href="/map"', html)
 
-    def test_primary_pages_use_shared_topbar_with_connection_and_battery(self) -> None:
+    def test_primary_pages_use_shared_topbar_with_fsm_battery_and_drawer_connection(self) -> None:
         renderer = frontend.MissionFrontendRenderer()
         renderer._site_title = "AMR Sweeper"
 
@@ -264,9 +266,11 @@ class UnifiedMissionPageTest(unittest.TestCase):
 
         for html in pages:
             self.assertIn('data-shared-topbar="true"', html)
-            self.assertIn('id="topbar-connection"', html)
+            self.assertNotIn('id="topbar-connection"', html)
             self.assertIn('id="topbar-page-state"', html)
             self.assertIn('id="topbar-battery-button"', html)
+            self.assertIn('id="drawer-live-status"', html)
+            self.assertIn('id="drawer-live-dot"', html)
             self.assertIn('id="battery-popover"', html)
             self.assertIn("function updateTopbarFromStatus", html)
             self.assertIn("function formatRuntime", html)
