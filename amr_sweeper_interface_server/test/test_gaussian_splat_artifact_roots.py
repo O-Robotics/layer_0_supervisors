@@ -238,9 +238,65 @@ class UnifiedMissionPageTest(unittest.TestCase):
         self.assertIn('class="app-topbar"', html)
         self.assertIn('id="nav-drawer"', html)
         self.assertIn('id="teleop-topbar-stop"', html)
+        self.assertIn('id="teleop-options-dock"', html)
+        self.assertIn('id="teleop-options-list"', html)
+        self.assertIn('aria-controls="teleop-options-list"', html)
+        self.assertIn('id="lights-button"', html)
+        self.assertIn('id="camera-button"', html)
+        self.assertIn('id="two-stick-button"', html)
+        self.assertNotIn('#teleop-topbar-stop {\n        grid-column: 1 / -1', html)
+        self.assertNotIn('height: 100dvh;\n      overflow: hidden;', html)
         self.assertIn("RECORDING MAP", html)
         self.assertNotIn("FSM:", html)
         self.assertNotIn('href="/map"', html)
+
+    def test_primary_pages_use_shared_topbar_with_connection_and_battery(self) -> None:
+        renderer = frontend.MissionFrontendRenderer()
+        renderer._site_title = "AMR Sweeper"
+
+        pages = [
+            renderer.render_index_html(),
+            renderer.render_calendar_html(),
+            renderer.render_map_html(),
+            renderer.render_teleop_html(),
+            renderer.render_developer_html(),
+        ]
+
+        for html in pages:
+            self.assertIn('data-shared-topbar="true"', html)
+            self.assertIn('id="topbar-connection"', html)
+            self.assertIn('id="topbar-page-state"', html)
+            self.assertIn('id="topbar-battery-button"', html)
+            self.assertIn('id="battery-popover"', html)
+            self.assertIn("function updateTopbarFromStatus", html)
+            self.assertIn("function formatRuntime", html)
+            self.assertIn("markTopbarDisconnected", html)
+
+    def test_calendar_defaults_to_compact_expandable_overview_before_editor(self) -> None:
+        renderer = frontend.MissionFrontendRenderer()
+        renderer._site_title = "AMR Sweeper"
+
+        html = renderer.render_calendar_html()
+
+        self.assertIn('id="calendar-card"', html)
+        self.assertIn('id="compact-calendar-grid"', html)
+        self.assertIn('class="calendar-detail"', html)
+        self.assertIn('id="calendar-expand-button"', html)
+        self.assertIn("function renderCompactCalendar", html)
+        self.assertIn("function setCalendarExpanded", html)
+        self.assertLess(html.index('id="calendar-card"'), html.index('class="editor-layout"'))
+
+    def test_mission_bottom_sheet_has_explicit_expand_collapse_affordance(self) -> None:
+        renderer = frontend.MissionFrontendRenderer()
+        renderer._site_title = "AMR Sweeper"
+
+        html = renderer.render_map_html()
+
+        self.assertIn('id="sheet-summary-toggle"', html)
+        self.assertIn('id="sheet-chevron"', html)
+        self.assertIn('aria-expanded="false"', html)
+        self.assertIn("function toggleMissionSheet", html)
+        self.assertIn("summaryToggle.setAttribute('aria-expanded'", html)
 
     def test_developer_uses_tabs_and_defines_accent(self) -> None:
         renderer = frontend.MissionFrontendRenderer()

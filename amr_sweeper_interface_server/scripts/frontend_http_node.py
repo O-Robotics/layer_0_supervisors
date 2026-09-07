@@ -58,6 +58,301 @@ class MissionThreadingHTTPServer(ThreadingHTTPServer):
 
 class MissionFrontendRenderer:
 
+    def _shared_topbar_css(self, absolute: bool = False) -> str:
+        position = "absolute" if absolute else "fixed"
+        return f"""
+    .app-topbar {{
+      position: {position};
+      top: calc(10px + env(safe-area-inset-top));
+      left: calc(10px + env(safe-area-inset-left));
+      right: calc(10px + env(safe-area-inset-right));
+      z-index: 700;
+      display: grid;
+      grid-template-columns: 46px minmax(0, 1fr) minmax(64px, auto) minmax(54px, auto) minmax(0, auto);
+      gap: 8px;
+      align-items: center;
+      min-height: 52px;
+      padding: 5px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(24, 27, 29, 0.84);
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.32);
+      backdrop-filter: blur(8px);
+    }}
+    .topbar-title {{
+      min-width: 0;
+      overflow: hidden;
+    }}
+    .topbar-title h1 {{
+      overflow: hidden;
+      margin: 0;
+      color: var(--accent);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 1.08rem;
+    }}
+    .topbar-substatus {{
+      display: block;
+      overflow: hidden;
+      color: var(--muted);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }}
+    .topbar-status, .battery-button {{
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 0;
+      min-height: 34px;
+      max-width: 118px;
+      border-radius: 999px;
+      padding: 6px 10px;
+      overflow: hidden;
+      background: rgba(253, 202, 15, 0.12);
+      color: var(--accent);
+      font-weight: 700;
+      font-size: 0.74rem;
+      text-overflow: ellipsis;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }}
+    .topbar-status.connected {{
+      background: rgba(34, 197, 94, 0.13);
+      color: #86efac;
+    }}
+    .topbar-status.disconnected {{
+      background: rgba(239, 68, 68, 0.13);
+      color: #fca5a5;
+    }}
+    .battery-button {{
+      border: 0;
+      cursor: pointer;
+      font: inherit;
+      letter-spacing: 0.02em;
+    }}
+    .topbar-action {{
+      display: flex;
+      gap: 6px;
+      justify-content: flex-end;
+      min-width: 0;
+    }}
+    .topbar-action:empty {{
+      display: none;
+    }}
+    .battery-popover {{
+      position: fixed;
+      top: calc(70px + env(safe-area-inset-top));
+      right: calc(10px + env(safe-area-inset-right));
+      z-index: 920;
+      display: none;
+      width: min(92vw, 320px);
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(42, 46, 48, 0.98);
+      box-shadow: 0 18px 42px rgba(0, 0, 0, 0.36);
+      backdrop-filter: blur(8px);
+    }}
+    .battery-popover.open {{
+      display: grid;
+      gap: 8px;
+    }}
+    .battery-detail-row {{
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid rgba(253, 202, 15, 0.12);
+      padding-bottom: 7px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }}
+    .battery-detail-row strong {{
+      color: var(--ink);
+      text-align: right;
+    }}
+    .icon-button {{
+      width: 46px;
+      padding: 0;
+      color: var(--ink);
+      background: rgba(18, 20, 21, 0.76);
+      border: 1px solid var(--line);
+      font-size: 1.24rem;
+      letter-spacing: 0;
+      text-transform: none;
+    }}
+    @media (max-width: 560px) {{
+      .app-topbar {{
+        grid-template-columns: 46px minmax(0, 1fr) minmax(54px, auto) minmax(48px, auto) minmax(0, auto);
+        gap: 5px;
+      }}
+      .topbar-status, .battery-button {{
+        max-width: 76px;
+        padding: 6px 8px;
+        font-size: 0.68rem;
+      }}
+      .topbar-action button {{
+        min-width: 0;
+        padding-left: 10px;
+        padding-right: 10px;
+        font-size: 0.72rem;
+      }}
+    }}
+"""
+
+    def _render_topbar(self, page_title: str, action_html: str = "") -> str:
+        escaped_title = escape(page_title)
+        return f"""<header class="app-topbar" aria-label="{escaped_title} controls" data-shared-topbar="true">
+    <button id="open-nav-button" class="icon-button" type="button" aria-label="Open navigation">&#9776;</button>
+    <div class="topbar-title">
+      <h1>{escaped_title}</h1>
+      <span id="topbar-page-state" class="topbar-substatus">Loading</span>
+    </div>
+    <span id="topbar-connection" class="topbar-status">Connecting</span>
+    <button id="topbar-battery-button" class="battery-button" type="button" aria-expanded="false" aria-controls="battery-popover">--</button>
+    <div class="topbar-action">{action_html}</div>
+  </header>
+  <section id="battery-popover" class="battery-popover" aria-label="Battery details">
+    <div class="battery-detail-row"><span>Battery</span><strong id="battery-detail-percent">--</strong></div>
+    <div class="battery-detail-row"><span>Voltage</span><strong id="battery-detail-voltage">--</strong></div>
+    <div class="battery-detail-row"><span>Current</span><strong id="battery-detail-current">--</strong></div>
+    <div class="battery-detail-row"><span>Charge</span><strong id="battery-detail-charge">--</strong></div>
+    <div class="battery-detail-row"><span>Temperature</span><strong id="battery-detail-temperature">--</strong></div>
+    <div class="battery-detail-row"><span>Runtime</span><strong id="battery-detail-runtime">--</strong></div>
+    <div class="battery-detail-row"><span>Status</span><strong id="battery-detail-status">--</strong></div>
+  </section>"""
+
+    def _shared_topbar_js(self) -> str:
+        return """
+    const topbarConnection = document.getElementById('topbar-connection');
+    const topbarPageState = document.getElementById('topbar-page-state');
+    const topbarBatteryButton = document.getElementById('topbar-battery-button');
+    const batteryPopover = document.getElementById('battery-popover');
+
+    function finiteNumber(value) {
+      const number = Number(value);
+      return Number.isFinite(number) ? number : null;
+    }
+
+    function formatPercent(value) {
+      const number = finiteNumber(value);
+      return number === null ? '--' : `${Math.round(number * 100)}%`;
+    }
+
+    function formatFixed(value, digits, unit) {
+      const number = finiteNumber(value);
+      return number === null ? '--' : `${number.toFixed(digits)} ${unit}`;
+    }
+
+    function formatCharge(battery) {
+      const charge = finiteNumber(battery?.charge);
+      const capacity = finiteNumber(battery?.capacity);
+      if (charge === null && capacity === null) {
+        return '--';
+      }
+      if (charge !== null && capacity !== null && capacity > 0) {
+        return `${charge.toFixed(1)} / ${capacity.toFixed(1)} Ah`;
+      }
+      return charge !== null ? `${charge.toFixed(1)} Ah` : `${capacity.toFixed(1)} Ah capacity`;
+    }
+
+    function formatRuntime(battery) {
+      const charge = finiteNumber(battery?.charge);
+      const current = finiteNumber(battery?.current);
+      if (charge === null || charge <= 0 || current === null || current >= 0) {
+        return '--';
+      }
+      const hours = charge / Math.abs(current);
+      if (!Number.isFinite(hours) || hours <= 0) {
+        return '--';
+      }
+      const minutes = Math.round(hours * 60);
+      return minutes >= 60 ? `~${Math.floor(minutes / 60)}h ${minutes % 60}m` : `~${minutes}m`;
+    }
+
+    function batteryStatusLabel(battery) {
+      if (!battery) {
+        return '--';
+      }
+      const present = battery.present === false ? 'Not present' : 'Present';
+      const status = finiteNumber(battery.power_supply_status);
+      const labels = {
+        1: 'Unknown',
+        2: 'Charging',
+        3: 'Discharging',
+        4: 'Not charging',
+        5: 'Full',
+      };
+      return `${present}${status === null ? '' : ` | ${labels[status] || `Status ${status}`}`}`;
+    }
+
+    function updateTopbarFromStatus(data, pageState) {
+      const fsm = data?.fsm_status || data?.fsm_state || {};
+      const display = data?.fsm_display || {};
+      const battery = data?.battery || {};
+      if (topbarConnection) {
+        topbarConnection.textContent = 'Connected';
+        topbarConnection.classList.add('connected');
+        topbarConnection.classList.remove('disconnected');
+      }
+      if (topbarPageState) {
+        topbarPageState.textContent = pageState || display.current_state || fsm.current_state || 'Ready';
+      }
+      if (topbarBatteryButton) {
+        topbarBatteryButton.textContent = formatPercent(battery.percentage);
+      }
+      const percent = document.getElementById('battery-detail-percent');
+      if (percent) {
+        percent.textContent = formatPercent(battery.percentage);
+        document.getElementById('battery-detail-voltage').textContent = formatFixed(battery.voltage, 2, 'V');
+        document.getElementById('battery-detail-current').textContent = formatFixed(battery.current, 2, 'A');
+        document.getElementById('battery-detail-charge').textContent = formatCharge(battery);
+        document.getElementById('battery-detail-temperature').textContent = formatFixed(battery.temperature, 1, 'C');
+        document.getElementById('battery-detail-runtime').textContent = formatRuntime(battery);
+        document.getElementById('battery-detail-status').textContent = batteryStatusLabel(battery);
+      }
+    }
+
+    function markTopbarDisconnected() {
+      if (topbarConnection) {
+        topbarConnection.textContent = 'Disconnected';
+        topbarConnection.classList.add('disconnected');
+        topbarConnection.classList.remove('connected');
+      }
+    }
+
+    function closeBatteryPopover() {
+      if (batteryPopover) {
+        batteryPopover.classList.remove('open');
+      }
+      if (topbarBatteryButton) {
+        topbarBatteryButton.setAttribute('aria-expanded', 'false');
+      }
+    }
+
+    if (topbarBatteryButton && batteryPopover) {
+      topbarBatteryButton.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const open = !batteryPopover.classList.contains('open');
+        batteryPopover.classList.toggle('open', open);
+        topbarBatteryButton.setAttribute('aria-expanded', String(open));
+      });
+      document.addEventListener('click', (event) => {
+        if (!batteryPopover.contains(event.target) && event.target !== topbarBatteryButton) {
+          closeBatteryPopover();
+        }
+      });
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+          closeBatteryPopover();
+        }
+      });
+    }
+"""
+
     def render_index_html(self) -> str:
         title = escape(self._site_title)
         return f"""<!DOCTYPE html>
@@ -438,21 +733,15 @@ class MissionFrontendRenderer:
     }}
     @media (max-width: 780px) {{
       main {{ padding: calc(124px + env(safe-area-inset-top)) 14px 18px; }}
-      .app-topbar {{ grid-template-columns: 46px minmax(0, 1fr) auto; }}
-      #topbar-battery {{ display: none; }}
       .status-card {{
         grid-column: span 1;
       }}
     }}
+    {self._shared_topbar_css()}
   </style>
 </head>
 <body>
-  <header class="app-topbar" aria-label="Dashboard controls">
-    <button id="open-nav-button" class="icon-button" type="button" aria-label="Open navigation">&#9776;</button>
-    <h1>Dashboard</h1>
-    <span id="topbar-live" class="topbar-status">Connecting</span>
-    <span id="topbar-battery" class="topbar-status">--</span>
-  </header>
+  {self._render_topbar("Dashboard")}
   <div id="drawer-backdrop" class="drawer-backdrop"></div>
   <nav id="nav-drawer" class="nav" aria-label="Application navigation">
     <h2>O-ROBOTICS</h2>
@@ -527,6 +816,7 @@ class MissionFrontendRenderer:
     crossorigin=""
   ></script>
   <script>
+    {self._shared_topbar_js()}
     const banner = document.getElementById('banner');
     let lastStatusEpochMs = 0;
     let lastSafetyLatched = false;
@@ -641,7 +931,6 @@ class MissionFrontendRenderer:
       liveStatus.classList.add('connected');
       liveStatus.classList.remove('disconnected');
       document.getElementById('live-dot').classList.add('connected');
-      document.getElementById('topbar-live').textContent = 'Connected';
 
       const rawCurrentState = fsm.current_state || 'Unknown';
       const rawCurrentProfile = formatProfileValue(fsm.current_profile);
@@ -655,11 +944,11 @@ class MissionFrontendRenderer:
       const transitionInProgress = Boolean(fsmDisplay.transition_active);
       const targetState = deriveStateFromProfile(targetProfile) || rawCurrentState;
       const formattedTargetProfile = formatProfileValue(targetProfile);
+      updateTopbarFromStatus(data, transitionInProgress ? 'Running' : currentState);
 
       document.getElementById('fsm-state').textContent = transitionInProgress
         ? formatArrowValue(currentState, targetState)
         : currentState;
-      document.getElementById('topbar-live').textContent = transitionInProgress ? 'Running' : currentState;
       document.getElementById('fsm-profile').textContent = transitionInProgress
         ? `Profile: ${{formatArrowValue(currentProfile, formattedTargetProfile)}}`
         : `Profile: ${{currentProfile}}`;
@@ -681,10 +970,6 @@ class MissionFrontendRenderer:
       updateDashboardPositionMap(position);
 
       document.getElementById('battery-percent').textContent =
-        battery.percentage !== null && battery.percentage !== undefined
-          ? `${{Math.round(Number(battery.percentage) * 100)}}%`
-          : '--';
-      document.getElementById('topbar-battery').textContent =
         battery.percentage !== null && battery.percentage !== undefined
           ? `${{Math.round(Number(battery.percentage) * 100)}}%`
           : '--';
@@ -764,6 +1049,7 @@ class MissionFrontendRenderer:
       document.getElementById('safety-stop-button').click();
     }});
     document.getElementById('open-nav-button').addEventListener('click', () => {{
+      closeBatteryPopover();
       document.getElementById('nav-drawer').classList.add('open');
       document.getElementById('drawer-backdrop').classList.add('show');
     }});
@@ -781,7 +1067,7 @@ class MissionFrontendRenderer:
         liveStatus.classList.add('disconnected');
         liveStatus.classList.remove('connected');
         document.getElementById('live-dot').classList.remove('connected');
-        document.getElementById('topbar-live').textContent = 'Disconnected';
+        markTopbarDisconnected();
         setBanner('error', error.message || 'Failed to reach mission web server');
       }}
     }}
@@ -819,7 +1105,7 @@ class MissionFrontendRenderer:
         liveStatus.classList.add('disconnected');
         liveStatus.classList.remove('connected');
         document.getElementById('live-dot').classList.remove('connected');
-        document.getElementById('topbar-live').textContent = 'Disconnected';
+        markTopbarDisconnected();
       }}
     }}, 1000);
     setInterval(refreshHeartbeat, 250);
@@ -1216,14 +1502,75 @@ class MissionFrontendRenderer:
         grid-column: span 1;
       }}
     }}
+    .calendar-card-header {{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      cursor: pointer;
+    }}
+    .calendar-card-header button {{
+      min-height: 36px;
+      padding: 8px 12px;
+    }}
+    .compact-week-grid {{
+      display: grid;
+      grid-template-columns: repeat(7, minmax(82px, 1fr));
+      gap: 8px;
+      margin-top: 12px;
+    }}
+    .compact-day {{
+      min-height: 118px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 9px;
+      background: var(--panel);
+      overflow: hidden;
+    }}
+    .compact-day strong {{
+      display: block;
+      color: var(--accent);
+      margin-bottom: 7px;
+      font-size: 0.82rem;
+      text-transform: uppercase;
+    }}
+    .compact-event {{
+      display: block;
+      margin-top: 5px;
+      border-radius: 7px;
+      padding: 5px 6px;
+      overflow: hidden;
+      background: rgba(253, 202, 15, 0.18);
+      color: var(--ink);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 0.76rem;
+    }}
+    .calendar-detail {{
+      display: none;
+      margin-top: 14px;
+    }}
+    .calendar-card.expanded .calendar-detail {{
+      display: block;
+    }}
+    @media (max-width: 700px) {{
+      .compact-week-grid {{
+        grid-template-columns: repeat(7, minmax(64px, 1fr));
+        overflow-x: auto;
+      }}
+      .compact-day {{
+        min-height: 94px;
+        padding: 7px;
+      }}
+      .compact-event {{
+        font-size: 0.68rem;
+      }}
+    }}
+    {self._shared_topbar_css()}
   </style>
 </head>
 <body>
-  <header class="app-topbar" aria-label="Calendar controls">
-    <button id="open-nav-button" class="icon-button" type="button" aria-label="Open navigation">&#9776;</button>
-    <h1>Calendar</h1>
-    <span id="topbar-status" class="topbar-status">Schedule</span>
-  </header>
+  {self._render_topbar("Calendar")}
   <div id="drawer-backdrop" class="drawer-backdrop"></div>
   <nav id="nav-drawer" class="nav" aria-label="Application navigation">
     <h2>O-ROBOTICS</h2>
@@ -1252,6 +1599,28 @@ class MissionFrontendRenderer:
         <div class="calendar-clock">
           <div class="muted">Robot local time:</div>
           <div id="calendar-robot-clock" class="calendar-clock-value">--:--:--</div>
+        </div>
+      </div>
+    </section>
+    <section id="calendar-card" class="card calendar-card" aria-expanded="false">
+      <div id="calendar-card-header" class="calendar-card-header">
+        <div>
+          <h2>Week Overview</h2>
+          <div class="muted">Tap to expand the 24-hour planner.</div>
+        </div>
+        <button id="calendar-expand-button" type="button" aria-label="Expand calendar">Expand</button>
+      </div>
+      <div id="compact-calendar-grid" class="compact-week-grid"></div>
+      <div class="calendar-detail">
+        <div id="schedule-path" class="muted" style="margin-bottom: 12px;">Schedule: -</div>
+        <div class="week-shell">
+          <div id="calendar-grid" class="week-grid"></div>
+        </div>
+        <div class="legend">
+          <span><strong style="color: var(--work);">WORK</strong> mission windows</span>
+          <span><strong style="color: var(--nowork);">NO_WORK</strong> blackout windows</span>
+          <span><strong style="color: var(--safety);">SAFETY</strong> logged safety events</span>
+          <span>Planned blocks are blue-gray, dashed, and semi-transparent in the background. Actual blocks are solid in the foreground.</span>
         </div>
       </div>
     </section>
@@ -1329,20 +1698,9 @@ class MissionFrontendRenderer:
         <div id="planned-entry-list" class="entry-list"></div>
       </section>
     </section>
-    <section class="card">
-      <div id="schedule-path" class="muted" style="margin-bottom: 12px;">Schedule: -</div>
-      <div class="week-shell">
-        <div id="calendar-grid" class="week-grid"></div>
-      </div>
-      <div class="legend">
-        <span><strong style="color: var(--work);">WORK</strong> mission windows</span>
-        <span><strong style="color: var(--nowork);">NO_WORK</strong> blackout windows</span>
-        <span><strong style="color: var(--safety);">SAFETY</strong> logged safety events</span>
-        <span>Planned blocks are blue-gray, dashed, and semi-transparent in the background. Actual blocks are solid in the foreground.</span>
-      </div>
-    </section>
   </main>
   <script>
+    {self._shared_topbar_js()}
     let activeWeek = '';
     let activeScheduleData = null;
     const weekdayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -1350,6 +1708,8 @@ class MissionFrontendRenderer:
     const banner = document.getElementById('banner');
     const navDrawer = document.getElementById('nav-drawer');
     const drawerBackdrop = document.getElementById('drawer-backdrop');
+    const calendarCard = document.getElementById('calendar-card');
+    const calendarExpandButton = document.getElementById('calendar-expand-button');
 
     function setBanner(kind, message) {{
       banner.className = `banner show ${{kind}}`;
@@ -1512,6 +1872,42 @@ class MissionFrontendRenderer:
       }}
     }}
 
+    function renderCompactCalendar(data) {{
+      const grid = document.getElementById('compact-calendar-grid');
+      grid.innerHTML = '';
+      const weekStart = parseLocalDate(data.week_start);
+      const eventsByDay = Array.from({{ length: 7 }}, () => []);
+      for (const event of [...(data.planned_events || []), ...(data.actual_events || [])]) {{
+        const start = parseLocalDateTime(event.start_local);
+        const dayIndex = Math.floor((startOfDay(start).getTime() - weekStart.getTime()) / 86400000);
+        if (dayIndex >= 0 && dayIndex <= 6) {{
+          eventsByDay[dayIndex].push(event);
+        }}
+      }}
+      for (let index = 0; index < 7; index += 1) {{
+        const current = new Date(weekStart);
+        current.setDate(weekStart.getDate() + index);
+        const day = document.createElement('div');
+        day.className = 'compact-day';
+        day.innerHTML = `<strong>${{weekdayNames[index]}} ${{String(current.getDate()).padStart(2, '0')}}.${{String(current.getMonth() + 1).padStart(2, '0')}}</strong>`;
+        const dayEvents = eventsByDay[index].slice(0, 3);
+        if (dayEvents.length === 0) {{
+          day.insertAdjacentHTML('beforeend', '<span class="muted">Clear</span>');
+        }}
+        for (const event of dayEvents) {{
+          const start = parseLocalDateTime(event.start_local);
+          day.insertAdjacentHTML(
+            'beforeend',
+            `<span class="compact-event">${{formatLocalTime(start)}} ${{event.summary || event.schedule_type || 'Event'}}</span>`
+          );
+        }}
+        if (eventsByDay[index].length > dayEvents.length) {{
+          day.insertAdjacentHTML('beforeend', `<span class="compact-event">+${{eventsByDay[index].length - dayEvents.length}} more</span>`);
+        }}
+        grid.appendChild(day);
+      }}
+    }}
+
     async function loadCalendar(week) {{
       const response = await fetch(`/api/v1/schedule?week=${{encodeURIComponent(week)}}`, {{ cache: 'no-store' }});
       const data = await response.json();
@@ -1525,6 +1921,7 @@ class MissionFrontendRenderer:
       document.getElementById('schedule-path').textContent =
         `Planned: ${{data.planned_schedule_path || '-'}} | Actual: ${{data.actual_schedule_path || '-'}}`;
       renderPlannedEntries(data.planned_entries || []);
+      renderCompactCalendar(data);
 
       const grid = document.getElementById('calendar-grid');
       grid.innerHTML = '';
@@ -1636,6 +2033,7 @@ class MissionFrontendRenderer:
       await loadCalendar(shiftWeek(activeWeek, 1));
     }});
     document.getElementById('open-nav-button').addEventListener('click', () => {{
+      closeBatteryPopover();
       navDrawer.classList.add('open');
       drawerBackdrop.classList.add('show');
     }});
@@ -1643,6 +2041,29 @@ class MissionFrontendRenderer:
       navDrawer.classList.remove('open');
       drawerBackdrop.classList.remove('show');
     }});
+
+    function setCalendarExpanded(expanded) {{
+      calendarCard.classList.toggle('expanded', expanded);
+      calendarCard.setAttribute('aria-expanded', String(expanded));
+      calendarExpandButton.textContent = expanded ? 'Collapse' : 'Expand';
+      calendarExpandButton.setAttribute('aria-label', expanded ? 'Collapse calendar' : 'Expand calendar');
+    }}
+    document.getElementById('calendar-card-header').addEventListener('click', () => {{
+      setCalendarExpanded(!calendarCard.classList.contains('expanded'));
+    }});
+    calendarExpandButton.addEventListener('click', (event) => {{
+      event.stopPropagation();
+      setCalendarExpanded(!calendarCard.classList.contains('expanded'));
+    }});
+
+    async function refreshTopbarStatus() {{
+      try {{
+        const response = await fetch('/api/v1/status', {{ cache: 'no-store' }});
+        updateTopbarFromStatus(await response.json(), 'Schedule');
+      }} catch (_error) {{
+        markTopbarDisconnected();
+      }}
+    }}
 
     document.getElementById('schedule-form').addEventListener('submit', async (event) => {{
       event.preventDefault();
@@ -1678,6 +2099,8 @@ class MissionFrontendRenderer:
     loadCalendar(toIsoWeekString(new Date())).then(() => {{
       resetEntryForm();
     }});
+    refreshTopbarStatus();
+    setInterval(refreshTopbarStatus, 2000);
   </script>
 </body>
 </html>
@@ -1721,8 +2144,8 @@ class MissionFrontendRenderer:
     * {{ box-sizing: border-box; }}
     html, body {{
       width: 100vw;
-      height: 100dvh;
-      overflow: hidden;
+      min-height: 100dvh;
+      overflow-x: hidden;
     }}
     body {{
       margin: 0;
@@ -2039,6 +2462,25 @@ class MissionFrontendRenderer:
       gap: 12px;
       align-items: center;
     }}
+    .sheet-summary-toggle {{
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      min-width: 0;
+      padding: 6px 0;
+      color: var(--ink);
+      background: transparent;
+      border: 0;
+      text-align: left;
+      letter-spacing: 0;
+      text-transform: none;
+    }}
+    .sheet-chevron {{
+      color: var(--accent);
+      font-size: 1.1rem;
+      line-height: 1;
+    }}
     .sheet-summary strong {{
       display: block;
       overflow: hidden;
@@ -2289,11 +2731,11 @@ class MissionFrontendRenderer:
     }}
     .hidden {{ display: none !important; }}
     @media (max-width: 520px) {{
-      .app-topbar {{ grid-template-columns: 46px minmax(0, 1fr) 46px; }}
       .meta-grid {{ grid-template-columns: 1fr; }}
       .bottom-sheet {{ left: 0; right: 0; bottom: 0; border-radius: 20px 20px 0 0; }}
       .side-sheet {{ left: 8px; right: 8px; width: auto; }}
     }}
+    {self._shared_topbar_css(absolute=True)}
   </style>
 </head>
 <body>
@@ -2309,14 +2751,7 @@ class MissionFrontendRenderer:
 
     <div id="banner" class="toast" role="status" aria-live="polite"></div>
 
-    <header class="app-topbar" aria-label="Mission controls">
-      <button id="open-nav-button" class="icon-button" type="button" aria-label="Open navigation">&#9776;</button>
-      <button id="mission-title-button" class="mission-title-button" type="button" aria-label="Select mission">
-        <strong id="selected-mission-title">Missions</strong>
-        <span id="selected-mission-state">Loading mission...</span>
-      </button>
-      <button id="mission-menu-button" class="icon-button" type="button" aria-label="Mission actions">&#8942;</button>
-    </header>
+    {self._render_topbar("Missions", '<button id="mission-title-button" class="icon-button" type="button" aria-label="Select mission">+</button><button id="mission-menu-button" class="icon-button" type="button" aria-label="Mission actions">&#8942;</button>')}
 
     <div id="drawer-backdrop" class="drawer-backdrop"></div>
     <nav id="nav-drawer" class="drawer nav-drawer" aria-label="Application navigation">
@@ -2393,10 +2828,13 @@ class MissionFrontendRenderer:
         <div class="sheet-handle"></div>
       </button>
       <div class="sheet-summary">
-        <div>
-          <strong id="sheet-mission-title">No mission selected</strong>
-          <span id="sheet-mission-meta">Select a mission to review it.</span>
-        </div>
+        <button id="sheet-summary-toggle" class="sheet-summary-toggle" type="button" aria-expanded="false" aria-label="Toggle mission details">
+          <span>
+            <strong id="sheet-mission-title">No mission selected</strong>
+            <span id="sheet-mission-meta">Select a mission to review it.</span>
+          </span>
+          <span id="sheet-chevron" class="sheet-chevron" aria-hidden="true">&#8963;</span>
+        </button>
         <button id="start-mission-button" type="button">Start</button>
       </div>
       <div class="sheet-tabs">
@@ -2552,6 +2990,7 @@ class MissionFrontendRenderer:
     crossorigin=""
   ></script>
   <script>
+    {self._shared_topbar_js()}
     const banner = document.getElementById('banner');
     const chip = document.getElementById('recording-chip');
     const latestRun = document.getElementById('latest-run');
@@ -2565,8 +3004,8 @@ class MissionFrontendRenderer:
     const mapComboList = document.getElementById('map-combo-list');
     const mapNameInput = document.getElementById('map-name');
     const missionApp = document.getElementById('mission-app');
-    const selectedMissionTitle = document.getElementById('selected-mission-title');
-    const selectedMissionState = document.getElementById('selected-mission-state');
+    const selectedMissionTitle = document.querySelector('.topbar-title h1');
+    const selectedMissionState = document.getElementById('topbar-page-state');
     const sheetMissionTitle = document.getElementById('sheet-mission-title');
     const sheetMissionMeta = document.getElementById('sheet-mission-meta');
     const missionBottomSheet = document.getElementById('mission-bottom-sheet');
@@ -2658,6 +3097,7 @@ class MissionFrontendRenderer:
     mapNameInput.value = latestRecordingLabel;
     mapComboList.innerHTML = '<button class="map-combo-option" type="button" disabled>Loading saved maps...</button>';
     gaussianOverlaySummary.style.display = 'none';
+    updateTopbarFromStatus({{}}, 'Loading mission');
 
     const map = L.map('record-map', {{ zoomControl: true }}).setView([55.6761, 12.5683], 18);
     const satelliteTileLayer = L.tileLayer(
@@ -2732,6 +3172,19 @@ class MissionFrontendRenderer:
       if (state === 'medium' || state === 'expanded') {{
         missionBottomSheet.classList.add(state);
       }}
+      const expanded = state === 'medium' || state === 'expanded';
+      const summaryToggle = document.getElementById('sheet-summary-toggle');
+      const handleToggle = document.getElementById('sheet-handle-button');
+      const chevron = document.getElementById('sheet-chevron');
+      if (summaryToggle) {{
+        summaryToggle.setAttribute('aria-expanded', String(expanded));
+      }}
+      if (handleToggle) {{
+        handleToggle.setAttribute('aria-expanded', String(expanded));
+      }}
+      if (chevron) {{
+        chevron.textContent = expanded ? '⌄' : '⌃';
+      }}
       window.setTimeout(() => {{
         missionApp.style.setProperty('--bottom-sheet-height', `${{missionBottomSheet.offsetHeight}}px`);
         map.invalidateSize();
@@ -2761,6 +3214,7 @@ class MissionFrontendRenderer:
 
     function openDrawer(drawer) {{
       closeOverlayPanels();
+      closeBatteryPopover();
       navDrawer.classList.toggle('open', drawer === navDrawer);
       missionDrawer.classList.toggle('open', drawer === missionDrawer);
       drawerBackdrop.classList.add('show');
@@ -2768,6 +3222,7 @@ class MissionFrontendRenderer:
 
     function openSideSheet(sheet) {{
       closeDrawers();
+      closeBatteryPopover();
       missionActionMenu.classList.remove('open');
       for (const element of [mapEditSheet, pathEditSheet, areaEditSheet, missionSettingsSheet, advancedSheet]) {{
         element.classList.toggle('open', element === sheet);
@@ -3691,7 +4146,7 @@ class MissionFrontendRenderer:
       const title = selectedSourceDisplayName();
       const status = missionUiStatus(entry);
       const metrics = missionMetrics(entry);
-      selectedMissionTitle.textContent = title;
+      selectedMissionTitle.textContent = 'Missions';
       selectedMissionState.textContent = status;
       sheetMissionTitle.textContent = title;
       sheetMissionMeta.textContent = `${{status}} | ${{metrics}}`;
@@ -3911,6 +4366,17 @@ class MissionFrontendRenderer:
         throw new Error(data.message || `${{path}} failed with HTTP ${{response.status}}`);
       }}
       return data;
+    }}
+
+    async function refreshTopbarStatus() {{
+      try {{
+        const response = await fetch('/api/v1/status', {{ cache: 'no-store' }});
+        const data = await response.json();
+        const missionState = selectedMapId ? (selectedMap()?.name || selectedMapId) : 'Select mission';
+        updateTopbarFromStatus(data, missionState);
+      }} catch (_error) {{
+        markTopbarDisconnected();
+      }}
     }}
 
     function selectedMissionEditableMessage() {{
@@ -4169,7 +4635,7 @@ class MissionFrontendRenderer:
       }});
     }}
 
-    document.getElementById('sheet-handle-button').addEventListener('click', () => {{
+    function toggleMissionSheet() {{
       if (missionBottomSheet.classList.contains('expanded')) {{
         setSheetState('collapsed');
       }} else if (missionBottomSheet.classList.contains('medium')) {{
@@ -4177,7 +4643,9 @@ class MissionFrontendRenderer:
       }} else {{
         setSheetState('medium');
       }}
-    }});
+    }}
+    document.getElementById('sheet-handle-button').addEventListener('click', toggleMissionSheet);
+    document.getElementById('sheet-summary-toggle').addEventListener('click', toggleMissionSheet);
     document.getElementById('mission-tab-button').addEventListener('click', () => {{
       document.getElementById('mission-tab-button').classList.add('active');
       document.getElementById('runs-tab-button').classList.remove('active');
@@ -4520,6 +4988,7 @@ class MissionFrontendRenderer:
     }});
     window.setInterval(() => {{
       loadRecordMapSnapshot().catch(() => null);
+      refreshTopbarStatus();
     }}, 4000);
     window.setInterval(() => {{
       refreshGaussianStatus().catch((error) => {{
@@ -4560,8 +5029,8 @@ class MissionFrontendRenderer:
     * {{ box-sizing: border-box; }}
     html, body {{
       width: 100vw;
-      height: 100dvh;
-      overflow: hidden;
+      min-height: 100dvh;
+      overflow-x: hidden;
     }}
     body {{
       margin: 0;
@@ -4572,9 +5041,9 @@ class MissionFrontendRenderer:
     }}
     main {{
       width: 100vw;
-      height: 100dvh;
-      overflow: hidden;
-      padding: calc(72px + env(safe-area-inset-top)) 14px calc(14px + env(safe-area-inset-bottom));
+      min-height: 100dvh;
+      overflow-x: hidden;
+      padding: calc(72px + env(safe-area-inset-top)) 14px calc(88px + env(safe-area-inset-bottom));
     }}
     .card {{
       background: var(--card);
@@ -4932,13 +5401,6 @@ class MissionFrontendRenderer:
       50% {{ opacity: 1; }}
     }}
     @media (max-width: 820px) {{
-      .app-topbar {{
-        grid-template-columns: 46px minmax(0, 1fr) auto;
-      }}
-      #teleop-topbar-stop {{
-        grid-column: 1 / -1;
-        width: 100%;
-      }}
       .teleop-layout {{ grid-template-columns: 1fr; }}
       .teleop-layout.one-stick {{ grid-template-columns: 1fr; }}
       .center-controls {{ grid-row: 1; }}
@@ -4948,17 +5410,63 @@ class MissionFrontendRenderer:
         --stick-size: min(78vw, 310px);
       }}
     }}
+    .teleop-options-dock {{
+      position: fixed;
+      left: calc(12px + env(safe-area-inset-left));
+      right: calc(12px + env(safe-area-inset-right));
+      bottom: calc(12px + env(safe-area-inset-bottom));
+      z-index: 720;
+      display: grid;
+      justify-items: center;
+      pointer-events: none;
+    }}
+    .teleop-options-button {{
+      pointer-events: auto;
+      width: min(100%, 360px);
+      border: 1px solid var(--line);
+      color: var(--ink);
+      background: rgba(18, 20, 21, 0.92);
+    }}
+    .teleop-options-list {{
+      pointer-events: auto;
+      display: none;
+      width: min(100%, 360px);
+      margin-bottom: 8px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(42, 46, 48, 0.98);
+      box-shadow: 0 18px 42px rgba(0, 0, 0, 0.36);
+      backdrop-filter: blur(8px);
+      gap: 8px;
+    }}
+    .teleop-options-dock.open .teleop-options-list {{
+      display: grid;
+    }}
+    .teleop-option-row {{
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      min-height: 48px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 8px 10px;
+      background: rgba(18, 20, 21, 0.56);
+    }}
+    .teleop-option-row span {{
+      color: var(--muted);
+      font-size: 0.84rem;
+    }}
+    .teleop-option-row button {{
+      min-width: 88px;
+    }}
+    {self._shared_topbar_css()}
   </style>
 </head>
 <body>
   <main>
-    <header class="app-topbar" aria-label="Teleop controls">
-      <button id="open-nav-button" class="icon-button" type="button" aria-label="Open navigation">&#9776;</button>
-      <h1>Teleop</h1>
-      <span id="fsm-state" class="topbar-status">CONNECTING</span>
-      <span id="battery-summary" class="topbar-status">--</span>
-      <button id="teleop-topbar-stop" class="stop" type="button" disabled>Stop</button>
-    </header>
+    {self._render_topbar("Teleop", '<button id="teleop-topbar-stop" class="stop" type="button" disabled>Stop</button>')}
     <div id="banner" class="banner" role="status" aria-live="polite"></div>
     <div id="drawer-backdrop" class="drawer-backdrop"></div>
     <nav id="nav-drawer" class="nav" aria-label="Application navigation">
@@ -5000,9 +5508,6 @@ class MissionFrontendRenderer:
           <button id="teleop-start-button" class="idle-start" type="button">Teleop</button>
           <button id="record-map-start-button" class="idle-start" type="button">Record Map</button>
           <button id="teleop-toggle-button" class="merged-button" type="button">Stop</button>
-          <button id="lights-button" class="toggle-button" type="button">Lights</button>
-          <button id="camera-button" class="camera-button" type="button">Camera</button>
-          <button id="two-stick-button" class="mode-button left-column-button" type="button">Two Stick</button>
         </section>
         <section id="tools-panel" class="stick-panel tools-panel">
           <h2>Tools</h2>
@@ -5017,9 +5522,27 @@ class MissionFrontendRenderer:
       </div>
       <div id="tool-scale" class="speed-scale" role="slider" aria-label="Tool speed" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"></div>
     </section>
+    <section id="teleop-options-dock" class="teleop-options-dock" aria-label="Teleop options">
+      <div id="teleop-options-list" class="teleop-options-list">
+        <div class="teleop-option-row">
+          <div><strong>Lights</strong><br><span>Front work lights</span></div>
+          <button id="lights-button" class="toggle-button" type="button">Off</button>
+        </div>
+        <div class="teleop-option-row">
+          <div><strong>Camera</strong><br><span>Live driving view</span></div>
+          <button id="camera-button" class="camera-button" type="button">Off</button>
+        </div>
+        <div class="teleop-option-row">
+          <div><strong>Two Stick</strong><br><span>Separate drive and tool sticks</span></div>
+          <button id="two-stick-button" class="mode-button" type="button">Off</button>
+        </div>
+      </div>
+      <button id="teleop-options-button" class="teleop-options-button" type="button" aria-expanded="false" aria-controls="teleop-options-list">Options</button>
+    </section>
   </main>
 
   <script>
+    {self._shared_topbar_js()}
     const banner = document.getElementById('banner');
     const teleopStartButton = document.getElementById('teleop-start-button');
     const recordMapStartButton = document.getElementById('record-map-start-button');
@@ -5033,6 +5556,8 @@ class MissionFrontendRenderer:
     const cameraFeed = document.getElementById('camera-feed');
     const teleopStage = document.getElementById('teleop-stage');
     const teleopLayout = document.getElementById('teleop-layout');
+    const teleopOptionsDock = document.getElementById('teleop-options-dock');
+    const teleopOptionsButton = document.getElementById('teleop-options-button');
     const centerControls = document.querySelector('.center-controls');
     const driveToolScaleSlot = document.getElementById('drive-tool-scale-slot');
     const toolScaleSlot = document.getElementById('tool-scale-slot');
@@ -5109,7 +5634,7 @@ class MissionFrontendRenderer:
           resetStick(sticks.right);
         }}
       }}
-      twoStickButton.textContent = twoStickEnabled ? 'One Stick' : 'Two Stick';
+      twoStickButton.textContent = twoStickEnabled ? 'On' : 'Off';
     }}
     function handlePointer(stick, event) {{
       const rect = stick.shell.getBoundingClientRect();
@@ -5194,10 +5719,12 @@ class MissionFrontendRenderer:
       cameraEnabled = false;
       closeCameraStream();
       cameraButton.classList.remove('enabled');
+      cameraButton.textContent = 'Off';
       teleopStage.classList.remove('camera-active', 'camera-waiting');
     }}
     function updateCameraState() {{
       cameraButton.classList.toggle('enabled', cameraEnabled);
+      cameraButton.textContent = cameraEnabled ? 'On' : 'Off';
       if (!cameraEnabled) {{
         closeCameraStream();
         teleopStage.classList.remove('camera-active', 'camera-waiting');
@@ -5282,18 +5809,16 @@ class MissionFrontendRenderer:
         active.active !== false;
       lightsEnabled = Boolean(data.teleop_lights_enabled);
       lightsButton.classList.toggle('enabled', lightsEnabled);
+      lightsButton.textContent = lightsEnabled ? 'On' : 'Off';
       transitionBusy = transitionActive && (
         [220, 225].includes(Number(fsm.transitioning_to_profile)) ||
         [220, 225].includes(Number(fsm.current_profile)) ||
         ['Teleop', 'RecordMap'].includes(active.mission_id)
       );
-      document.getElementById('fsm-state').textContent = teleopReady
+      const teleopStateLabel = teleopReady
         ? (activeTeleopMode === 'record_map' ? 'RECORDING MAP' : 'TELEOP ACTIVE')
         : (display.current_state || fsm.current_state || 'READY');
-      document.getElementById('battery-summary').textContent =
-        data.battery?.percentage !== null && data.battery?.percentage !== undefined
-          ? `${{Math.round(Number(data.battery.percentage) * 100)}}%`
-          : '--';
+      updateTopbarFromStatus(data, teleopStateLabel);
       document.getElementById('fsm-profile').textContent = formatProfileValue(
         display.current_profile !== undefined && display.current_profile !== null ? display.current_profile : fsm.current_profile
       );
@@ -5349,6 +5874,9 @@ class MissionFrontendRenderer:
       teleopToggleButton.click();
     }});
     document.getElementById('open-nav-button').addEventListener('click', () => {{
+      closeBatteryPopover();
+      teleopOptionsDock.classList.remove('open');
+      teleopOptionsButton.setAttribute('aria-expanded', 'false');
       navDrawer.classList.add('open');
       drawerBackdrop.classList.add('show');
     }});
@@ -5364,6 +5892,7 @@ class MissionFrontendRenderer:
         if (result.success) {{
           lightsEnabled = nextEnabled;
           lightsButton.classList.toggle('enabled', lightsEnabled);
+          lightsButton.textContent = lightsEnabled ? 'On' : 'Off';
         }}
         setBanner(result.success ? 'ok' : 'error', result.message || 'Lights request completed');
       }} catch (error) {{
@@ -5379,6 +5908,19 @@ class MissionFrontendRenderer:
     cameraButton.addEventListener('click', () => {{
       cameraEnabled = !cameraEnabled;
       updateCameraState();
+    }});
+    teleopOptionsButton.addEventListener('click', (event) => {{
+      event.stopPropagation();
+      const open = !teleopOptionsDock.classList.contains('open');
+      teleopOptionsDock.classList.toggle('open', open);
+      teleopOptionsButton.setAttribute('aria-expanded', String(open));
+      closeBatteryPopover();
+    }});
+    document.addEventListener('click', (event) => {{
+      if (!teleopOptionsDock.contains(event.target)) {{
+        teleopOptionsDock.classList.remove('open');
+        teleopOptionsButton.setAttribute('aria-expanded', 'false');
+      }}
     }});
     document.addEventListener('visibilitychange', () => {{
       if (document.visibilityState !== 'visible') {{
@@ -6322,7 +6864,7 @@ class MissionFrontendRenderer:
     main {{
       max-width: 1200px;
       margin: 0 auto;
-      padding: 24px;
+      padding: calc(82px + env(safe-area-inset-top)) 24px 24px;
     }}
     .card {{
       background: var(--card);
@@ -6534,17 +7076,14 @@ class MissionFrontendRenderer:
       letter-spacing: 0.06em;
     }}
     @media (max-width: 720px) {{
-      main {{ padding: 14px; }}
+      main {{ padding: calc(82px + env(safe-area-inset-top)) 14px 18px; }}
       .log-entry {{ grid-template-columns: 1fr; gap: 4px; }}
     }}
+    {self._shared_topbar_css()}
   </style>
 </head>
 <body>
-  <header class="app-topbar" aria-label="Developer controls">
-    <button id="open-nav-button" class="icon-button" type="button" aria-label="Open navigation">&#9776;</button>
-    <h1>Developer</h1>
-    <span id="developer-topbar-status" class="topbar-status">Engineering</span>
-  </header>
+  {self._render_topbar("Developer")}
   <div id="drawer-backdrop" class="drawer-backdrop"></div>
   <nav id="nav-drawer" class="nav" aria-label="Application navigation">
     <h2>O-ROBOTICS</h2>
@@ -6589,6 +7128,7 @@ class MissionFrontendRenderer:
   </main>
 
   <script>
+    {self._shared_topbar_js()}
     const logList = document.getElementById('log-list');
     const rawStatus = document.getElementById('raw-status');
     const selectedMissionElement = document.getElementById('developer-selected-mission');
@@ -6753,6 +7293,7 @@ class MissionFrontendRenderer:
     async function loadStatus() {{
       const response = await fetch('/api/v1/status', {{ cache: 'no-store' }});
       const data = await response.json();
+      updateTopbarFromStatus(data, 'Engineering');
       const recentLogs = data.recent_logs || [];
 
       logList.innerHTML = '';
@@ -6771,6 +7312,9 @@ class MissionFrontendRenderer:
         }}
       }}
 
+      rawStatus.textContent = JSON.stringify(data, null, 2);
+    }}
+
     for (const tab of developerTabs) {{
       tab.addEventListener('click', () => {{
         const target = tab.dataset.tab || 'logs';
@@ -6783,6 +7327,7 @@ class MissionFrontendRenderer:
       }});
     }}
     document.getElementById('open-nav-button').addEventListener('click', () => {{
+      closeBatteryPopover();
       navDrawer.classList.add('open');
       drawerBackdrop.classList.add('show');
     }});
@@ -6794,11 +7339,8 @@ class MissionFrontendRenderer:
       await navigator.clipboard.writeText(rawStatus.textContent || '{{}}');
     }});
 
-      rawStatus.textContent = JSON.stringify(data, null, 2);
-    }}
-
-    Promise.all([loadStatus(), loadMissions()]).catch(() => null);
-    setInterval(loadStatus, 2000);
+    Promise.all([loadStatus(), loadMissions()]).catch(() => markTopbarDisconnected());
+    setInterval(() => loadStatus().catch(() => markTopbarDisconnected()), 2000);
     window.addEventListener('storage', () => {{
       renderLayerToggles();
     }});
