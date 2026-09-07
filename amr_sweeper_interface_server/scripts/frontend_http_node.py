@@ -195,11 +195,33 @@ class MissionFrontendRenderer:
       border-radius: 50%;
       background: #ef4444;
       box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.45);
-      animation: pulse 1.2s infinite;
+      animation: none;
     }}
     .live-dot.connected {{
       background: #22c55e;
       box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.45);
+      animation: drawer-live-pulse 1.2s infinite;
+    }}
+    .drawer-safety-stop {{
+      width: 100%;
+      min-height: 46px;
+      margin-top: auto;
+      border: 0;
+      border-radius: 8px;
+      background: #d22c2c;
+      color: #fff8f6;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }}
+    .drawer-safety-stop:hover {{
+      background: #ec3b3b;
+    }}
+    @keyframes drawer-live-pulse {{
+      0% {{ box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.45); }}
+      70% {{ box-shadow: 0 0 0 10px rgba(34, 197, 94, 0); }}
+      100% {{ box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }}
     }}
     @media (max-width: 560px) {{
       .app-topbar {{
@@ -249,6 +271,9 @@ class MissionFrontendRenderer:
         <span id="drawer-live-status" class="live-status-text">CONNECTING</span>
       </div>
     </div>"""
+
+    def _render_drawer_safety_stop(self) -> str:
+        return """<button id="drawer-safety-stop-button" class="drawer-safety-stop" type="button">SAFETY STOP</button>"""
 
     def _shared_topbar_js(self) -> str:
         return """
@@ -365,6 +390,22 @@ class MissionFrontendRenderer:
       }
     }
 
+    async function requestSafetyStop() {
+      const response = await fetch('/api/v1/safety/stop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sender: 'frontend_http_node',
+          reason: 'safety stop requested from navigation drawer'
+        })
+      });
+      const data = await response.json();
+      if (typeof setBanner === 'function') {
+        setBanner(data.success ? 'ok' : 'error', data.message || 'Safety stop request completed');
+      }
+      return data;
+    }
+
     if (topbarBatteryButton && batteryPopover) {
       topbarBatteryButton.addEventListener('click', (event) => {
         event.stopPropagation();
@@ -380,6 +421,18 @@ class MissionFrontendRenderer:
       document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') {
           closeBatteryPopover();
+        }
+      });
+    }
+
+    const drawerSafetyStopButton = document.getElementById('drawer-safety-stop-button');
+    if (drawerSafetyStopButton) {
+      drawerSafetyStopButton.addEventListener('click', async () => {
+        drawerSafetyStopButton.disabled = true;
+        try {
+          await requestSafetyStop();
+        } finally {
+          drawerSafetyStopButton.disabled = false;
         }
       });
     }
@@ -618,7 +671,7 @@ class MissionFrontendRenderer:
       display: grid;
       align-content: start;
       gap: 9px;
-      width: min(90vw, 390px);
+      width: min(67.5vw, 292px);
       padding: calc(18px + env(safe-area-inset-top)) 18px calc(18px + env(safe-area-inset-bottom));
       overflow-y: auto;
       background: rgba(42, 46, 48, 0.96);
@@ -679,11 +732,12 @@ class MissionFrontendRenderer:
       border-radius: 50%;
       background: #ef4444;
       box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.45);
-      animation: pulse 1.2s infinite;
+      animation: none;
     }}
     .live-dot.connected {{
       background: #22c55e;
       box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.45);
+      animation: drawer-live-pulse 1.2s infinite;
     }}
     .clock-block {{
       display: flex;
@@ -783,7 +837,7 @@ class MissionFrontendRenderer:
     <a class="nav-link" href="/missions">Missions</a>
     <a class="nav-link" href="/teleop">Teleop</a>
     <a class="nav-link" href="/developer">Developer</a>
-    <button id="drawer-safety-stop-button" class="stop" type="button">SAFETY STOP</button>
+    {self._render_drawer_safety_stop()}
   </nav>
   <main>
     <section class="hero">
@@ -1072,9 +1126,6 @@ class MissionFrontendRenderer:
       );
       await loadStatus();
     }});
-    document.getElementById('drawer-safety-stop-button').addEventListener('click', () => {{
-      document.getElementById('safety-stop-button').click();
-    }});
     document.getElementById('open-nav-button').addEventListener('click', () => {{
       closeBatteryPopover();
       document.getElementById('nav-drawer').classList.add('open');
@@ -1258,7 +1309,7 @@ class MissionFrontendRenderer:
       display: grid;
       align-content: start;
       gap: 9px;
-      width: min(90vw, 390px);
+      width: min(67.5vw, 292px);
       padding: calc(18px + env(safe-area-inset-top)) 18px calc(18px + env(safe-area-inset-bottom));
       overflow-y: auto;
       background: rgba(42, 46, 48, 0.96);
@@ -1607,6 +1658,7 @@ class MissionFrontendRenderer:
     <a class="nav-link" href="/missions">Missions</a>
     <a class="nav-link" href="/teleop">Teleop</a>
     <a class="nav-link" href="/developer">Developer</a>
+    {self._render_drawer_safety_stop()}
   </nav>
   <main>
     <section class="card">
@@ -2329,11 +2381,16 @@ class MissionFrontendRenderer:
       bottom: 0;
       left: 0;
       z-index: 900;
-      width: min(90vw, 390px);
       padding: calc(18px + env(safe-area-inset-top)) 18px calc(18px + env(safe-area-inset-bottom));
       transform: translateX(-105%);
       transition: transform 180ms ease;
       overflow-y: auto;
+    }}
+    .nav-drawer {{
+      width: min(67.5vw, 292px);
+    }}
+    .mission-drawer {{
+      width: min(90vw, 390px);
     }}
     .nav-drawer.open, .mission-drawer.open {{
       transform: translateX(0);
@@ -2794,6 +2851,7 @@ class MissionFrontendRenderer:
         <a class="nav-link" href="/teleop">Teleop</a>
         <a class="nav-link" href="/developer">Developer</a>
       </div>
+      {self._render_drawer_safety_stop()}
     </nav>
 
     <aside id="mission-drawer" class="drawer mission-drawer" aria-label="Mission Selection">
@@ -5151,7 +5209,7 @@ class MissionFrontendRenderer:
       display: grid;
       align-content: start;
       gap: 9px;
-      width: min(90vw, 390px);
+      width: min(67.5vw, 292px);
       padding: calc(18px + env(safe-area-inset-top)) 18px calc(18px + env(safe-area-inset-bottom));
       overflow-y: auto;
       background: rgba(42, 46, 48, 0.96);
@@ -5358,7 +5416,7 @@ class MissionFrontendRenderer:
       display: none;
     }}
     .idle-start.needs-start {{
-      animation: start-button-pulse 0.95s ease-in-out 2;
+      animation: start-button-pulse 0.95s ease-in-out infinite;
     }}
     .merged-button {{
       display: none;
@@ -5535,6 +5593,7 @@ class MissionFrontendRenderer:
         <a class="nav-link" href="/teleop">Teleop</a>
         <a class="nav-link" href="/developer">Developer</a>
       </div>
+      {self._render_drawer_safety_stop()}
     </nav>
     <section class="card" style="display: none;">
       <div class="status-row">
@@ -5580,7 +5639,7 @@ class MissionFrontendRenderer:
     <section id="teleop-options-dock" class="teleop-options-dock" aria-label="Teleop options">
       <div id="teleop-options-list" class="teleop-options-list">
         <div class="teleop-option-row">
-          <div><strong>Lights</strong><br><span>Front work lights</span></div>
+          <div><strong>Lights</strong><br><span>LED work lights</span></div>
           <button id="lights-button" class="toggle-button" type="button">Off</button>
         </div>
         <div class="teleop-option-row">
@@ -5668,9 +5727,12 @@ class MissionFrontendRenderer:
         return;
       }}
       for (const button of [teleopStartButton, recordMapStartButton]) {{
-        button.classList.remove('needs-start');
-        void button.offsetWidth;
         button.classList.add('needs-start');
+      }}
+    }}
+    function stopPulsingStartButtons() {{
+      for (const button of [teleopStartButton, recordMapStartButton]) {{
+        button.classList.remove('needs-start');
       }}
     }}
     function renderScale(scale) {{
@@ -5790,8 +5852,14 @@ class MissionFrontendRenderer:
           handlePointer(stick, event);
         }}
       }});
-      stick.shell.addEventListener('pointerup', () => relaxStickToZero(stick));
-      stick.shell.addEventListener('pointercancel', () => relaxStickToZero(stick));
+      stick.shell.addEventListener('pointerup', () => {{
+        stopPulsingStartButtons();
+        relaxStickToZero(stick);
+      }});
+      stick.shell.addEventListener('pointercancel', () => {{
+        stopPulsingStartButtons();
+        relaxStickToZero(stick);
+      }});
       updateKnob(stick);
     }}
     for (const scale of Object.values(speedScales)) {{
@@ -7088,7 +7156,7 @@ class MissionFrontendRenderer:
       display: grid;
       align-content: start;
       gap: 9px;
-      width: min(90vw, 390px);
+      width: min(67.5vw, 292px);
       padding: calc(18px + env(safe-area-inset-top)) 18px calc(18px + env(safe-area-inset-bottom));
       overflow-y: auto;
       background: rgba(42, 46, 48, 0.96);
@@ -7234,6 +7302,7 @@ class MissionFrontendRenderer:
     <a class="nav-link" href="/missions">Missions</a>
     <a class="nav-link" href="/teleop">Teleop</a>
     <a class="nav-link" href="/developer">Developer</a>
+    {self._render_drawer_safety_stop()}
   </nav>
   <main>
     <section class="card">
