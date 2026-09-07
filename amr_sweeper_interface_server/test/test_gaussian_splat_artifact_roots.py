@@ -269,6 +269,10 @@ class UnifiedMissionPageTest(unittest.TestCase):
             self.assertNotIn('id="topbar-connection"', html)
             self.assertIn('id="topbar-page-state"', html)
             self.assertIn('id="topbar-battery-button"', html)
+            self.assertLess(
+                html.index('id="topbar-battery-button"'),
+                html.index('id="topbar-page-state"'),
+            )
             self.assertIn('id="drawer-live-status"', html)
             self.assertIn('id="drawer-live-dot"', html)
             self.assertIn('id="battery-popover"', html)

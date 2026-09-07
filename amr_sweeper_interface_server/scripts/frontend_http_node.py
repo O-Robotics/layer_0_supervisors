@@ -227,8 +227,8 @@ class MissionFrontendRenderer:
     <div class="topbar-title">
       <h1>{escaped_title}</h1>
     </div>
-    <span id="topbar-page-state" class="topbar-status">State</span>
     <button id="topbar-battery-button" class="battery-button" type="button" aria-expanded="false" aria-controls="battery-popover">--</button>
+    <span id="topbar-page-state" class="topbar-status">State</span>
     <div class="topbar-action">{action_html}</div>
   </header>
   <section id="battery-popover" class="battery-popover" aria-label="Battery details">
