@@ -256,6 +256,8 @@ class UnifiedMissionPageTest(unittest.TestCase):
         self.assertIn("const durationMs = 250 * distance", html)
         self.assertIn("requestAnimationFrame(step)", html)
         self.assertIn("streamCommand();", html)
+        self.assertIn("let teleopStopPending = false", html)
+        self.assertIn("teleopStopPending ? 'Stopping'", html)
         self.assertIn("Drive Speed", html)
         self.assertIn("Tool Speed", html)
         self.assertNotIn("<h2>Drive</h2>", html)

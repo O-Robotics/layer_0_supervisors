@@ -5616,6 +5616,7 @@ class MissionFrontendRenderer:
     let cameraEnabled = false;
     let cameraStreamActive = false;
     let commandInFlight = false;
+    let teleopStopPending = false;
     const sticks = {{
       left: {{ x: 0, y: 0, shell: document.getElementById('left-stick'), knob: document.getElementById('left-knob'), pointerId: null, relaxFrame: 0 }},
       right: {{ x: 0, y: 0, shell: document.getElementById('right-stick'), knob: document.getElementById('right-knob'), pointerId: null, relaxFrame: 0 }},
@@ -5918,6 +5919,9 @@ class MissionFrontendRenderer:
         [220, 225].includes(Number(fsm.current_profile)) ||
         ['Teleop', 'RecordMap'].includes(active.mission_id)
       );
+      if (!transitionBusy && !teleopReady) {{
+        teleopStopPending = false;
+      }}
       const teleopStateLabel = teleopReady
         ? (activeTeleopMode === 'record_map' ? 'RECORDING MAP' : 'TELEOP ACTIVE')
         : (display.current_state || fsm.current_state || 'READY');
@@ -5927,7 +5931,7 @@ class MissionFrontendRenderer:
       );
       document.getElementById('active-mission').textContent = active?.mission_id || '--';
       if (transitionBusy) {{
-        setBusyButton(display.transition_progress || 'Transitioning');
+        setBusyButton(teleopStopPending ? 'Stopping' : (display.transition_progress || 'Transitioning'));
       }} else {{
         renderButton();
       }}
@@ -5938,6 +5942,7 @@ class MissionFrontendRenderer:
 
     async function startTeleopMode(mode) {{
       try {{
+        teleopStopPending = false;
         setBusyButton(mode === 'record_map' ? 'Recording' : 'Starting');
         const result = await postJson('/api/v1/teleop/start', {{ mode }});
         if (!result.success) {{
@@ -5961,10 +5966,12 @@ class MissionFrontendRenderer:
     teleopToggleButton.addEventListener('click', async () => {{
       try {{
         if (teleopReady) {{
+          teleopStopPending = true;
           setBusyButton('Stopping');
           await sendZeroCommand();
           const result = await postJson('/api/v1/teleop/stop', {{}});
           if (!result.success) {{
+            teleopStopPending = false;
             setBanner('error', result.message || 'Teleop stop request failed');
           }}
         }} else {{
@@ -5972,6 +5979,7 @@ class MissionFrontendRenderer:
           return;
         }}
       }} catch (error) {{
+        teleopStopPending = false;
         setBanner('error', error.message || 'Teleop request failed');
       }} finally {{
         await loadStatus();
