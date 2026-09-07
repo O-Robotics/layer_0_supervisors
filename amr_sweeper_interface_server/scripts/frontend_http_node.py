@@ -5249,6 +5249,27 @@ class MissionFrontendRenderer:
     .teleop-stage.camera-waiting .camera-message {{
       display: grid;
     }}
+    .speed-readout {{
+      position: absolute;
+      left: 50%;
+      top: 14px;
+      z-index: 4;
+      display: none;
+      transform: translateX(-50%);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 8px 12px;
+      background: rgba(18, 20, 21, 0.86);
+      color: var(--accent);
+      font-size: 0.86rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+      pointer-events: none;
+    }}
+    .speed-readout.show {{
+      display: block;
+    }}
     .stick-panel {{
       display: grid;
       justify-items: center;
@@ -5512,10 +5533,10 @@ class MissionFrontendRenderer:
 
     <section id="teleop-stage" class="card teleop-stage">
       <img id="camera-feed" class="camera-feed" alt="">
+      <div id="speed-readout" class="speed-readout" aria-live="polite"></div>
       <div id="camera-message" class="camera-message">Waiting for Teleop to start</div>
       <div id="teleop-layout" class="teleop-layout one-stick">
         <section class="stick-panel drive-panel">
-          <h2>Drive</h2>
           <div class="stick-cluster">
             <div class="scale-slot">
               <div id="wheel-scale" class="speed-scale" role="slider" aria-label="Wheel speed" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"></div>
@@ -5532,7 +5553,6 @@ class MissionFrontendRenderer:
           <button id="teleop-toggle-button" class="merged-button" type="button">Stop</button>
         </section>
         <section id="tools-panel" class="stick-panel tools-panel">
-          <h2>Tools</h2>
           <div class="stick-cluster">
             <div id="tool-scale-slot" class="scale-slot"></div>
             <div id="right-stick" class="stick-shell" aria-label="Tool joystick">
@@ -5578,14 +5598,15 @@ class MissionFrontendRenderer:
     const cameraFeed = document.getElementById('camera-feed');
     const teleopStage = document.getElementById('teleop-stage');
     const teleopLayout = document.getElementById('teleop-layout');
+    const speedReadout = document.getElementById('speed-readout');
     const teleopOptionsDock = document.getElementById('teleop-options-dock');
     const teleopOptionsButton = document.getElementById('teleop-options-button');
     const centerControls = document.querySelector('.center-controls');
     const driveToolScaleSlot = document.getElementById('drive-tool-scale-slot');
     const toolScaleSlot = document.getElementById('tool-scale-slot');
     const speedScales = {{
-      wheel: {{ value: 0.5, shell: document.getElementById('wheel-scale'), pointerId: null }},
-      tool: {{ value: 0.5, shell: document.getElementById('tool-scale'), pointerId: null }},
+      wheel: {{ value: 0.5, label: 'Drive Speed', shell: document.getElementById('wheel-scale'), pointerId: null }},
+      tool: {{ value: 0.5, label: 'Tool Speed', shell: document.getElementById('tool-scale'), pointerId: null }},
     }};
     let teleopReady = false;
     let transitionBusy = false;
@@ -5634,6 +5655,18 @@ class MissionFrontendRenderer:
       const x = clamp(event.clientX - rect.left, 0, rect.width);
       scale.value = clamp(x / rect.width, 0, 1);
       renderScale(scale);
+      showSpeedReadout(scale);
+    }}
+    function showSpeedReadout(scale) {{
+      speedReadout.textContent = `${{scale.label}} ${{Math.round(scale.value * 100)}}%`;
+      speedReadout.classList.add('show');
+    }}
+    function hideSpeedReadout(scale) {{
+      if (scale && scale.pointerId !== null) {{
+        return;
+      }}
+      speedReadout.classList.remove('show');
+      speedReadout.textContent = '';
     }}
     function createScaleSegments(scale) {{
       const segmentCount = 20;
@@ -5704,9 +5737,11 @@ class MissionFrontendRenderer:
       }});
       scale.shell.addEventListener('pointerup', () => {{
         scale.pointerId = null;
+        hideSpeedReadout(scale);
       }});
       scale.shell.addEventListener('pointercancel', () => {{
         scale.pointerId = null;
+        hideSpeedReadout(scale);
       }});
     }}
     renderControlMode(false);
@@ -5859,7 +5894,9 @@ class MissionFrontendRenderer:
       try {{
         setBusyButton(mode === 'record_map' ? 'Recording' : 'Starting');
         const result = await postJson('/api/v1/teleop/start', {{ mode }});
-        setBanner(result.success ? 'ok' : 'error', result.message || 'Teleop start request completed');
+        if (!result.success) {{
+          setBanner('error', result.message || 'Teleop start request failed');
+        }}
       }} catch (error) {{
         setBanner('error', error.message || 'Teleop request failed');
       }} finally {{
@@ -5881,7 +5918,9 @@ class MissionFrontendRenderer:
           setBusyButton('Stopping');
           await sendZeroCommand();
           const result = await postJson('/api/v1/teleop/stop', {{}});
-          setBanner(result.success ? 'ok' : 'error', result.message || 'Teleop stop request completed');
+          if (!result.success) {{
+            setBanner('error', result.message || 'Teleop stop request failed');
+          }}
         }} else {{
           await startTeleopMode(activeTeleopMode || 'teleop');
           return;
@@ -5916,7 +5955,9 @@ class MissionFrontendRenderer:
           lightsButton.classList.toggle('enabled', lightsEnabled);
           lightsButton.textContent = lightsEnabled ? 'On' : 'Off';
         }}
-        setBanner(result.success ? 'ok' : 'error', result.message || 'Lights request completed');
+        if (!result.success) {{
+          setBanner('error', result.message || 'Lights request failed');
+        }}
       }} catch (error) {{
         setBanner('error', error.message || 'Lights request failed');
       }} finally {{
