@@ -44,3 +44,7 @@ The main packages in this layer are:
 - Layer 0 is responsible for coordinating the lower layers, not for driving hardware directly.
 - The bridge profiles `000 -> 100 -> 200 -> 300 -> 400` are empty pass-through steps.
 - Runtime mission history and generated artifacts are maintained under `/missions`.
+
+## Controlled engineering documentation
+
+The controlled AMR-Sweeper software design, requirements traceability, verification references, and release/configuration records for this repository are maintained in SharePoint under [07 - Software Development / 01 - Layer 0 - Supervisors](https://orobotics.sharepoint.com/sites/AMRSweeper/Shared%20Documents/07%20-%20Software%20Development/01%20-%20Layer%200%20-%20Supervisors). GitHub remains the source of truth for implementation source code; SharePoint is the controlled engineering and traceability record.
