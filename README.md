@@ -47,4 +47,11 @@ The main packages in this layer are:
 
 ## Controlled engineering documentation
 
-The controlled AMR-Sweeper software design, requirements traceability, verification references, and release/configuration records for this repository are maintained in SharePoint under [07 - Software Development / 01 - Layer 0 - Supervisors](https://orobotics.sharepoint.com/sites/AMRSweeper/Shared%20Documents/07%20-%20Software%20Development/01%20-%20Layer%200%20-%20Supervisors). GitHub remains the source of truth for implementation source code; SharePoint is the controlled engineering and traceability record.
+The controlled AMR-Sweeper software records for this repository are maintained in SharePoint under the corresponding folder in `07 - Software Development`. GitHub remains the source of truth for implementation source code; SharePoint is the controlled engineering and traceability record.
+
+Controlled records:
+- `SWD_13000` - Software Architecture
+- `SWR_13001` - Software Requirements Traceability Matrix (PDS / DRA / DFMEA -> software -> verification)
+- `SWD_13002` - Software Configuration and Release Register
+
+See the repository-specific SharePoint folder from the existing controlled-documentation link/history for the current revision of these records.
