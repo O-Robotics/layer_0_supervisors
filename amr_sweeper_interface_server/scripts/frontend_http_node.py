@@ -5125,9 +5125,12 @@ class MissionFrontendRenderer:
     }}
     main {{
       width: 100vw;
-      min-height: 100dvh;
-      overflow-x: hidden;
-      padding: calc(72px + env(safe-area-inset-top)) 14px calc(18px + env(safe-area-inset-bottom));
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      overflow: hidden;
+      padding: calc(72px + env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
     }}
     .card {{
       background: var(--card);
@@ -5240,18 +5243,45 @@ class MissionFrontendRenderer:
       margin-top: 14px;
     }}
     .teleop-layout {{
+      --controls-space: 0px;
+      --controls-width: 180px;
+      --layout-gap: 22px;
+      /* Measure the usable pane after scrollbar gutters, buttons and column gaps. */
+      --stick-width-limit: calc((100cqw - var(--controls-width) - 2 * var(--layout-gap)) / 2);
       display: grid;
-      grid-template-columns: minmax(220px, 1fr) 180px minmax(220px, 1fr);
-      gap: 22px;
+      grid-template-columns: minmax(0, 1fr) var(--controls-width) minmax(0, 1fr);
+      gap: var(--layout-gap);
       align-items: center;
+      align-content: safe center;
+      min-height: 0;
+      container-type: size;
+      overflow: auto;
+      scrollbar-width: thin;
+      scrollbar-gutter: stable both-edges;
     }}
     .teleop-layout.one-stick {{
-      grid-template-columns: minmax(320px, 1fr) 180px;
+      /* Equal side columns keep the drive circle centered independently of the buttons. */
+      --stick-width-limit: calc(100cqw - 2 * var(--controls-width) - 2 * var(--layout-gap));
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    }}
+    .teleop-layout.one-stick .drive-panel {{
+      grid-column: 2;
+      grid-row: 1;
+    }}
+    .teleop-layout.one-stick .center-controls {{
+      grid-column: 3;
+      grid-row: 1;
+      justify-self: end;
+      width: var(--controls-width);
+      max-width: 100%;
     }}
     .teleop-stage {{
       position: relative;
       overflow: hidden;
-      height: 100%;
+      display: grid;
+      grid-template-rows: minmax(0, 1fr);
+      flex: 1 1 0;
+      min-height: 0;
       margin-top: 0;
       border-radius: 18px;
     }}
@@ -5337,9 +5367,11 @@ class MissionFrontendRenderer:
       display: none;
     }}
     .stick-cluster {{
-      --stick-size: min(32vw, 310px);
-      --bar-height: clamp(36px, 5vw, 48px);
-      --cluster-gap: clamp(8px, 1.6vw, 12px);
+      /* The complete group is 1.4 circle diameters high: two 16% bars and two 4% gaps. */
+      /* Reduction keeps the group at 75% of the pane-fitting size. */
+      --stick-size: clamp(230px, calc(0.75 * min(var(--stick-width-limit),calc((100cqh - var(--controls-space)) / 1.4))),500px);
+      --bar-height: calc(var(--stick-size) * 0.16);
+      --cluster-gap: calc(var(--stick-size) * 0.04);
       display: grid;
       grid-template-columns: var(--stick-size);
       grid-template-rows: var(--bar-height) var(--stick-size) var(--bar-height);
@@ -5382,19 +5414,18 @@ class MissionFrontendRenderer:
       width: var(--stick-size);
       height: var(--bar-height);
       min-height: 0;
-      max-height: 48px;
       display: flex;
       flex-direction: row;
       align-items: center;
       justify-content: space-between;
-      padding: 0 7px;
+      padding: 0 calc(var(--stick-size) * 0.023);
       touch-action: none;
       user-select: none;
       cursor: pointer;
     }}
     .scale-segment {{
-      width: 8px;
-      border-radius: 2px;
+      width: calc(var(--stick-size) * 0.026);
+      border-radius: calc(var(--stick-size) * 0.0065);
       background: rgba(8, 9, 10, 0.88);
       border: 1px solid rgba(245, 241, 223, 0.08);
       box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
@@ -5414,6 +5445,9 @@ class MissionFrontendRenderer:
     }}
     .center-controls.active-mode .idle-start {{
       display: none;
+    }}
+    .center-controls .idle-start {{
+      padding-inline: 10px;
     }}
     .idle-start.needs-start {{
       animation: start-button-pulse 0.95s ease-in-out infinite;
@@ -5519,13 +5553,22 @@ class MissionFrontendRenderer:
       }}
     }}
     @media (max-width: 820px) {{
-      .teleop-layout {{ grid-template-columns: 1fr; }}
-      .teleop-layout.one-stick {{ grid-template-columns: 1fr; }}
+      .teleop-layout, .teleop-layout.one-stick {{
+        grid-template-columns: 1fr;
+        --stick-width-limit: 100cqw;
+        /* Reserve room for the control buttons and the gap above the circle. */
+        --controls-space: 88px;
+      }}
       .center-controls {{ grid-row: 1; }}
-      .stick-cluster {{
-        --cluster-gap: clamp(6px, 2vw, 10px);
-        --bar-height: clamp(32px, 9vw, 44px);
-        --stick-size: min(78vw, 310px);
+      .teleop-layout.one-stick .drive-panel {{
+        grid-column: 1;
+        grid-row: 2;
+      }}
+      .teleop-layout.one-stick .center-controls {{
+        grid-column: 1;
+        grid-row: 1;
+        justify-self: stretch;
+        width: auto;
       }}
     }}
     .teleop-options-dock {{
@@ -5534,7 +5577,8 @@ class MissionFrontendRenderer:
       display: grid;
       justify-items: center;
       width: min(100%, 360px);
-      margin: 14px auto 0;
+      flex: none;
+      margin: 0 auto;
     }}
     .teleop-options-button {{
       width: 100%;
@@ -5544,8 +5588,12 @@ class MissionFrontendRenderer:
     }}
     .teleop-options-list {{
       display: none;
+      position: absolute;
+      bottom: calc(100% + 8px);
+      left: 0;
       width: 100%;
-      margin-bottom: 8px;
+      max-height: calc(100dvh - 144px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+      overflow-y: auto;
       padding: 10px;
       border: 1px solid var(--line);
       border-radius: 14px;
@@ -5611,7 +5659,7 @@ class MissionFrontendRenderer:
         <section class="stick-panel drive-panel">
           <div class="stick-cluster">
             <div class="scale-slot">
-              <div id="wheel-scale" class="speed-scale" role="slider" aria-label="Wheel speed" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"></div>
+              <div id="wheel-scale" class="speed-scale" role="slider" aria-label="Wheel speed" aria-valuemin="0" aria-valuemax="100" aria-valuenow="75"></div>
             </div>
             <div id="left-stick" class="stick-shell" aria-label="Drive joystick">
               <div id="left-knob" class="stick-knob"></div>
@@ -5634,7 +5682,7 @@ class MissionFrontendRenderer:
           </div>
         </section>
       </div>
-      <div id="tool-scale" class="speed-scale" role="slider" aria-label="Tool speed" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"></div>
+      <div id="tool-scale" class="speed-scale" role="slider" aria-label="Tool speed" aria-valuemin="0" aria-valuemax="100" aria-valuenow="75"></div>
     </section>
     <section id="teleop-options-dock" class="teleop-options-dock" aria-label="Teleop options">
       <div id="teleop-options-list" class="teleop-options-list">
@@ -5644,11 +5692,19 @@ class MissionFrontendRenderer:
         </div>
         <div class="teleop-option-row">
           <div><strong>Camera</strong><br><span>Live driving view</span></div>
-          <button id="camera-button" class="camera-button" type="button">Off</button>
+          <button id="camera-button" class="camera-button enabled" type="button">On</button>
         </div>
         <div class="teleop-option-row">
           <div><strong>Two Stick</strong><br><span>Separate drive and tool sticks</span></div>
           <button id="two-stick-button" class="mode-button" type="button">Off</button>
+        </div>
+        <div class="teleop-option-row">
+          <div><strong>Joystick</strong><br><span>X/B: drive +/−5%<br>Y/A: brushes +/−5%</span></div>
+          <button id="gamepad-button" class="mode-button enabled" type="button" aria-pressed="true">On</button>
+        </div>
+        <div id="drive-diagnostics" style="display: none; text-align: center;">
+          <p id="drive-input-readout" class="muted">Forward 0% · Turn 0%</p>
+          <button id="save-drive-log" class="mode-button" type="button">Save drive log</button>
         </div>
       </div>
       <button id="teleop-options-button" class="teleop-options-button" type="button" aria-expanded="false" aria-controls="teleop-options-list">Options</button>
@@ -5665,6 +5721,7 @@ class MissionFrontendRenderer:
     const navDrawer = document.getElementById('nav-drawer');
     const drawerBackdrop = document.getElementById('drawer-backdrop');
     const twoStickButton = document.getElementById('two-stick-button');
+    const gamepadButton = document.getElementById('gamepad-button');
     const lightsButton = document.getElementById('lights-button');
     const cameraButton = document.getElementById('camera-button');
     const cameraFeed = document.getElementById('camera-feed');
@@ -5677,18 +5734,42 @@ class MissionFrontendRenderer:
     const driveToolScaleSlot = document.getElementById('drive-tool-scale-slot');
     const toolScaleSlot = document.getElementById('tool-scale-slot');
     const speedScales = {{
-      wheel: {{ value: 0.5, label: 'Drive Speed', shell: document.getElementById('wheel-scale'), pointerId: null }},
-      tool: {{ value: 0.5, label: 'Tool Speed', shell: document.getElementById('tool-scale'), pointerId: null }},
+      wheel: {{ value: 0.75, label: 'Drive Speed', shell: document.getElementById('wheel-scale'), pointerId: null }},
+      tool: {{ value: 0.75, label: 'Tool Speed', shell: document.getElementById('tool-scale'), pointerId: null }},
     }};
     let teleopReady = false;
     let transitionBusy = false;
     let activeTeleopMode = '';
     let twoStickEnabled = false;
     let lightsEnabled = false;
-    let cameraEnabled = false;
+    let cameraEnabled = true;
     let cameraStreamActive = false;
     let commandInFlight = false;
+    let zeroCommandPending = false;
+    let zeroCommandKeepalive = false;
+    let zeroCommandInFlight = false;
     let teleopStopPending = false;
+    let lastStatusAt = -Infinity;
+    let gamepadEnabled = true;
+    let gamepadIndex = null;
+    let gamepadId = '';
+    let gamepadArmed = false;
+    let gamepadDriving = false;
+    let gamepadSpeedButtons = null;
+    let speedReadoutTimeout = null;
+    const GAMEPAD_DEADZONE = 0.15;
+    const GAMEPAD_ENABLE_BUTTON = 4; // Standard mapping: Xbox LB.
+    const GAMEPAD_SPEED_STEP = 0.05;
+    const GAMEPAD_SPEED_BINDINGS = [
+      {{ scale: 'wheel', increase: 2, decrease: 1 }}, // Xbox X / B.
+      {{ scale: 'tool', increase: 3, decrease: 0 }}, // Xbox Y / A.
+    ];
+    // Opt-in recording of this page's inputs and HTTP exchanges; never replays commands.
+    const driveDiagnosticsEnabled = new URLSearchParams(location.search).get('drive_debug') === '1';
+    const driveLog = [];
+    const driveLogCapacity = 2400; // About two minutes at the normal command rate.
+    let driveLogSequence = 0;
+    let latestDriveInput = null;
     const sticks = {{
       left: {{ x: 0, y: 0, shell: document.getElementById('left-stick'), knob: document.getElementById('left-knob'), pointerId: null, relaxFrame: 0 }},
       right: {{ x: 0, y: 0, shell: document.getElementById('right-stick'), knob: document.getElementById('right-knob'), pointerId: null, relaxFrame: 0 }},
@@ -5707,9 +5788,188 @@ class MissionFrontendRenderer:
       return Number.isFinite(numericProfile) ? String(Math.trunc(numericProfile)).padStart(3, '0') : '--';
     }}
     function clamp(value, min, max) {{ return Math.max(min, Math.min(max, value)); }}
+    function recordDriveRequest(payload) {{
+      if (!driveDiagnosticsEnabled) return null;
+      const entry = {{
+        sequence: ++driveLogSequence,
+        sent_at: new Date().toISOString(),
+        input: latestDriveInput,
+        payload: {{ ...payload }},
+        focused: document.hasFocus(),
+        visible: document.visibilityState,
+        gamepad_enabled: gamepadEnabled,
+        gamepad_armed: gamepadArmed,
+      }};
+      driveLog.push(entry);
+      if (driveLog.length > driveLogCapacity) driveLog.shift();
+      document.getElementById('drive-input-readout').textContent =
+        `Forward ${{Math.round(payload.left_y * 100)}}% · Turn ${{Math.round(-payload.left_x * 100)}}% (left +)`;
+      return entry;
+    }}
+    function saveDriveLog() {{
+      const data = {{
+        format: 'amr-drive-input-v1',
+        exported_at: new Date().toISOString(),
+        page: location.origin + location.pathname,
+        browser: navigator.userAgent,
+        viewport: {{ width: innerWidth, height: innerHeight, device_pixel_ratio: devicePixelRatio }},
+        dropped_requests: driveLogSequence - driveLog.length,
+        requests: driveLog,
+      }};
+      const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], {{ type: 'application/json' }}));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'drive_input_capture.json';
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }}
+    if (driveDiagnosticsEnabled) {{
+      document.getElementById('drive-diagnostics').style.display = 'block';
+      document.getElementById('save-drive-log').addEventListener('click', saveDriveLog);
+    }}
     function normalizeToCircle(x, y) {{
       const length = Math.hypot(x, y);
       return length <= 1 ? [x, y] : [x / length, y / length];
+    }}
+    function controlsReady() {{
+      return teleopReady && !transitionBusy && !teleopStopPending &&
+        document.visibilityState === 'visible' && document.hasFocus() &&
+        performance.now() - lastStatusAt < 1500;
+    }}
+    function pointerControlsActive() {{
+      return Object.values(sticks).some((stick) => stick.pointerId !== null || stick.relaxFrame !== 0);
+    }}
+    function clearControlInputs() {{
+      gamepadArmed = false;
+      gamepadDriving = false;
+      gamepadSpeedButtons = null;
+      for (const stick of Object.values(sticks)) {{
+        cancelStickRelaxation(stick);
+        stick.pointerId = null;
+        stick.x = 0;
+        stick.y = 0;
+        updateKnob(stick);
+      }}
+    }}
+    function stopControlInputs(keepalive = false) {{
+      clearControlInputs();
+      sendGamepadZeroCommand(keepalive);
+    }}
+    function stopGamepadInput(keepalive = false) {{
+      // An idle or disconnected controller must not clear an active mouse drag.
+      gamepadArmed = false;
+      if (gamepadDriving) stopControlInputs(keepalive);
+    }}
+    function gamepadStick(x, y) {{
+      const length = Math.hypot(x, y);
+      if (length <= GAMEPAD_DEADZONE) {{
+        return [0, 0];
+      }}
+      const magnitude = (Math.min(length, 1) - GAMEPAD_DEADZONE) / (1 - GAMEPAD_DEADZONE);
+      // Browser Y grows downwards; the teleop API uses positive Y forwards.
+      return [x / length * magnitude, -y / length * magnitude];
+    }}
+    function updateGamepadSpeeds(pad) {{
+      // Speed selection also works before starting a mission, without holding LB.
+      // Ignore held buttons across interruptions and while a speed bar is dragged.
+      if (document.visibilityState !== 'visible' || !document.hasFocus() ||
+          performance.now() - lastStatusAt >= 1500 || transitionBusy || teleopStopPending ||
+          Object.values(speedScales).some((scale) => scale.pointerId !== null)) {{
+        gamepadSpeedButtons = null;
+        return;
+      }}
+      const pressed = [0, 1, 2, 3].map((index) => pad.buttons[index]?.pressed === true);
+      const previous = gamepadSpeedButtons;
+      gamepadSpeedButtons = pressed;
+      if (previous === null) return; // First sample only establishes the button state.
+      for (const binding of GAMEPAD_SPEED_BINDINGS) {{
+        if (pressed[binding.increase] === pressed[binding.decrease]) continue;
+        const direction = pressed[binding.increase] && !previous[binding.increase] ? 1
+          : (pressed[binding.decrease] && !previous[binding.decrease] ? -1 : 0);
+        if (!direction) continue;
+        const scale = speedScales[binding.scale];
+        const value = clamp(Number((scale.value + direction * GAMEPAD_SPEED_STEP).toFixed(4)), 0, 1);
+        if (value === scale.value) continue;
+        scale.value = value;
+        renderScale(scale);
+        showSpeedReadout(scale, 1200);
+      }}
+    }}
+    function updateGamepad() {{
+      if (!gamepadEnabled) {{
+        return;
+      }}
+      // Mouse/touch owns both sticks until all drags and return animations finish.
+      // Require a new neutral, LB-released sample before the controller can resume.
+      if (pointerControlsActive()) {{
+        gamepadArmed = false;
+        gamepadSpeedButtons = null;
+        return;
+      }}
+      let pads;
+      try {{
+        pads = Array.from(navigator.getGamepads());
+      }} catch (_error) {{
+        gamepadSpeedButtons = null;
+        stopGamepadInput();
+        return;
+      }}
+      const supported = (pad) => pad && pad.connected && pad.mapping === 'standard' &&
+        pad.axes.length >= 4 && pad.buttons.length > GAMEPAD_ENABLE_BUTTON;
+      let pad = gamepadIndex === null ? null : pads[gamepadIndex];
+      if (gamepadIndex !== null && (!supported(pad) || pad.id !== gamepadId)) {{
+        gamepadSpeedButtons = null;
+        stopGamepadInput();
+        gamepadIndex = null;
+        gamepadId = '';
+        return;
+      }}
+      if (gamepadIndex === null) {{
+        pad = pads.find((candidate) => supported(candidate) && /x-?box|045e/i.test(candidate.id)) || pads.find(supported);
+        if (!pad) {{
+          return;
+        }}
+        gamepadIndex = pad.index;
+        gamepadId = pad.id;
+        gamepadArmed = false;
+        gamepadSpeedButtons = null;
+      }}
+      if (![0, 1, 2, 3].every((index) => Number.isFinite(pad.axes[index]))) {{
+        gamepadSpeedButtons = null;
+        stopGamepadInput();
+        return;
+      }}
+      updateGamepadSpeeds(pad);
+      if (!controlsReady()) {{
+        stopGamepadInput();
+        return;
+      }}
+      const [leftX, leftY] = gamepadStick(pad.axes[0], pad.axes[1]);
+      const [rightX, rightY] = gamepadStick(pad.axes[2], pad.axes[3]);
+      const held = pad.buttons[GAMEPAD_ENABLE_BUTTON].pressed;
+      const centered = leftX === 0 && leftY === 0 && rightX === 0 && rightY === 0;
+      if (!held) {{
+        if (gamepadDriving) stopControlInputs();
+        gamepadArmed = centered;
+      }}
+      if (!gamepadArmed) {{
+        return;
+      }}
+      if (!held) {{
+        return;
+      }}
+      gamepadDriving = true;
+      if (driveDiagnosticsEnabled) latestDriveInput = {{
+        source: 'gamepad', at: new Date().toISOString(), id: pad.id, mapping: pad.mapping,
+        axes: Array.from(pad.axes), lb: held,
+        normalized: {{ left_x: leftX, left_y: leftY, right_x: rightX, right_y: rightY }},
+      }};
+      sticks.left.x = leftX;
+      sticks.left.y = leftY;
+      sticks.right.x = twoStickEnabled ? rightX : 0;
+      sticks.right.y = twoStickEnabled ? rightY : 0;
+      updateKnob(sticks.left);
+      updateKnob(sticks.right);
     }}
     function updateKnob(stick) {{
       const shellRect = stick.shell.getBoundingClientRect();
@@ -5749,7 +6009,9 @@ class MissionFrontendRenderer:
       renderScale(scale);
       showSpeedReadout(scale);
     }}
-    function showSpeedReadout(scale) {{
+    function showSpeedReadout(scale, autoHideMs = 0) {{
+      clearTimeout(speedReadoutTimeout);
+      speedReadoutTimeout = null;
       speedReadout.textContent = `${{scale.label}} ${{Math.round(scale.value * 100)}}%`;
       speedReadout.classList.add('show');
       const scaleRect = scale.shell.getBoundingClientRect();
@@ -5758,11 +6020,16 @@ class MissionFrontendRenderer:
       const top = Math.max(10, scaleRect.top - stageRect.top - speedReadout.offsetHeight - 8);
       speedReadout.style.left = `${{left}}px`;
       speedReadout.style.top = `${{top}}px`;
+      if (autoHideMs > 0) {{
+        speedReadoutTimeout = setTimeout(() => hideSpeedReadout(scale), autoHideMs);
+      }}
     }}
     function hideSpeedReadout(scale) {{
       if (scale && scale.pointerId !== null) {{
         return;
       }}
+      clearTimeout(speedReadoutTimeout);
+      speedReadoutTimeout = null;
       speedReadout.classList.remove('show');
       speedReadout.textContent = '';
     }}
@@ -5771,7 +6038,7 @@ class MissionFrontendRenderer:
       for (let index = 0; index < segmentCount; index += 1) {{
         const segment = document.createElement('div');
         segment.className = 'scale-segment';
-        segment.style.height = `${{14 + index * 0.9}}px`;
+        segment.style.height = `${{30 + index * 2}}%`;
         scale.shell.appendChild(segment);
       }}
       renderScale(scale);
@@ -5798,6 +6065,13 @@ class MissionFrontendRenderer:
       const [x, y] = normalizeToCircle(rawX, rawY);
       stick.x = clamp(x, -1, 1);
       stick.y = clamp(y, -1, 1);
+      if (driveDiagnosticsEnabled) latestDriveInput = {{
+        source: event.pointerType || 'pointer', at: new Date().toISOString(),
+        event: event.type, stick: stick.shell.id,
+        client_x: event.clientX, client_y: event.clientY,
+        bounds: {{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }},
+        normalized: {{ x: stick.x, y: stick.y }},
+      }};
       updateKnob(stick);
     }}
     function resetStick(stick) {{
@@ -5841,6 +6115,11 @@ class MissionFrontendRenderer:
     }}
     for (const stick of Object.values(sticks)) {{
       stick.shell.addEventListener('pointerdown', (event) => {{
+        if (event.button !== 0 || stick.pointerId !== null) return;
+        // Stop the previous source before taking ownership of the shared command.
+        if (gamepadDriving) stopControlInputs();
+        gamepadArmed = false;
+        gamepadSpeedButtons = null;
         cancelStickRelaxation(stick);
         pulseStartButtons();
         stick.pointerId = event.pointerId;
@@ -5852,14 +6131,14 @@ class MissionFrontendRenderer:
           handlePointer(stick, event);
         }}
       }});
-      stick.shell.addEventListener('pointerup', () => {{
+      const releasePointer = (event) => {{
+        if (stick.pointerId !== event.pointerId) return;
         stopPulsingStartButtons();
         relaxStickToZero(stick);
-      }});
-      stick.shell.addEventListener('pointercancel', () => {{
-        stopPulsingStartButtons();
-        relaxStickToZero(stick);
-      }});
+      }};
+      stick.shell.addEventListener('pointerup', releasePointer);
+      stick.shell.addEventListener('pointercancel', releasePointer);
+      stick.shell.addEventListener('lostpointercapture', releasePointer);
       updateKnob(stick);
     }}
     for (const scale of Object.values(speedScales)) {{
@@ -5885,14 +6164,32 @@ class MissionFrontendRenderer:
     }}
     renderControlMode(false);
 
-    async function postJson(path, body, keepalive = false) {{
-      const response = await fetch(path, {{
-        method: 'POST',
-        headers: {{ 'Content-Type': 'application/json' }},
-        body: JSON.stringify(body || {{}}),
-        keepalive,
-      }});
-      return response.json();
+    async function postJson(path, body, keepalive = false, guardGamepad = gamepadDriving) {{
+      const driveEntry = path === '/api/v1/teleop/command' ? recordDriveRequest(body || {{}}) : null;
+      const guardedCommand = path === '/api/v1/teleop/command' && guardGamepad;
+      const controller = guardedCommand ? new AbortController() : null;
+      const timeout = guardedCommand
+        ? setTimeout(() => controller.abort(), 1500) : null;
+      try {{
+        const response = await fetch(path, {{
+          method: 'POST',
+          headers: {{ 'Content-Type': 'application/json' }},
+          body: JSON.stringify(body || {{}}),
+          keepalive,
+          ...(controller ? {{ signal: controller.signal }} : {{}}),
+        }});
+        if (driveEntry) driveEntry.http_status = response.status;
+        if (guardedCommand && !response.ok) throw new Error(`HTTP ${{response.status}}`);
+        const result = await response.json();
+        if (driveEntry) driveEntry.response = result;
+        return result;
+      }} catch (error) {{
+        if (driveEntry) driveEntry.error = String(error);
+        throw error;
+      }} finally {{
+        if (driveEntry) driveEntry.completed_at = new Date().toISOString();
+        if (timeout !== null) clearTimeout(timeout);
+      }}
     }}
     function commandPayload() {{
       return {{
@@ -5940,6 +6237,10 @@ class MissionFrontendRenderer:
       }}
     }}
     async function sendZeroCommand(keepalive = false) {{
+      if (gamepadEnabled || zeroCommandPending || zeroCommandInFlight) {{
+        return sendGamepadZeroCommand(keepalive);
+      }}
+      // Preserve the original mouse stop path; joystick stops use the queue below.
       try {{
         await postJson('/api/v1/teleop/command', {{
           left_x: 0,
@@ -5949,19 +6250,63 @@ class MissionFrontendRenderer:
           control_mode: twoStickEnabled ? 'two_stick' : 'one_stick',
           wheel_scale: speedScales.wheel.value,
           tool_scale: speedScales.tool.value,
-        }}, keepalive);
+        }}, keepalive, false);
       }} catch (_error) {{}}
     }}
+    async function sendGamepadZeroCommand(keepalive = false) {{
+      // Queue stops after in-flight requests instead of racing a second HTTP request.
+      zeroCommandPending = true;
+      zeroCommandKeepalive = zeroCommandKeepalive || keepalive;
+      if (commandInFlight) return;
+      commandInFlight = true;
+      zeroCommandInFlight = true;
+      zeroCommandPending = false;
+      const useKeepalive = zeroCommandKeepalive;
+      zeroCommandKeepalive = false;
+      try {{
+        await postJson('/api/v1/teleop/command', {{
+          left_x: 0,
+          left_y: 0,
+          right_x: 0,
+          right_y: 0,
+          control_mode: twoStickEnabled ? 'two_stick' : 'one_stick',
+          wheel_scale: speedScales.wheel.value,
+          tool_scale: speedScales.tool.value,
+        }}, useKeepalive, true);
+      }} catch (_error) {{
+      }} finally {{
+        commandInFlight = false;
+        zeroCommandInFlight = false;
+        if (zeroCommandPending) sendGamepadZeroCommand();
+      }}
+    }}
     async function streamCommand() {{
-      if (!teleopReady || document.visibilityState !== 'visible' || commandInFlight) {{
+      if (gamepadEnabled) updateGamepad();
+      const useGamepad = gamepadDriving;
+      if (useGamepad) {{
+        if (!controlsReady()) {{
+          if (Object.values(sticks).some((stick) => stick.x !== 0 || stick.y !== 0)) stopControlInputs();
+          return;
+        }}
+      }} else if (!teleopReady || document.visibilityState !== 'visible') {{
+        // The mouse path keeps the readiness checks used by upstream before joystick support.
+        return;
+      }}
+      if (commandInFlight) {{
         return;
       }}
       commandInFlight = true;
       try {{
-        await postJson('/api/v1/teleop/command', commandPayload());
+        const result = await postJson('/api/v1/teleop/command', commandPayload(), false, useGamepad);
+        if (useGamepad && !result.success) throw new Error(result.message || 'Teleop command rejected');
       }} catch (_error) {{
+        if (useGamepad) {{
+          lastStatusAt = -Infinity;
+          stopControlInputs();
+        }}
       }} finally {{
         commandInFlight = false;
+        if (zeroCommandPending) sendGamepadZeroCommand();
       }}
     }}
     function setBusyButton(label) {{
@@ -5990,7 +6335,9 @@ class MissionFrontendRenderer:
     }}
     async function loadStatus() {{
       const response = await fetch('/api/v1/status', {{ cache: 'no-store' }});
+      if (gamepadEnabled && !response.ok) throw new Error(`HTTP ${{response.status}}`);
       const data = await response.json();
+      lastStatusAt = performance.now();
       const fsm = data.fsm_status || data.fsm_state || {{}};
       const display = data.fsm_display || {{}};
       const active = data.active_execution || {{}};
@@ -6034,6 +6381,7 @@ class MissionFrontendRenderer:
 
     async function startTeleopMode(mode) {{
       try {{
+        if (gamepadEnabled) stopControlInputs();
         teleopStopPending = false;
         setBusyButton(mode === 'record_map' ? 'Recording' : 'Starting');
         const result = await postJson('/api/v1/teleop/start', {{ mode }});
@@ -6060,6 +6408,7 @@ class MissionFrontendRenderer:
         if (teleopReady) {{
           teleopStopPending = true;
           setBusyButton('Stopping');
+          if (gamepadEnabled) clearControlInputs();
           await sendZeroCommand();
           const result = await postJson('/api/v1/teleop/stop', {{}});
           if (!result.success) {{
@@ -6111,8 +6460,33 @@ class MissionFrontendRenderer:
       }}
     }});
     twoStickButton.addEventListener('click', () => {{
+      if (gamepadEnabled) stopControlInputs();
       twoStickEnabled = !twoStickEnabled;
-      renderControlMode();
+      renderControlMode(!gamepadEnabled);
+    }});
+    gamepadButton.addEventListener('click', () => {{
+      stopControlInputs();
+      gamepadEnabled = !gamepadEnabled;
+      gamepadIndex = null;
+      gamepadId = '';
+      gamepadButton.textContent = gamepadEnabled ? 'On' : 'Off';
+      gamepadButton.classList.toggle('enabled', gamepadEnabled);
+      gamepadButton.setAttribute('aria-pressed', String(gamepadEnabled));
+      if (gamepadEnabled) {{
+        updateGamepad();
+      }}
+    }});
+    drawerSafetyStopButton.addEventListener('click', () => {{
+      if (gamepadEnabled) stopControlInputs(true);
+    }});
+    window.addEventListener('gamepadconnected', () => updateGamepad());
+    window.addEventListener('gamepaddisconnected', (event) => {{
+      if (gamepadEnabled && event.gamepad.index === gamepadIndex) {{
+        gamepadSpeedButtons = null;
+        stopGamepadInput();
+        gamepadIndex = null;
+        gamepadId = '';
+      }}
     }});
     cameraButton.addEventListener('click', () => {{
       cameraEnabled = !cameraEnabled;
@@ -6134,15 +6508,26 @@ class MissionFrontendRenderer:
     document.addEventListener('visibilitychange', () => {{
       if (document.visibilityState !== 'visible') {{
         disableCamera();
-        sendZeroCommand(true);
+        gamepadArmed = false;
+        gamepadSpeedButtons = null;
+        if (gamepadDriving) stopControlInputs(true);
+        else sendZeroCommand(true);
       }}
+    }});
+    window.addEventListener('blur', () => {{
+      gamepadSpeedButtons = null;
+      stopGamepadInput(true);
     }});
     window.addEventListener('pagehide', () => {{
       disableCamera();
-      sendZeroCommand(true);
+      gamepadArmed = false;
+      gamepadSpeedButtons = null;
+      if (gamepadDriving) stopControlInputs(true);
+      else sendZeroCommand(true);
     }});
     window.addEventListener('beforeunload', () => {{
       disableCamera();
+      if (gamepadEnabled) clearControlInputs();
       const body = JSON.stringify({{
         left_x: 0,
         left_y: 0,
@@ -6154,9 +6539,29 @@ class MissionFrontendRenderer:
       }});
       navigator.sendBeacon('/api/v1/teleop/command', new Blob([body], {{ type: 'application/json' }}));
     }});
+    // Let the browser enforce its policy; do not impose an additional HTTPS gate.
+    if (typeof navigator.getGamepads !== 'function') {{
+      // Keep mouse control available when this browser cannot read a joystick.
+      gamepadEnabled = false;
+      gamepadButton.textContent = 'Off';
+      gamepadButton.classList.remove('enabled');
+      gamepadButton.setAttribute('aria-pressed', 'false');
+      gamepadButton.disabled = true;
+    }} else {{
+      updateGamepad();
+    }}
+    function handleStatusError() {{
+      lastStatusAt = -Infinity;
+      gamepadSpeedButtons = null;
+      markTopbarDisconnected();
+      stopGamepadInput();
+    }}
     setInterval(streamCommand, 50);
-    loadStatus().catch((error) => setBanner('error', error.message || 'Failed to load teleop status'));
-    setInterval(() => loadStatus().catch(() => null), 500);
+    loadStatus().catch((error) => {{
+      handleStatusError();
+      setBanner('error', error.message || 'Failed to load teleop status');
+    }});
+    setInterval(() => loadStatus().catch(handleStatusError), 500);
   </script>
 </body>
 </html>
