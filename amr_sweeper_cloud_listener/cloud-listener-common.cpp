@@ -6,9 +6,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <ctime>
 #include <fstream>
 #include <iomanip>
+#include <iostream>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
@@ -25,6 +25,34 @@ volatile std::sig_atomic_t g_running = 1;
 
 namespace
 {
+
+constexpr const char * kConnectionStatusError = "451";
+
+const char * connection_reason_to_string(IOTHUB_CLIENT_CONNECTION_STATUS_REASON reason)
+{
+  switch (reason) {
+    case IOTHUB_CLIENT_CONNECTION_EXPIRED_SAS_TOKEN:
+      return "expired SAS token";
+    case IOTHUB_CLIENT_CONNECTION_DEVICE_DISABLED:
+      return "device disabled";
+    case IOTHUB_CLIENT_CONNECTION_BAD_CREDENTIAL:
+      return "bad credential";
+    case IOTHUB_CLIENT_CONNECTION_RETRY_EXPIRED:
+      return "retry expired";
+    case IOTHUB_CLIENT_CONNECTION_NO_NETWORK:
+      return "no network";
+    case IOTHUB_CLIENT_CONNECTION_COMMUNICATION_ERROR:
+      return "communication error";
+    case IOTHUB_CLIENT_CONNECTION_OK:
+      return "ok";
+    case IOTHUB_CLIENT_CONNECTION_NO_PING_RESPONSE:
+      return "no ping response";
+    case IOTHUB_CLIENT_CONNECTION_QUOTA_EXCEEDED:
+      return "quota exceeded";
+    default:
+      return "unknown";
+  }
+}
 
 bool is_space(char ch)
 {
@@ -343,6 +371,20 @@ void handle_signal(int)
   g_running = 0;
 }
 
+void on_connection_status(
+  IOTHUB_CLIENT_CONNECTION_STATUS status,
+  IOTHUB_CLIENT_CONNECTION_STATUS_REASON reason,
+  void *)
+{
+  if (status == IOTHUB_CLIENT_CONNECTION_AUTHENTICATED) {
+    std::cout << "IOT HUB DEVICE LISTENER v" << VERSION << " CONNECTED TO IOT HUB" << std::endl;
+    std::cout << IDLING << " LISTENING (IDLING)" << std::endl;
+  } else {
+    std::cerr << kConnectionStatusError << " IOT HUB AUTHENTICATION FAILURE: "
+              << connection_reason_to_string(reason) << std::endl;
+  }
+}
+
 std::string trim(const std::string & value)
 {
   std::size_t begin = 0;
@@ -513,78 +555,6 @@ std::string require_json_object_field(const std::string & json_object, const std
   return value;
 }
 
-std::string require_json_array_field(const std::string & json_object, const std::string & key)
-{
-  const std::string value = trim(require_json_value(json_object, key));
-  if (value.size() < 2 || value.front() != '[' || value.back() != ']') {
-    throw std::runtime_error(std::string(ERROR) + " JSON FIELD '" + key + "' IS NOT AN ARRAY");
-  }
-
-  return value;
-}
-
-std::string current_timestamp_utc_iso8601()
-{
-  const std::time_t now = std::time(nullptr);
-  std::tm time_components {};
-
-#if defined(_WIN32)
-  if (gmtime_s(&time_components, &now) != 0) {
-    throw std::runtime_error(std::string(ERROR) + " FAILED TO CONVERT CURRENT TIME TO UTC");
-  }
-#else
-  if (gmtime_r(&now, &time_components) == nullptr) {
-    throw std::runtime_error(std::string(ERROR) + " FAILED TO CONVERT CURRENT TIME TO UTC");
-  }
-#endif
-
-  std::ostringstream formatted;
-  formatted << std::put_time(&time_components, "%Y-%m-%dT%H:%M:%SZ");
-  return formatted.str();
-}
-
-std::vector<std::string> split_top_level_array_elements(const std::string & json_array)
-{
-  const std::string array_text = trim(json_array);
-  if (array_text.size() < 2 || array_text.front() != '[' || array_text.back() != ']') {
-    throw std::runtime_error(std::string(ERROR) + " VALUE IS NOT A JSON ARRAY");
-  }
-
-  std::vector<std::string> elements;
-  std::size_t position = skip_spaces(array_text, 1);
-
-  while (position < array_text.size() - 1) {
-    if (array_text[position] == ']') {
-      break;
-    }
-
-    const std::size_t value_end = find_json_value_end(array_text, position);
-    if (value_end == std::string::npos || value_end > array_text.size()) {
-      throw std::runtime_error(std::string(ERROR) + " FAILED TO PARSE JSON ARRAY ELEMENT");
-    }
-
-    elements.push_back(trim(array_text.substr(position, value_end - position)));
-    position = skip_spaces(array_text, value_end);
-
-    if (position >= array_text.size()) {
-      throw std::runtime_error(std::string(ERROR) + " JSON ARRAY ENDED UNEXPECTEDLY");
-    }
-
-    if (array_text[position] == ',') {
-      position = skip_spaces(array_text, position + 1);
-      continue;
-    }
-
-    if (array_text[position] == ']') {
-      break;
-    }
-
-    throw std::runtime_error(std::string(ERROR) + " EXPECTED ',' OR ']' WHILE PARSING JSON ARRAY");
-  }
-
-  return elements;
-}
-
 std::string normalize_sha256_checksum(const std::string & checksum)
 {
   std::string normalized = lowercase_ascii(trim(checksum));
@@ -653,23 +623,6 @@ std::string calculate_sha256_checksum(const std::filesystem::path & path)
   return "sha256:" + hex_output.str();
 }
 
-std::optional<ActivePackageReportInfo> try_parse_active_package_report_info(
-  const std::string & active_package_json,
-  std::string * error_message)
-{
-  try {
-    ActivePackageReportInfo package_info;
-    package_info.package_id = require_json_string_field(active_package_json, "packageId");
-    package_info.version = require_json_integer_field(active_package_json, "version");
-    return package_info;
-  } catch (const std::exception & ex) {
-    if (error_message != nullptr) {
-      *error_message = ex.what();
-    }
-    return std::nullopt;
-  }
-}
-
 std::string connection_string_from_environment()
 {
   return required_environment_variable(kConnectionStringEnv);
@@ -710,13 +663,6 @@ std::filesystem::path manifest_output_path_from_home()
 std::filesystem::path message_output_path()
 {
   return manifest_output_path_from_home().parent_path() / kMessageOutputFileName;
-}
-
-std::filesystem::path content_output_path_from_manifest(
-  const std::filesystem::path & manifest_path,
-  const std::string & file_name)
-{
-  return manifest_path.parent_path() / file_name;
 }
 
 void save_payload_to_path(
@@ -762,33 +708,12 @@ std::string payload_to_string(const unsigned char * payload, std::size_t size)
   return std::string(reinterpret_cast<const char *>(payload), size);
 }
 
-void queue_twin_update(
-  ListenerContext & listener_context,
-  DEVICE_TWIN_UPDATE_STATE update_state,
-  std::string payload)
-{
-  std::lock_guard<std::mutex> lock(listener_context.state_mutex);
-  listener_context.pending_twin_updates.push_back(PendingTwinUpdate {update_state, std::move(payload)});
-}
-
 void queue_message(
   ListenerContext & listener_context,
   std::string payload)
 {
   std::lock_guard<std::mutex> lock(listener_context.state_mutex);
   listener_context.pending_messages.push_back(PendingMessage {std::move(payload)});
-}
-
-std::optional<PendingTwinUpdate> take_pending_twin_update(ListenerContext & listener_context)
-{
-  std::lock_guard<std::mutex> lock(listener_context.state_mutex);
-  if (listener_context.pending_twin_updates.empty()) {
-    return std::nullopt;
-  }
-
-  PendingTwinUpdate next_update = std::move(listener_context.pending_twin_updates.front());
-  listener_context.pending_twin_updates.pop_front();
-  return next_update;
 }
 
 std::optional<PendingMessage> take_pending_message(ListenerContext & listener_context)
@@ -801,33 +726,6 @@ std::optional<PendingMessage> take_pending_message(ListenerContext & listener_co
   PendingMessage next_message = std::move(listener_context.pending_messages.front());
   listener_context.pending_messages.pop_front();
   return next_message;
-}
-
-bool try_begin_startup_twin_request(ListenerContext & listener_context)
-{
-  std::lock_guard<std::mutex> lock(listener_context.state_mutex);
-  if (listener_context.startup_twin_requested ||
-      listener_context.startup_twin_completed) {
-    return false;
-  }
-
-  listener_context.startup_twin_requested = true;
-  return true;
-}
-
-void mark_startup_twin_request_pending(ListenerContext & listener_context)
-{
-  std::lock_guard<std::mutex> lock(listener_context.state_mutex);
-  if (!listener_context.startup_twin_completed) {
-    listener_context.startup_twin_requested = false;
-  }
-}
-
-void mark_startup_twin_completed(ListenerContext & listener_context)
-{
-  std::lock_guard<std::mutex> lock(listener_context.state_mutex);
-  listener_context.startup_twin_requested = true;
-  listener_context.startup_twin_completed = true;
 }
 
 bool download_file(
@@ -862,11 +760,21 @@ bool download_file(
     return false;
   }
 
+  auto remove_partial_download = [&output_path_object, error_message]() {
+    std::error_code remove_error;
+    std::filesystem::remove(output_path_object, remove_error);
+    if (remove_error && error_message != nullptr) {
+      *error_message += "; failed to remove partial download: " + remove_error.message();
+    }
+  };
+
   CURL * curl = curl_easy_init();
   if (curl == nullptr) {
     if (error_message != nullptr) {
       *error_message = "curl_easy_init failed";
     }
+    output.close();
+    remove_partial_download();
     return false;
   }
 
@@ -875,6 +783,8 @@ bool download_file(
       !append_http_header(&headers, "X-Robot-Api-Key", robot_api_key, error_message)) {
     curl_slist_free_all(headers);
     curl_easy_cleanup(curl);
+    output.close();
+    remove_partial_download();
     return false;
   }
 
@@ -886,15 +796,33 @@ bool download_file(
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, &output);
 
   const CURLcode result = curl_easy_perform(curl);
+  long http_status = 0;
+  const CURLcode response_result = curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_status);
   curl_slist_free_all(headers);
   curl_easy_cleanup(curl);
   output.close();
 
+  std::string failure_reason;
   if (result != CURLE_OK) {
-    std::remove(output_path.c_str());
-    if (error_message != nullptr) {
-      *error_message = std::string("download failed: ") + curl_easy_strerror(result);
+    failure_reason = "download failed";
+    if (http_status != 0) {
+      failure_reason += " (HTTP " + std::to_string(http_status) + ")";
     }
+    failure_reason += std::string(": ") + curl_easy_strerror(result);
+  } else if (response_result != CURLE_OK) {
+    failure_reason = std::string("failed to read HTTP response status: ") +
+      curl_easy_strerror(response_result);
+  } else if (http_status != 0 && (http_status < 200 || http_status >= 300)) {
+    failure_reason = "download failed: HTTP " + std::to_string(http_status);
+  } else if (!output) {
+    failure_reason = " FAILED TO FINALIZE DOWNLOADED FILE: " + output_path;
+  }
+
+  if (!failure_reason.empty()) {
+    if (error_message != nullptr) {
+      *error_message = failure_reason;
+    }
+    remove_partial_download();
     return false;
   }
 

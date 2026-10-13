@@ -284,6 +284,7 @@ bool is_database_file_preserved(const std::filesystem::path & path)
 {
   const std::string file_name = path.filename().string();
   return file_name == kPreservedMessageFileName ||
+         file_name == kLastMessageOutputFileName ||
          file_name == kPreservedLastCommandFileName ||
          file_name == kPreservedLastResponseFileName ||
          file_name == kPreservedScheduleFileName;

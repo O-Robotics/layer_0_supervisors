@@ -1,10 +1,11 @@
 CXX ?= g++
 
+# ZIP extraction requires libarchive-dev on Debian/Ubuntu.
+
 TARGET := cloud-listener
 SRCS := \
 	cloud-listener.cpp \
 	cloud-listener-common.cpp \
-	cloud-listener-twin.cpp \
 	cloud-listener-direct.cpp \
 	cloud-listener-message-receiver.cpp \
 	azure_iot_hsm_stubs.cpp
@@ -29,6 +30,7 @@ LDLIBS += -Wl,--start-group \
         -lprov_auth_client \
         -lparson \
         -Wl,--end-group \
+        -larchive \
         -lpthread \
         -lssl \
         -lcrypto \

@@ -1,6 +1,5 @@
 #pragma once
 
-#include <chrono>
 #include <csignal>
 #include <cstddef>
 #include <cstdint>
@@ -9,7 +8,6 @@
 #include <mutex>
 #include <optional>
 #include <string>
-#include <vector>
 
 #if __has_include(<azureiot/iothub.h>)
 #include <azureiot/iothub.h>
@@ -39,38 +37,38 @@ inline constexpr const char * kConnectionStringEnv = "IOTHUB_DEVICE_CONNECTION_S
 inline constexpr const char * kRobotApiKeyEnv = "ROBOT_API_KEY";
 inline constexpr const char * kHomeEnv = "HOME";
 inline constexpr const char * kMessageOutputFileName = "message.json";
+inline constexpr const char * kLastMessageOutputFileName = "last_message.json";
 
 extern volatile std::sig_atomic_t g_running;
-
-struct PendingTwinUpdate
-{
-  DEVICE_TWIN_UPDATE_STATE update_state;
-  std::string payload;
-};
 
 struct PendingMessage
 {
   std::string payload;
 };
 
-struct ActivePackageReportInfo
+struct C2DMessage
 {
+  std::string message_type;
+  std::string message_id;
+  std::string robot_id;
   std::string package_id;
-  std::int64_t version {};
+  std::string package_type;
+  std::int64_t package_version {};
+  std::string checksum;
+  std::string created_at;
+
+  static C2DMessage from_json(const std::string & json_object);
+  static C2DMessage load_from_file(const std::filesystem::path & path);
 };
 
 struct ListenerContext
 {
   std::string hostname;
   std::string robot_api_key;
-  IOTHUB_DEVICE_CLIENT_LL_HANDLE device_client_handle = nullptr;
   std::mutex state_mutex;
-  std::deque<PendingTwinUpdate> pending_twin_updates;
   std::deque<PendingMessage> pending_messages;
-  std::optional<std::string> last_processed_active_package;
-  std::optional<std::string> last_confirmed_reported_status_key;
-  bool startup_twin_requested = false;
-  bool startup_twin_completed = false;
+  // Most recent C2D message successfully loaded from message.json.
+  std::optional<C2DMessage> last_received_message;
 };
 
 void handle_signal(int);
@@ -83,14 +81,8 @@ std::optional<std::string> parse_json_string_literal(const std::string & value);
 std::string require_json_string_field(const std::string & json_object, const std::string & key);
 std::int64_t require_json_integer_field(const std::string & json_object, const std::string & key);
 std::string require_json_object_field(const std::string & json_object, const std::string & key);
-std::string require_json_array_field(const std::string & json_object, const std::string & key);
-std::string current_timestamp_utc_iso8601();
-std::vector<std::string> split_top_level_array_elements(const std::string & json_array);
 std::string normalize_sha256_checksum(const std::string & checksum);
 std::string calculate_sha256_checksum(const std::filesystem::path & path);
-std::optional<ActivePackageReportInfo> try_parse_active_package_report_info(
-  const std::string & active_package_json,
-  std::string * error_message = nullptr);
 bool download_file(
   const std::string & url,
   const std::string & output_path,
@@ -103,55 +95,27 @@ std::string robot_api_key_from_environment();
 std::string host_name_from_system();
 std::filesystem::path manifest_output_path_from_home();
 std::filesystem::path message_output_path();
-std::filesystem::path content_output_path_from_manifest(
-  const std::filesystem::path & manifest_path,
-  const std::string & file_name);
 void save_payload_to_path(
   const std::filesystem::path & output_path,
   const std::string & payload);
 std::string payload_to_string(const unsigned char * payload, std::size_t size);
 
-void queue_twin_update(
-  ListenerContext & listener_context,
-  DEVICE_TWIN_UPDATE_STATE update_state,
-  std::string payload);
 void queue_message(
   ListenerContext & listener_context,
   std::string payload);
-std::optional<PendingTwinUpdate> take_pending_twin_update(ListenerContext & listener_context);
 std::optional<PendingMessage> take_pending_message(ListenerContext & listener_context);
-
-bool try_begin_startup_twin_request(ListenerContext & listener_context);
-void mark_startup_twin_request_pending(ListenerContext & listener_context);
-void mark_startup_twin_completed(ListenerContext & listener_context);
-
-bool send_reported_active_package_status(
-  const ListenerContext & listener_context,
-  const ActivePackageReportInfo & package_info,
-  const char * status);
-void flush_iothub_work_until_reported_status(
-  ListenerContext & listener_context,
-  const std::string & confirmation_key,
-  std::chrono::milliseconds max_wait);
 
 void on_connection_status(
   IOTHUB_CLIENT_CONNECTION_STATUS status,
   IOTHUB_CLIENT_CONNECTION_STATUS_REASON reason,
   void * user_context);
-void on_device_twin_update(
-  DEVICE_TWIN_UPDATE_STATE update_state,
-  const unsigned char * payload,
-  std::size_t size,
-  void * user_context);
-void process_device_twin_update(
-  DEVICE_TWIN_UPDATE_STATE update_state,
-  const std::string & twin_payload,
-  ListenerContext & listener_context);
 
 IOTHUBMESSAGE_DISPOSITION_RESULT on_message_received(
   IOTHUB_MESSAGE_HANDLE message,
   void * user_context);
-void process_received_message(const PendingMessage & message);
+void process_received_message(
+  const PendingMessage & message,
+  ListenerContext & listener_context);
 int on_direct_method_invoked(
   const char * method_name,
   const unsigned char * payload,
