@@ -5,7 +5,7 @@ Provides the AMR Sweeper operator interface stack as a standalone layer 0 packag
 Structure:
 - `scripts/backend_node.py` is the local-only backend entry point. It owns ROS topics/services, mission files, schedule files, and the raw JSONL API over a Unix domain socket.
 - `scripts/frontend_http_node.py` is the network-facing web frontend. It serves the local operator pages and adapts `/api/v1` HTTP requests to backend JSONL requests.
-- `scripts/mqtt_bridge_node.py` is a TODO sibling process for a future VDA5050 MQTT bridge. It must route through backend IPC, like the frontend, and must not write mission files or call ROS services directly.
+- `scripts/mqtt_bridge_node.py` is the VDA5050 MQTT bridge. It subscribes to VDA5050 command topics and publishes VDA5050 status topics while routing robot-side decisions through backend IPC, like the frontend. It must not write mission files or call ROS services directly.
 
 Responsibilities:
 - expose a local dashboard over TCP through the frontend node
@@ -14,6 +14,7 @@ Responsibilities:
 - execute built-in manual missions and saved autonomous missions through `amr_sweeper_mission_executor`
 - stop the active mission through `amr_sweeper_mission_executor`
 - upload/import a VDA5050 mission package into `/missions/database/<mission_id>` so it becomes executable
+- optionally bridge VDA5050 MQTT `order`, `instantActions`, and `zoneSet` messages into the backend import/control path
 - provide a dedicated `/record-map` workflow page for starting `RecordMap`, previewing the latest GNSS overlay on satellite imagery, and saving named autonomous missions from the latest recorded map
 - let operators select a mission on the Missions page, preview its geometry before start, and choose per-mission launch preferences such as `Record rosbag`
 
@@ -45,6 +46,17 @@ Backend IPC:
 - Request framing: one compact JSON object plus `\n`, for example `{"action":"GET_STATUS","payload":{}}`
 - Response framing: one compact JSON object plus `\n`, including `success`, `message`, and `status_code`
 - The socket is created with owner-only permissions and removed on backend shutdown.
+
+VDA5050 MQTT bridge:
+- Disabled by default. Enable with `launch_mqtt_bridge:=true`.
+- Required broker setting: `mqtt_host:=<broker-host-or-ip>`.
+- Common settings: `mqtt_port:=8883`, `mqtt_client_id:=`, `mqtt_username:=`, `mqtt_password_file:=`, `mqtt_tls:=true`, `mqtt_ca_file:=`, `mqtt_cert_file:=`, `mqtt_key_file:=`, `mqtt_keepalive_seconds:=30`.
+- VDA5050 identity defaults: `vda5050_interface_name:=vda5050`, `vda5050_version:=3.0.0`, `vda5050_manufacturer:=O-Robotics`, `vda5050_serial_number:=amr_sweeper`.
+- Subscribes to `order`, `instantActions`, `zoneSet`, and `responses` under `/<interface>/v<major>/<manufacturer>/<serial>/`.
+- Publishes `connection`, `factsheet`, and `state` under the same VDA5050 topic prefix.
+- Incoming `order` messages are imported through backend action `APPLY_VDA5050_ORDER`. Set `vda5050_auto_execute_orders:=true` to execute successfully imported orders immediately.
+- Incoming `instantActions` currently map `cancelOrder` to stop active mission, `startPause` to safety stop, and `stopPause` to safety clear.
+- Current backend import still requires mission payloads to include `map_georeference`; a plain VDA5050 order without map georeference is rejected by the existing mission import path.
 
 Default operator URL:
 - `http://192.168.2.1:8080`

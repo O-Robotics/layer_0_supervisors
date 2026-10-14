@@ -40,6 +40,16 @@ def generate_launch_description():
     launch_mqtt_bridge = LaunchConfiguration("launch_mqtt_bridge")
     mqtt_host = LaunchConfiguration("mqtt_host")
     mqtt_port = LaunchConfiguration("mqtt_port")
+    mqtt_client_id = LaunchConfiguration("mqtt_client_id")
+    mqtt_username = LaunchConfiguration("mqtt_username")
+    mqtt_password_file = LaunchConfiguration("mqtt_password_file")
+    mqtt_tls = LaunchConfiguration("mqtt_tls")
+    mqtt_ca_file = LaunchConfiguration("mqtt_ca_file")
+    mqtt_cert_file = LaunchConfiguration("mqtt_cert_file")
+    mqtt_key_file = LaunchConfiguration("mqtt_key_file")
+    mqtt_keepalive_seconds = LaunchConfiguration("mqtt_keepalive_seconds")
+    vda5050_auto_execute_orders = LaunchConfiguration("vda5050_auto_execute_orders")
+    vda5050_overwrite_existing_orders = LaunchConfiguration("vda5050_overwrite_existing_orders")
     vda5050_interface_name = LaunchConfiguration("vda5050_interface_name")
     vda5050_version = LaunchConfiguration("vda5050_version")
     vda5050_manufacturer = LaunchConfiguration("vda5050_manufacturer")
@@ -51,7 +61,10 @@ def generate_launch_description():
         DeclareLaunchArgument("missions_log_directory", default_value="missions/logs"),
         DeclareLaunchArgument("simulations_directory", default_value="missions/simulations"),
         DeclareLaunchArgument("actual_schedule_log_directory", default_value="missions/logs"),
-        DeclareLaunchArgument("backend_socket_path", default_value="/tmp/amr_sweeper_interface_backend.sock"),
+        DeclareLaunchArgument(
+            "backend_socket_path",
+            default_value="/tmp/amr_sweeper_interface_backend.sock",
+        ),
         DeclareLaunchArgument("http_host", default_value="0.0.0.0"),
         DeclareLaunchArgument("http_port", default_value="8080"),
         DeclareLaunchArgument("gnss_topic", default_value="gnss/navsat"),
@@ -65,6 +78,16 @@ def generate_launch_description():
         DeclareLaunchArgument("launch_mqtt_bridge", default_value="false"),
         DeclareLaunchArgument("mqtt_host", default_value=""),
         DeclareLaunchArgument("mqtt_port", default_value="8883"),
+        DeclareLaunchArgument("mqtt_client_id", default_value=""),
+        DeclareLaunchArgument("mqtt_username", default_value=""),
+        DeclareLaunchArgument("mqtt_password_file", default_value=""),
+        DeclareLaunchArgument("mqtt_tls", default_value="true"),
+        DeclareLaunchArgument("mqtt_ca_file", default_value=""),
+        DeclareLaunchArgument("mqtt_cert_file", default_value=""),
+        DeclareLaunchArgument("mqtt_key_file", default_value=""),
+        DeclareLaunchArgument("mqtt_keepalive_seconds", default_value="30"),
+        DeclareLaunchArgument("vda5050_auto_execute_orders", default_value="false"),
+        DeclareLaunchArgument("vda5050_overwrite_existing_orders", default_value="true"),
         DeclareLaunchArgument("vda5050_interface_name", default_value="vda5050"),
         DeclareLaunchArgument("vda5050_version", default_value="3.0.0"),
         DeclareLaunchArgument("vda5050_manufacturer", default_value="O-Robotics"),
@@ -120,10 +143,20 @@ def generate_launch_description():
                 "backend_socket_path": backend_socket_path,
                 "mqtt_host": mqtt_host,
                 "mqtt_port": mqtt_port,
+                "mqtt_client_id": mqtt_client_id,
+                "mqtt_username": mqtt_username,
+                "mqtt_password_file": mqtt_password_file,
+                "mqtt_tls": mqtt_tls,
+                "mqtt_ca_file": mqtt_ca_file,
+                "mqtt_cert_file": mqtt_cert_file,
+                "mqtt_key_file": mqtt_key_file,
+                "mqtt_keepalive_seconds": mqtt_keepalive_seconds,
                 "interface_name": vda5050_interface_name,
                 "vda5050_version": vda5050_version,
                 "manufacturer": vda5050_manufacturer,
                 "serial_number": vda5050_serial_number,
+                "auto_execute_orders": vda5050_auto_execute_orders,
+                "overwrite_existing_orders": vda5050_overwrite_existing_orders,
             }],
         ),
     ])

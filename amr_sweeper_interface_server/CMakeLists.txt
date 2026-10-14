@@ -31,6 +31,10 @@ if(BUILD_TESTING)
     NAME test_gaussian_splat_artifact_roots
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test/test_gaussian_splat_artifact_roots.py
   )
+  add_test(
+    NAME test_mqtt_bridge_node
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test/test_mqtt_bridge_node.py
+  )
   find_package(ament_lint_auto REQUIRED)
   set(ament_cmake_flake8_CONFIG_FILE "${CMAKE_CURRENT_SOURCE_DIR}/setup.cfg")
   set(ament_cmake_xmllint_FOUND TRUE)
