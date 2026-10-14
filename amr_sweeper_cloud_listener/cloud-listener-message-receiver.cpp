@@ -23,7 +23,7 @@ namespace cloud_listener
 namespace
 {
 
-constexpr const char * kPackageDownloadBaseUrl =
+constexpr const char * kPackageApiBaseUrl =
   "https://orobotics-apim.azure-api.net/robot-api/v1/robots/";
 constexpr const char * kPackageDownloadOutputFileName = "last_package.zip";
 
@@ -183,14 +183,36 @@ std::string encode_url_path_segment(const std::string & value)
   return encoded;
 }
 
-std::string build_package_download_url(const C2DMessage & message)
+std::string build_package_url(const C2DMessage & message, const char * operation)
 {
   if (message.robot_id.empty() || message.package_id.empty()) {
-    throw std::runtime_error("PACKAGE DOWNLOAD REQUIRES NONEMPTY robotId AND packageId");
+    throw std::runtime_error("PACKAGE REQUEST REQUIRES NONEMPTY robotId AND packageId");
   }
 
-  return std::string(kPackageDownloadBaseUrl) + encode_url_path_segment(message.robot_id) +
-         "/packages/" + encode_url_path_segment(message.package_id) + "/download";
+  return std::string(kPackageApiBaseUrl) + encode_url_path_segment(message.robot_id) +
+         "/packages/" + encode_url_path_segment(message.package_id) + "/" + operation;
+}
+
+void report_package_ready(
+  const C2DMessage & message,
+  const std::string & verified_checksum,
+  const ListenerContext & listener_context)
+{
+  const std::string ready_url = build_package_url(message, "ready");
+  std::cout << WORKING << " REPORTING PACKAGE READY TO: " << ready_url << std::endl;
+
+  std::string error_message;
+  if (!post_package_ready(
+        ready_url,
+        listener_context.hostname,
+        listener_context.robot_api_key,
+        verified_checksum,
+        &error_message)) {
+    throw std::runtime_error(
+      "FAILED TO REPORT PACKAGE READY TO '" + ready_url + "': " + error_message);
+  }
+
+  std::cout << WORKING << " PACKAGE READY CONFIRMED: " << message.package_id << std::endl;
 }
 
 std::optional<std::string> extract_message_payload(IOTHUB_MESSAGE_HANDLE message)
@@ -282,23 +304,28 @@ void process_received_message(
     }
     if (last_message_exists) {
       const C2DMessage last_message = C2DMessage::load_from_file(last_message_path);
-      if (parsed_message.message_id == last_message.message_id) {
+      const bool duplicated_message = parsed_message.message_id == last_message.message_id;
+      const bool duplicated_download =
+        normalize_sha256_checksum(parsed_message.checksum) ==
+        normalize_sha256_checksum(last_message.checksum);
+      if (duplicated_message) {
         std::cout << WARNING << " DUPLICATED MESSAGE: messageId "
                   << parsed_message.message_id << " (SKIPPING)" << std::endl;
-        std::cout << IDLING << " LISTENING (IDLING)" << std::endl;
-        return;
       }
-      if (normalize_sha256_checksum(parsed_message.checksum) ==
-          normalize_sha256_checksum(last_message.checksum)) {
+      if (duplicated_download) {
         std::cout << WARNING << " DUPLICATED PROPOSED DOWNLOAD: checksum "
                   << parsed_message.checksum << " (SKIPPING)" << std::endl;
+        report_package_ready(
+          parsed_message, expected_package_sha256(last_message), listener_context);
+      }
+      if (duplicated_message || duplicated_download) {
         std::cout << IDLING << " LISTENING (IDLING)" << std::endl;
         return;
       }
     }
 
     const std::string expected_checksum = expected_package_sha256(parsed_message);
-    const std::string download_url = build_package_download_url(parsed_message);
+    const std::string download_url = build_package_url(parsed_message, "download");
     PackageArchiveCleanup archive_cleanup(download_path);
     std::cout << WORKING << " DOWNLOADING PACKAGE FROM: " << download_url << std::endl;
 
@@ -330,9 +357,10 @@ void process_received_message(
     std::cout << WORKING << " EXTRACTING PACKAGE ZIP INTO: "
               << download_path.parent_path().string() << std::endl;
     extract_package_archive(download_path);
-    archive_cleanup.remove();
     std::cout << WORKING << " PACKAGE EXTRACTION SUCCESSFUL: "
               << download_path.parent_path().string() << std::endl;
+    report_package_ready(parsed_message, actual_checksum, listener_context);
+    archive_cleanup.remove();
   } catch (const std::exception & ex) {
     std::cerr << ERROR << " FAILED TO PROCESS DEVICE MESSAGE: " << ex.what() << std::endl;
   }

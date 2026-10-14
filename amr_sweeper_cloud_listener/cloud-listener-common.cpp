@@ -206,7 +206,7 @@ std::string required_environment_variable(const char * variable_name)
 
   const char * value = std::getenv(variable_name);
   if (value == nullptr || value[0] == '\0') {
-    throw std::runtime_error(std::string(ERROR) + " " + std::string(variable_name) +
+    throw std::runtime_error(std::string(variable_name) +
       " IS NOT SET. PROVIDE IT VIA /storage/secrets/.env");
   }
 
@@ -330,6 +330,11 @@ size_t write_to_stream(void * contents, size_t size, size_t count, void * user_d
   const size_t bytes = size * count;
   output->write(static_cast<const char *>(contents), static_cast<std::streamsize>(bytes));
   return output->good() ? bytes : 0;
+}
+
+size_t discard_http_response(void *, size_t size, size_t count, void *)
+{
+  return size * count;
 }
 
 bool ensure_curl_initialized(std::string * error_message)
@@ -823,6 +828,75 @@ bool download_file(
       *error_message = failure_reason;
     }
     remove_partial_download();
+    return false;
+  }
+
+  return true;
+}
+
+bool post_package_ready(
+  const std::string & url,
+  const std::string & hostname,
+  const std::string & robot_api_key,
+  const std::string & package_checksum,
+  std::string * error_message)
+{
+  if (!ensure_curl_initialized(error_message)) {
+    return false;
+  }
+
+  CURL * curl = curl_easy_init();
+  if (curl == nullptr) {
+    if (error_message != nullptr) {
+      *error_message = "curl_easy_init failed";
+    }
+    return false;
+  }
+
+  struct curl_slist * headers = nullptr;
+  const std::string checksum_header = "sha256:" + normalize_sha256_checksum(package_checksum);
+  if (!append_http_header(&headers, "X-Robot-Api-Key", robot_api_key, error_message) ||
+      !append_http_header(&headers, "X-Device-Id", hostname, error_message) ||
+      !append_http_header(&headers, "X-Package-Checksum", checksum_header, error_message)) {
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+    return false;
+  }
+
+  curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+  curl_easy_setopt(curl, CURLOPT_POST, 1L);
+  curl_easy_setopt(curl, CURLOPT_POSTFIELDS, "");
+  curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, 0L);
+  curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
+  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, discard_http_response);
+  curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 15L);
+  curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
+
+  const CURLcode result = curl_easy_perform(curl);
+  long http_status = 0;
+  const CURLcode response_result = curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_status);
+  curl_slist_free_all(headers);
+  curl_easy_cleanup(curl);
+
+  std::string failure_reason;
+  if (result != CURLE_OK) {
+    failure_reason = "package ready POST failed";
+    if (http_status != 0) {
+      failure_reason += " (HTTP " + std::to_string(http_status) + ")";
+    }
+    failure_reason += std::string(": ") + curl_easy_strerror(result);
+  } else if (response_result != CURLE_OK) {
+    failure_reason = std::string("failed to read package ready HTTP response status: ") +
+      curl_easy_strerror(response_result);
+  } else if (http_status < 200 || http_status >= 300) {
+    failure_reason = "package ready POST failed: HTTP " + std::to_string(http_status);
+  }
+
+  if (!failure_reason.empty()) {
+    if (error_message != nullptr) {
+      *error_message = failure_reason;
+    }
     return false;
   }
 

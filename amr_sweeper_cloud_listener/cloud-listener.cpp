@@ -58,11 +58,11 @@ int main()
       std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 
-    std::cout << BREAK << " INTERRUPED BY USER" << std::endl;
+    std::cout << std::endl << BREAK << " INTERRUPED BY USER" << std::endl;
     std::cout << EXIT << " DISCONNECTED" << std::endl;
     return 0;
   } catch (const std::exception & ex) {
-    std::cerr << ERROR << "ERROR: " << ex.what() << std::endl;
+    std::cerr << ERROR << " ERROR: " << ex.what() << std::endl;
     return 1;
   }
 }

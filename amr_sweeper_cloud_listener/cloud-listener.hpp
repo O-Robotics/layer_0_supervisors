@@ -21,7 +21,7 @@
 #error "Azure IoT C SDK headers not found. Install azure-iot-sdk-c or set CPPFLAGS."
 #endif
 
-#define VERSION "0.7"
+#define VERSION "0.95"
 
 #define IDLING 101
 #define WORKING 201
@@ -88,6 +88,12 @@ bool download_file(
   const std::string & output_path,
   const std::string & hostname,
   const std::string & robot_api_key,
+  std::string * error_message = nullptr);
+bool post_package_ready(
+  const std::string & url,
+  const std::string & hostname,
+  const std::string & robot_api_key,
+  const std::string & package_checksum,
   std::string * error_message = nullptr);
 
 std::string connection_string_from_environment();
