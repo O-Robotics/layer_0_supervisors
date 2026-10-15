@@ -3,12 +3,12 @@ CXX ?= g++
 # ZIP extraction requires libarchive-dev on Debian/Ubuntu.
 
 OUTPUT_DIR := ../../../install/amr_sweeper_cloud_listener
-TARGET := $(OUTPUT_DIR)/cloud-listener
+TARGET := $(OUTPUT_DIR)/cloud_listener
 SRCS := \
-	cloud-listener.cpp \
-	cloud-listener-common.cpp \
-	cloud-listener-direct.cpp \
-	cloud-listener-message-receiver.cpp \
+	cloud_listener.cpp \
+	cloud_listener_common.cpp \
+	cloud_listener_direct.cpp \
+	cloud_listener_message_receiver.cpp \
 	azure_iot_hsm_stubs.cpp
 
 AZURE_IOT_PREFIX ?= /opt/azure-iot-sdk-c
