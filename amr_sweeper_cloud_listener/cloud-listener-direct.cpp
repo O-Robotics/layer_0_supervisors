@@ -55,17 +55,6 @@ struct PackageCommand
 {
   std::string action;
   std::optional<std::string> mission_id;
-  std::optional<std::string> mission_execution_directory;
-  std::optional<std::string> mission_window_start;
-  std::optional<std::string> mission_window_end;
-  std::optional<std::string> requester;
-  std::optional<std::string> sender;
-  std::optional<std::string> reason;
-  std::optional<std::string> outcome;
-  std::optional<std::int64_t> priority;
-  std::optional<bool> force;
-  std::optional<bool> record_rosbag;
-  std::optional<bool> request_idling;
 };
 
 std::optional<std::string> optional_json_string_field(
@@ -79,110 +68,40 @@ std::optional<std::string> optional_json_string_field(
   return std::nullopt;
 }
 
-std::optional<bool> optional_json_bool_field(
-  const std::string & json_object,
-  const char * key)
+struct DirectMethodParameters
 {
-  const std::optional<std::string> raw_value = extract_top_level_json_value(json_object, key);
+  std::string package_id;
+  std::int64_t package_version {};
+  std::optional<std::string> order_id;
 
-  if (!raw_value.has_value()) {
-    return std::nullopt;
-  }
-
-  if (*raw_value == "true") {
-    return true;
-  }
-
-  if (*raw_value == "false") {
-    return false;
-  }
-
-  throw std::runtime_error(std::string(ERROR) + " payload." + key + " MUST BE BOOLEAN");
-}
-
-struct DirectMethodRequester
-{
-  std::string user_id;
-  std::string client;
-  std::string session_id;
-
-  static DirectMethodRequester from_json(const std::string & json_object)
+  static DirectMethodParameters from_json(const std::string & json_object)
   {
-    DirectMethodRequester requester;
-    requester.user_id = require_json_string_field(json_object, "user_id");
-    requester.client = require_json_string_field(json_object, "client");
-    requester.session_id = require_json_string_field(json_object, "session_id");
-    return requester;
-  }
-};
-
-struct DirectMethodPayload
-{
-  std::string expected_package_id;
-  std::int64_t expected_desired_version {};
-  std::string reason;
-  std::optional<std::string> mission_id;
-  std::optional<std::string> mission_execution_directory;
-  std::optional<std::string> mission_window_start;
-  std::optional<std::string> mission_window_end;
-  std::optional<std::string> requester;
-  std::optional<std::string> sender;
-  std::optional<std::string> outcome;
-  std::optional<bool> force;
-  std::optional<bool> record_rosbag;
-  std::optional<bool> request_idling;
-
-  static DirectMethodPayload from_json(const std::string & json_object)
-  {
-    DirectMethodPayload payload;
-    payload.expected_package_id = require_json_string_field(json_object, "expected_package_id");
-    payload.expected_desired_version =
-      require_json_integer_field(json_object, "expected_desired_version");
-    payload.reason = require_json_string_field(json_object, "reason");
-    payload.mission_id = optional_json_string_field(json_object, "mission_id");
-    payload.mission_execution_directory =
-      optional_json_string_field(json_object, "mission_execution_directory");
-    payload.mission_window_start =
-      optional_json_string_field(json_object, "mission_window_start");
-    payload.mission_window_end =
-      optional_json_string_field(json_object, "mission_window_end");
-    payload.requester = optional_json_string_field(json_object, "requester");
-    payload.sender = optional_json_string_field(json_object, "sender");
-    payload.outcome = optional_json_string_field(json_object, "outcome");
-    payload.force = optional_json_bool_field(json_object, "force");
-    payload.record_rosbag = optional_json_bool_field(json_object, "record_rosbag");
-    payload.request_idling = optional_json_bool_field(json_object, "request_idling");
-    return payload;
+    DirectMethodParameters parameters;
+    parameters.package_id = require_json_string_field(json_object, "packageId");
+    parameters.package_version = require_json_integer_field(json_object, "packageVersion");
+    parameters.order_id = optional_json_string_field(json_object, "orderId");
+    return parameters;
   }
 };
 
 struct DirectMethodCommand
 {
-  std::string schema;
-  std::string cmd;
-  std::string cmd_id;
+  std::string command_id;
+  std::string command;
   std::string robot_id;
-  std::string issued_at;
-  std::int64_t ttl_ms {};
-  std::int64_t priority {};
-  DirectMethodRequester requested_by;
-  DirectMethodPayload payload;
+  std::string created_at;
+  DirectMethodParameters parameters;
 
   static DirectMethodCommand from_json(const std::string & json_object)
   {
-    DirectMethodCommand command;
-    command.schema = require_json_string_field(json_object, "schema");
-    command.cmd = require_json_string_field(json_object, "cmd");
-    command.cmd_id = require_json_string_field(json_object, "cmd_id");
-    command.robot_id = require_json_string_field(json_object, "robot_id");
-    command.issued_at = require_json_string_field(json_object, "issued_at");
-    command.ttl_ms = require_json_integer_field(json_object, "ttl_ms");
-    command.priority = require_json_integer_field(json_object, "priority");
-    command.requested_by =
-      DirectMethodRequester::from_json(require_json_object_field(json_object, "requested_by"));
-    command.payload =
-      DirectMethodPayload::from_json(require_json_object_field(json_object, "payload"));
-    return command;
+    DirectMethodCommand direct_command;
+    direct_command.command_id = require_json_string_field(json_object, "commandId");
+    direct_command.command = require_json_string_field(json_object, "command");
+    direct_command.robot_id = require_json_string_field(json_object, "robotId");
+    direct_command.created_at = require_json_string_field(json_object, "createdAt");
+    direct_command.parameters =
+      DirectMethodParameters::from_json(require_json_object_field(json_object, "parameters"));
+    return direct_command;
   }
 
   static DirectMethodCommand load_from_file(const std::filesystem::path & path)
@@ -205,7 +124,7 @@ struct DirectMethodCommand
     }
   }
 
-  static std::optional<DirectMethodCommand> try_load_from_file_if_exists(
+  static std::optional<std::string> try_load_command_id_from_file_if_exists(
     const std::filesystem::path & path)
   {
     std::error_code exists_error;
@@ -219,7 +138,19 @@ struct DirectMethodCommand
       return std::nullopt;
     }
 
-    return load_from_file(path);
+    std::ifstream input(path, std::ios::binary);
+    if (!input) {
+      throw std::runtime_error(
+        std::string(ERROR) + " FAILED TO OPEN DIRECT METHOD FILE: " + path.string());
+    }
+
+    std::ostringstream buffer;
+    buffer << input.rdbuf();
+
+    // A cached command can use an older schema; duplicate detection only needs commandId.
+    const std::optional<std::string> command_id =
+      extract_top_level_json_value(buffer.str(), "commandId");
+    return command_id.has_value() ? parse_json_string_literal(*command_id) : std::nullopt;
   }
 };
 
@@ -302,18 +233,13 @@ std::filesystem::path last_response_output_path()
   return manifest_output_path_from_home().parent_path() / kLastResponseOutputFileName;
 }
 
-std::string direct_method_requester_identity(const DirectMethodRequester & requester)
-{
-  return requester.user_id + "@" + requester.client + "/" + requester.session_id;
-}
-
 std::string normalize_direct_method_command_name(const std::string & command_name)
 {
   if (command_name == "clearActivePackage") {
     return kClearActivePackageAction;
   }
 
-  if (command_name == "startSingleMission") {
+  if (command_name == "start" || command_name == "startSingleMission") {
     return kStartSingleMissionAction;
   }
 
@@ -335,24 +261,9 @@ std::string normalize_direct_method_command_name(const std::string & command_nam
 PackageCommand build_package_command_from_direct_method(const DirectMethodCommand & direct_command)
 {
   PackageCommand package_command;
-  package_command.action = normalize_direct_method_command_name(direct_command.cmd);
-  package_command.mission_id = direct_command.payload.mission_id;
-  package_command.mission_execution_directory =
-    direct_command.payload.mission_execution_directory;
-  package_command.mission_window_start = direct_command.payload.mission_window_start;
-  package_command.mission_window_end = direct_command.payload.mission_window_end;
-  package_command.requester = direct_command.payload.requester.has_value()
-    ? direct_command.payload.requester
-    : std::optional<std::string>(direct_method_requester_identity(direct_command.requested_by));
-  package_command.sender = direct_command.payload.sender.has_value()
-    ? direct_command.payload.sender
-    : std::optional<std::string>(direct_command.requested_by.client);
-  package_command.reason = direct_command.payload.reason;
-  package_command.outcome = direct_command.payload.outcome;
-  package_command.priority = direct_command.priority;
-  package_command.force = direct_command.payload.force;
-  package_command.record_rosbag = direct_command.payload.record_rosbag;
-  package_command.request_idling = direct_command.payload.request_idling;
+  package_command.action = normalize_direct_method_command_name(direct_command.command);
+  // The local interface backend still uses mission_id for the cloud orderId.
+  package_command.mission_id = direct_command.parameters.order_id;
   return package_command;
 }
 
@@ -654,24 +565,16 @@ std::string build_start_single_mission_payload_json(const PackageCommand & comma
 {
   std::vector<std::string> fields;
   fields.push_back(json_string_field("mission_id", *command.mission_id));
-  fields.push_back(json_string_field(
-    "mission_execution_directory",
-    command.mission_execution_directory.value_or("")));
-  fields.push_back(json_string_field(
-    "mission_window_start",
-    command.mission_window_start.value_or("")));
-  fields.push_back(json_string_field(
-    "mission_window_end",
-    command.mission_window_end.value_or("")));
-  fields.push_back(json_string_field(
-    "requester",
-    command.requester.value_or("cloud-listener-direct")));
-  fields.push_back(json_integer_field("priority", command.priority.value_or(200)));
-  fields.push_back(json_bool_field("force", command.force.value_or(false)));
-  fields.push_back(json_bool_field("record_rosbag", command.record_rosbag.value_or(false)));
+  fields.push_back(json_string_field("mission_execution_directory", ""));
+  fields.push_back(json_string_field("mission_window_start", ""));
+  fields.push_back(json_string_field("mission_window_end", ""));
+  fields.push_back(json_string_field("requester", "cloud-listener-direct"));
+  fields.push_back(json_integer_field("priority", 200));
+  fields.push_back(json_bool_field("force", false));
+  fields.push_back(json_bool_field("record_rosbag", false));
   fields.push_back(json_string_field(
     "reason",
-    command.reason.value_or("startSingleMission requested from Azure IoT Hub direct method")));
+    "start requested from Azure IoT Hub direct method"));
   return join_json_object_fields(fields);
 }
 
@@ -681,25 +584,22 @@ std::string build_stop_payload_json(const PackageCommand & command)
   fields.push_back(json_string_field("mission_id", command.mission_id.value_or("")));
   fields.push_back(json_string_field(
     "reason",
-    command.reason.value_or("stop requested from Azure IoT Hub direct method")));
-  fields.push_back(json_string_field("outcome", command.outcome.value_or("aborted")));
-  fields.push_back(json_string_field(
-    "requester",
-    command.requester.value_or("cloud-listener-direct")));
-  fields.push_back(json_integer_field("priority", command.priority.value_or(200)));
-  fields.push_back(json_bool_field("force", command.force.value_or(false)));
-  fields.push_back(json_bool_field("request_idling", command.request_idling.value_or(true)));
+    "stop requested from Azure IoT Hub direct method"));
+  fields.push_back(json_string_field("outcome", "aborted"));
+  fields.push_back(json_string_field("requester", "cloud-listener-direct"));
+  fields.push_back(json_integer_field("priority", 200));
+  fields.push_back(json_bool_field("force", false));
+  fields.push_back(json_bool_field("request_idling", true));
   return join_json_object_fields(fields);
 }
 
-std::string build_pause_payload_json(const PackageCommand & command)
+std::string build_pause_payload_json()
 {
   std::vector<std::string> fields;
-  fields.push_back(json_string_field("sender", command.sender.value_or(
-    command.requester.value_or("cloud-listener-direct"))));
+  fields.push_back(json_string_field("sender", "cloud-listener-direct"));
   fields.push_back(json_string_field(
     "reason",
-    command.reason.value_or("pause requested from Azure IoT Hub direct method")));
+    "pause requested from Azure IoT Hub direct method"));
   return join_json_object_fields(fields);
 }
 
@@ -707,7 +607,7 @@ void send_start_single_mission_command(const PackageCommand & command)
 {
   if (!command.mission_id.has_value() || command.mission_id->empty()) {
     throw std::runtime_error(
-      std::string(ERROR) + " startSingleMission REQUIRES payload.mission_id");
+      std::string(ERROR) + " start REQUIRES parameters.orderId");
   }
 
   std::string response_body;
@@ -745,13 +645,13 @@ void send_stop_command(const PackageCommand & command)
   }
 }
 
-void send_pause_command(const PackageCommand & command)
+void send_pause_command()
 {
   std::string response_body;
   std::string error_message;
   if (!send_backend_command(
         kPauseAction,
-        build_pause_payload_json(command),
+        build_pause_payload_json(),
         &response_body,
         &error_message)) {
     throw std::runtime_error(std::string(ERROR) + " " + error_message);
@@ -799,7 +699,7 @@ bool handle_package_command(const PackageCommand & command)
   }
 
   if (command.action == kPauseAction) {
-    send_pause_command(command);
+    send_pause_command();
     return true;
   }
 
@@ -919,8 +819,8 @@ int on_direct_method_invoked(
     }
 
     const std::filesystem::path output_path = last_command_output_path();
-    const std::optional<DirectMethodCommand> previous_command =
-      DirectMethodCommand::try_load_from_file_if_exists(output_path);
+    const std::optional<std::string> previous_command_id =
+      DirectMethodCommand::try_load_command_id_from_file_if_exists(output_path);
     const std::string command_payload = payload_to_string(payload, size);
     save_payload_to_path(output_path, command_payload);
 
@@ -928,10 +828,10 @@ int on_direct_method_invoked(
     std::cout << WORKING << " SAVING FILE: " << output_path.string() << std::endl;
 
     const DirectMethodCommand parsed_command = DirectMethodCommand::load_from_file(output_path);
-    std::cout << WORKING << " DIRECT COMMAND LOADED: " << parsed_command.cmd
-              << " (" << parsed_command.cmd_id << ")" << std::endl;
+    std::cout << WORKING << " DIRECT COMMAND LOADED: " << parsed_command.command
+              << " (" << parsed_command.command_id << ")" << std::endl;
 
-    if (previous_command.has_value() && previous_command->cmd_id == parsed_command.cmd_id) {
+    if (previous_command_id.has_value() && *previous_command_id == parsed_command.command_id) {
       std::cout << WARNING << " RECEIVED DUPLICATE COMMAND" << std::endl;
       const DirectMethodResponse previous_response =
         DirectMethodResponse::load_from_file(last_response_output_path());
