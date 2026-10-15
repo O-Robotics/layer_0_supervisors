@@ -2,7 +2,8 @@ CXX ?= g++
 
 # ZIP extraction requires libarchive-dev on Debian/Ubuntu.
 
-TARGET := cloud-listener
+OUTPUT_DIR := ../../../install/amr_sweeper_cloud_listener
+TARGET := $(OUTPUT_DIR)/cloud-listener
 SRCS := \
 	cloud-listener.cpp \
 	cloud-listener-common.cpp \
@@ -41,8 +42,13 @@ LDLIBS += -Wl,--start-group \
 
 all: $(TARGET)
 
-$(TARGET): $(SRCS)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $^ -o $@ $(LDFLAGS) $(LDLIBS)
+$(TARGET): $(SRCS) | $(OUTPUT_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $^ -o "$@" $(LDFLAGS) $(LDLIBS)
+	@echo "Installed binary file: $(abspath $(TARGET))"
+
+$(OUTPUT_DIR):
+	mkdir -p "$@"
 
 clean:
-	rm -f $(TARGET)
+	rm -f "$(TARGET)"
+	@echo "Removed $(abspath $(TARGET))"
