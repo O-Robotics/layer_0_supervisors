@@ -147,8 +147,8 @@ DEFAULT_MISSION_SETTINGS = {
 TELEOP_PROFILE_ID = 220
 TELEOP_DRIVE_LINEAR_SCALE = 0.5
 TELEOP_DRIVE_ANGULAR_SCALE = 0.785
-TELEOP_TOOL_LINEAR_SCALE = 0.10
-TELEOP_TOOL_ANGULAR_SCALE = 0.10
+TELEOP_TOOL_LINEAR_SCALE = 0.50
+TELEOP_TOOL_ANGULAR_SCALE = 0.50
 TELEOP_INPUT_DEADZONE = 0.05
 TELEOP_DEFAULT_SPEED_SCALE = 0.5
 
@@ -1275,6 +1275,13 @@ class MissionBackendNode(Node):
         right_x = self._normalized_axis(payload.get("right_x", 0.0))
         right_y = self._normalized_axis(payload.get("right_y", 0.0))
         control_mode = self._teleop_control_mode(payload.get("control_mode", "one_stick"))
+        inward_one_stick = (
+            control_mode == "one_stick"
+            and str(payload.get("brush_direction", "OUT")).strip().upper() == "IN"
+        )
+        # The sweeping controller derives OUT tools from drive commands in one_stick.
+        # Use its explicit tool path for IN while keeping both tools coupled to driving.
+        command_mode = "two_stick" if inward_one_stick else control_mode
         wheel_scale = self._normalized_speed_scale(payload.get("wheel_scale", TELEOP_DEFAULT_SPEED_SCALE))
         tool_scale = self._normalized_speed_scale(payload.get("tool_scale", TELEOP_DEFAULT_SPEED_SCALE))
         non_zero = any(abs(value) > 0.0 for value in (left_x, left_y, right_x, right_y))
@@ -1289,14 +1296,18 @@ class MissionBackendNode(Node):
             }
 
         drive_command = Twist()
-        drive_scale = wheel_scale if control_mode == "two_stick" else 1.0
+        drive_scale = wheel_scale if command_mode == "two_stick" else 1.0
         drive_command.linear.x = left_y * TELEOP_DRIVE_LINEAR_SCALE * drive_scale
         drive_command.angular.z = -left_x * TELEOP_DRIVE_ANGULAR_SCALE * drive_scale
         tool_command = Twist()
         if control_mode == "two_stick":
             tool_command.linear.x = right_y * TELEOP_TOOL_LINEAR_SCALE * tool_scale
             tool_command.angular.z = right_x * TELEOP_TOOL_ANGULAR_SCALE * tool_scale
-        self._publish_teleop_mode(control_mode, wheel_scale, tool_scale)
+        elif inward_one_stick:
+            # Reverse the standard one-stick mapping before independent speed scaling.
+            tool_command.linear.x = -left_y * TELEOP_DRIVE_LINEAR_SCALE * tool_scale
+            tool_command.angular.z = left_x * TELEOP_DRIVE_ANGULAR_SCALE * tool_scale
+        self._publish_teleop_mode(command_mode, wheel_scale, tool_scale)
         self._teleop_drive_publisher.publish(drive_command)
         self._teleop_tool_publisher.publish(tool_command)
         return {

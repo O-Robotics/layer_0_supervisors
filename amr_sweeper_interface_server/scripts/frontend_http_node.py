@@ -5245,6 +5245,7 @@ class MissionFrontendRenderer:
     .teleop-layout {{
       --controls-space: 0px;
       --controls-width: 180px;
+      --desktop-button-scale: 1.5;
       --layout-gap: 22px;
       /* Measure the usable pane after scrollbar gutters, buttons and column gaps. */
       --stick-width-limit: calc((100cqw - var(--controls-width) - 2 * var(--layout-gap)) / 2);
@@ -5459,6 +5460,91 @@ class MissionFrontendRenderer:
     .center-controls.active-mode .merged-button {{
       display: block;
     }}
+    .desktop-teleop-actions {{
+      /* Desktop shortcut colors and borders are independent of the Options menu. */
+      --desktop-button-background-opacity: 50%;
+      --desktop-button-border-width: 1px;
+      --desktop-button-background: #333333;
+      --desktop-button-disabled-background: #5c5b55;
+      --desktop-button-text: #fdca0f;
+      --desktop-button-border-color: #777777;
+      --desktop-button-hover-background: #333333;
+      --desktop-button-hover-text: #FFFFFF;
+      --desktop-button-hover-border-color: #999999;
+      --desktop-lights-on-background: #064E3B;
+      --desktop-lights-on-text: #FFF8E7;
+      --desktop-lights-on-border-color: #0B8A68;
+      --desktop-camera-on-background: #064E3B;
+      --desktop-camera-on-text: #FFF8E7;
+      --desktop-camera-on-border-color: #0B8A68;
+      --desktop-two-stick-on-background: #064E3B;
+      --desktop-two-stick-on-text: #FFF8E7;
+      --desktop-two-stick-on-border-color: #0B8A68;
+      --desktop-brushes-in-background: #064E3B;
+      --desktop-brushes-in-text: #FFF8E7;
+      --desktop-brushes-in-border-color: #0B8A68;
+      display: grid;
+      grid-column: 1 / -1;
+      gap: 12px;
+    }}
+    .desktop-teleop-actions[hidden] {{
+      display: none;
+    }}
+    .desktop-teleop-actions button,
+    .desktop-teleop-actions button.enabled {{
+      width: 100%;
+      height: 48px;
+      white-space: nowrap;
+      border: var(--desktop-button-border-width) solid var(--desktop-button-border-color);
+      box-shadow: none;
+      background: color-mix(in srgb, var(--desktop-button-background) var(--desktop-button-background-opacity), transparent);
+      color: var(--desktop-button-text);
+    }}
+    .desktop-teleop-actions button:not(.enabled):not(:disabled):hover {{
+      background: color-mix(in srgb, var(--desktop-button-hover-background) var(--desktop-button-background-opacity), transparent);
+      color: var(--desktop-button-hover-text);
+      border-color: var(--desktop-button-hover-border-color);
+    }}
+    .desktop-teleop-actions button:disabled:not(.enabled) {{
+      background: color-mix(in srgb, var(--desktop-button-disabled-background) var(--desktop-button-background-opacity), transparent);
+    }}
+    .desktop-teleop-actions .toggle-button.enabled {{
+      background: color-mix(in srgb, var(--desktop-lights-on-background) var(--desktop-button-background-opacity), transparent);
+      color: var(--desktop-lights-on-text);
+      border-color: var(--desktop-lights-on-border-color);
+    }}
+    .desktop-teleop-actions .camera-button.enabled {{
+      background: color-mix(in srgb, var(--desktop-camera-on-background) var(--desktop-button-background-opacity), transparent);
+      color: var(--desktop-camera-on-text);
+      border-color: var(--desktop-camera-on-border-color);
+    }}
+    .desktop-teleop-actions #desktop-two-stick-button.enabled {{
+      background: color-mix(in srgb, var(--desktop-two-stick-on-background) var(--desktop-button-background-opacity), transparent);
+      color: var(--desktop-two-stick-on-text);
+      border-color: var(--desktop-two-stick-on-border-color);
+    }}
+    .desktop-teleop-actions #desktop-brushes-button.enabled {{
+      background: color-mix(in srgb, var(--desktop-brushes-in-background) var(--desktop-button-background-opacity), transparent);
+      color: var(--desktop-brushes-in-text);
+      border-color: var(--desktop-brushes-in-border-color);
+    }}
+    .teleop-layout.desktop-controls {{
+      --controls-width: calc(180px * var(--desktop-button-scale));
+    }}
+    .teleop-layout.desktop-controls .center-controls.active-mode {{
+      width: var(--controls-width);
+      max-width: 100%;
+    }}
+    .teleop-layout.desktop-controls .merged-button,
+    .teleop-layout.desktop-controls .desktop-teleop-actions button {{
+      height: calc(48px * var(--desktop-button-scale));
+      min-height: calc(48px * var(--desktop-button-scale));
+      padding: calc(13px * var(--desktop-button-scale)) calc(18px * var(--desktop-button-scale));
+      font-size: calc(0.95rem * var(--desktop-button-scale));
+    }}
+    .teleop-layout.desktop-controls .merged-button .gear {{
+      font-size: calc(1.15rem * var(--desktop-button-scale));
+    }}
     .left-column-button {{
       grid-column: 1;
     }}
@@ -5470,7 +5556,7 @@ class MissionFrontendRenderer:
       cursor: pointer;
       color: #08100a;
       background: var(--accent);
-      font-weight: 700;
+      font-weight: 400;
       letter-spacing: 0.04em;
       text-transform: uppercase;
       min-height: 48px;
@@ -5503,8 +5589,8 @@ class MissionFrontendRenderer:
       box-shadow: 0 0 0 3px rgba(253, 202, 15, 0.24);
     }}
     .camera-button.enabled {{
-      background: #d7f3ff;
-      color: #062233;
+      background: #fff4bd;
+      color: #111827;
       box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.28);
     }}
     .status-row {{
@@ -5585,6 +5671,9 @@ class MissionFrontendRenderer:
       border: 1px solid var(--line);
       color: var(--ink);
       background: rgba(18, 20, 21, 0.92);
+    }}
+    .teleop-options-button:hover {{
+      color: #08100a;
     }}
     .teleop-options-list {{
       display: none;
@@ -5671,6 +5760,12 @@ class MissionFrontendRenderer:
           <button id="teleop-start-button" class="idle-start" type="button">Teleop</button>
           <button id="record-map-start-button" class="idle-start" type="button">Record Map</button>
           <button id="teleop-toggle-button" class="merged-button" type="button">Stop</button>
+          <div id="desktop-teleop-actions" class="desktop-teleop-actions" role="group" aria-label="Teleop shortcuts" hidden>
+            <button id="desktop-lights-button" class="toggle-button" type="button">LIGHTS</button>
+            <button id="desktop-camera-button" class="camera-button" type="button">CAMERA</button>
+            <button id="desktop-two-stick-button" class="mode-button" type="button">2 STICK MODE</button>
+            <button id="desktop-brushes-button" class="mode-button" type="button">BRUSHES</button>
+          </div>
         </section>
         <section id="tools-panel" class="stick-panel tools-panel">
           <div class="stick-cluster">
@@ -5699,6 +5794,10 @@ class MissionFrontendRenderer:
           <button id="two-stick-button" class="mode-button" type="button">Off</button>
         </div>
         <div class="teleop-option-row">
+          <div><strong>Brushes</strong><br><span>Spinning direction</span></div>
+          <button id="brushes-button" class="mode-button" type="button" aria-label="Spin brushes inward when driving forward" aria-pressed="false">OUT</button>
+        </div>
+        <div class="teleop-option-row">
           <div><strong>Joystick</strong><br><span>X/B: drive +/−5%<br>Y/A: brushes +/−5%</span></div>
           <button id="gamepad-button" class="mode-button enabled" type="button" aria-pressed="true">On</button>
         </div>
@@ -5721,6 +5820,7 @@ class MissionFrontendRenderer:
     const navDrawer = document.getElementById('nav-drawer');
     const drawerBackdrop = document.getElementById('drawer-backdrop');
     const twoStickButton = document.getElementById('two-stick-button');
+    const brushesButton = document.getElementById('brushes-button');
     const gamepadButton = document.getElementById('gamepad-button');
     const lightsButton = document.getElementById('lights-button');
     const cameraButton = document.getElementById('camera-button');
@@ -5731,6 +5831,15 @@ class MissionFrontendRenderer:
     const teleopOptionsDock = document.getElementById('teleop-options-dock');
     const teleopOptionsButton = document.getElementById('teleop-options-button');
     const centerControls = document.querySelector('.center-controls');
+    const desktopTeleopActions = document.getElementById('desktop-teleop-actions');
+    const desktopActionButtons = [
+      [document.getElementById('desktop-lights-button'), lightsButton, 'LIGHTS'],
+      [document.getElementById('desktop-camera-button'), cameraButton, 'CAMERA'],
+      [document.getElementById('desktop-two-stick-button'), twoStickButton, '2 STICK MODE'],
+      [document.getElementById('desktop-brushes-button'), brushesButton, 'BRUSHES'],
+    ];
+    const coarsePointerQuery = window.matchMedia('(pointer: coarse)');
+    const finePointerQuery = window.matchMedia('(any-pointer: fine)');
     const driveToolScaleSlot = document.getElementById('drive-tool-scale-slot');
     const toolScaleSlot = document.getElementById('tool-scale-slot');
     const speedScales = {{
@@ -5741,13 +5850,16 @@ class MissionFrontendRenderer:
     let transitionBusy = false;
     let activeTeleopMode = '';
     let twoStickEnabled = false;
+    let brushDirection = 'OUT';
     let lightsEnabled = false;
     let cameraEnabled = true;
     let cameraStreamActive = false;
     let commandInFlight = false;
     let zeroCommandPending = false;
     let zeroCommandKeepalive = false;
-    let zeroCommandInFlight = false;
+    let zeroCommandResolvers = [];
+    let lastZeroCommandAt = -Infinity;
+    let lastCommandHadMotion = false;
     let teleopStopPending = false;
     let lastStatusAt = -Infinity;
     let gamepadEnabled = true;
@@ -5757,6 +5869,7 @@ class MissionFrontendRenderer:
     let gamepadDriving = false;
     let gamepadSpeedButtons = null;
     let speedReadoutTimeout = null;
+    const IDLE_COMMAND_INTERVAL_MS = 200;
     const GAMEPAD_DEADZONE = 0.15;
     const GAMEPAD_ENABLE_BUTTON = 4; // Standard mapping: Xbox LB.
     const GAMEPAD_SPEED_STEP = 0.05;
@@ -5774,6 +5887,23 @@ class MissionFrontendRenderer:
       left: {{ x: 0, y: 0, shell: document.getElementById('left-stick'), knob: document.getElementById('left-knob'), pointerId: null, relaxFrame: 0 }},
       right: {{ x: 0, y: 0, shell: document.getElementById('right-stick'), knob: document.getElementById('right-knob'), pointerId: null, relaxFrame: 0 }},
     }};
+
+    function renderDesktopTeleopActions() {{
+      // Screen dimensions also cover phones in landscape and narrow laptop windows.
+      const shortScreenSide = Math.min(screen.width || innerWidth, screen.height || innerHeight);
+      const smartphone = shortScreenSide <= 820 && coarsePointerQuery.matches && !finePointerQuery.matches;
+      teleopLayout.classList.toggle('desktop-controls', !smartphone && centerControls.classList.contains('active-mode'));
+      desktopTeleopActions.hidden = smartphone || !teleopReady || activeTeleopMode !== 'teleop' ||
+        transitionBusy || teleopStopPending;
+      for (const [shortcut, option, label] of desktopActionButtons) {{
+        const enabled = option.classList.contains('enabled');
+        shortcut.classList.toggle('enabled', enabled);
+        shortcut.disabled = option.disabled;
+        shortcut.setAttribute('aria-pressed', String(enabled));
+        shortcut.setAttribute('aria-label', `${{label}}: ${{option.textContent}}`);
+        shortcut.title = `${{label}}: ${{option.textContent}}`;
+      }}
+    }}
 
     function setBanner(kind, message) {{
       banner.className = `banner show ${{kind}}`;
@@ -5853,7 +5983,7 @@ class MissionFrontendRenderer:
     }}
     function stopControlInputs(keepalive = false) {{
       clearControlInputs();
-      sendGamepadZeroCommand(keepalive);
+      return sendZeroCommand(keepalive);
     }}
     function stopGamepadInput(keepalive = false) {{
       // An idle or disconnected controller must not clear an active mouse drag.
@@ -6055,6 +6185,7 @@ class MissionFrontendRenderer:
         }}
       }}
       twoStickButton.textContent = twoStickEnabled ? 'On' : 'Off';
+      renderDesktopTeleopActions();
     }}
     function handlePointer(stick, event) {{
       cancelStickRelaxation(stick);
@@ -6163,6 +6294,12 @@ class MissionFrontendRenderer:
       }});
     }}
     renderControlMode(false);
+    for (const [shortcut, option] of desktopActionButtons) {{
+      shortcut.addEventListener('click', () => option.click());
+    }}
+    coarsePointerQuery.addEventListener('change', renderDesktopTeleopActions);
+    finePointerQuery.addEventListener('change', renderDesktopTeleopActions);
+    window.addEventListener('resize', renderDesktopTeleopActions);
 
     async function postJson(path, body, keepalive = false, guardGamepad = gamepadDriving) {{
       const driveEntry = path === '/api/v1/teleop/command' ? recordDriveRequest(body || {{}}) : null;
@@ -6198,6 +6335,7 @@ class MissionFrontendRenderer:
         right_x: twoStickEnabled ? sticks.right.x : 0,
         right_y: twoStickEnabled ? sticks.right.y : 0,
         control_mode: twoStickEnabled ? 'two_stick' : 'one_stick',
+        brush_direction: brushDirection,
         wheel_scale: speedScales.wheel.value,
         tool_scale: speedScales.tool.value,
       }};
@@ -6213,11 +6351,13 @@ class MissionFrontendRenderer:
       closeCameraStream();
       cameraButton.classList.remove('enabled');
       cameraButton.textContent = 'Off';
+      renderDesktopTeleopActions();
       teleopStage.classList.remove('camera-active', 'camera-waiting');
     }}
     function updateCameraState() {{
       cameraButton.classList.toggle('enabled', cameraEnabled);
       cameraButton.textContent = cameraEnabled ? 'On' : 'Off';
+      renderDesktopTeleopActions();
       if (!cameraEnabled) {{
         closeCameraStream();
         teleopStage.classList.remove('camera-active', 'camera-waiting');
@@ -6236,33 +6376,24 @@ class MissionFrontendRenderer:
         cameraStreamActive = true;
       }}
     }}
-    async function sendZeroCommand(keepalive = false) {{
-      if (gamepadEnabled || zeroCommandPending || zeroCommandInFlight) {{
-        return sendGamepadZeroCommand(keepalive);
-      }}
-      // Preserve the original mouse stop path; joystick stops use the queue below.
-      try {{
-        await postJson('/api/v1/teleop/command', {{
-          left_x: 0,
-          left_y: 0,
-          right_x: 0,
-          right_y: 0,
-          control_mode: twoStickEnabled ? 'two_stick' : 'one_stick',
-          wheel_scale: speedScales.wheel.value,
-          tool_scale: speedScales.tool.value,
-        }}, keepalive, false);
-      }} catch (_error) {{}}
-    }}
-    async function sendGamepadZeroCommand(keepalive = false) {{
-      // Queue stops after in-flight requests instead of racing a second HTTP request.
+    function sendZeroCommand(keepalive = false) {{
+      // Every input source shares the stop queue, regardless of the Joystick option.
       zeroCommandPending = true;
       zeroCommandKeepalive = zeroCommandKeepalive || keepalive;
-      if (commandInFlight) return;
+      const completed = new Promise((resolve) => zeroCommandResolvers.push(resolve));
+      flushZeroCommand();
+      return completed;
+    }}
+    async function flushZeroCommand() {{
+      if (!zeroCommandPending || commandInFlight) return;
       commandInFlight = true;
-      zeroCommandInFlight = true;
       zeroCommandPending = false;
+      lastCommandHadMotion = false;
+      lastZeroCommandAt = performance.now();
       const useKeepalive = zeroCommandKeepalive;
       zeroCommandKeepalive = false;
+      const resolvers = zeroCommandResolvers;
+      zeroCommandResolvers = [];
       try {{
         await postJson('/api/v1/teleop/command', {{
           left_x: 0,
@@ -6270,18 +6401,20 @@ class MissionFrontendRenderer:
           right_x: 0,
           right_y: 0,
           control_mode: twoStickEnabled ? 'two_stick' : 'one_stick',
+          brush_direction: brushDirection,
           wheel_scale: speedScales.wheel.value,
           tool_scale: speedScales.tool.value,
         }}, useKeepalive, true);
       }} catch (_error) {{
       }} finally {{
         commandInFlight = false;
-        zeroCommandInFlight = false;
-        if (zeroCommandPending) sendGamepadZeroCommand();
+        for (const resolve of resolvers) resolve();
+        flushZeroCommand();
       }}
     }}
     async function streamCommand() {{
       if (gamepadEnabled) updateGamepad();
+      if (teleopStopPending) return;
       const useGamepad = gamepadDriving;
       if (useGamepad) {{
         if (!controlsReady()) {{
@@ -6292,12 +6425,24 @@ class MissionFrontendRenderer:
         // The mouse path keeps the readiness checks used by upstream before joystick support.
         return;
       }}
+      const payload = commandPayload();
+      const hasMotion = [payload.left_x, payload.left_y, payload.right_x, payload.right_y]
+        .some((value) => value !== 0);
+      if (!hasMotion && lastCommandHadMotion) {{
+        // Returning to centre is an immediate stop, even inside the idle interval.
+        if (!zeroCommandPending) sendZeroCommand();
+        return;
+      }}
       if (commandInFlight) {{
         return;
       }}
+      const now = performance.now();
+      if (!hasMotion && now - lastZeroCommandAt < IDLE_COMMAND_INTERVAL_MS) return;
       commandInFlight = true;
+      lastCommandHadMotion = hasMotion;
+      if (!hasMotion) lastZeroCommandAt = now;
       try {{
-        const result = await postJson('/api/v1/teleop/command', commandPayload(), false, useGamepad);
+        const result = await postJson('/api/v1/teleop/command', payload, false, useGamepad);
         if (useGamepad && !result.success) throw new Error(result.message || 'Teleop command rejected');
       }} catch (_error) {{
         if (useGamepad) {{
@@ -6306,7 +6451,7 @@ class MissionFrontendRenderer:
         }}
       }} finally {{
         commandInFlight = false;
-        if (zeroCommandPending) sendGamepadZeroCommand();
+        flushZeroCommand();
       }}
     }}
     function setBusyButton(label) {{
@@ -6323,6 +6468,7 @@ class MissionFrontendRenderer:
       gearSpan.setAttribute('aria-hidden', 'true');
       gearSpan.innerHTML = '&#9881;';
       teleopToggleButton.append(labelSpan, gearSpan);
+      renderDesktopTeleopActions();
     }}
     function renderButton() {{
       if (transitionBusy) {{
@@ -6332,6 +6478,7 @@ class MissionFrontendRenderer:
       teleopToggleButton.disabled = false;
       teleopToggleButton.classList.toggle('stop', teleopReady);
       teleopToggleButton.textContent = teleopReady ? 'Stop' : 'Start';
+      renderDesktopTeleopActions();
     }}
     async function loadStatus() {{
       const response = await fetch('/api/v1/status', {{ cache: 'no-store' }});
@@ -6381,7 +6528,7 @@ class MissionFrontendRenderer:
 
     async function startTeleopMode(mode) {{
       try {{
-        if (gamepadEnabled) stopControlInputs();
+        await stopControlInputs();
         teleopStopPending = false;
         setBusyButton(mode === 'record_map' ? 'Recording' : 'Starting');
         const result = await postJson('/api/v1/teleop/start', {{ mode }});
@@ -6408,8 +6555,9 @@ class MissionFrontendRenderer:
         if (teleopReady) {{
           teleopStopPending = true;
           setBusyButton('Stopping');
-          if (gamepadEnabled) clearControlInputs();
-          await sendZeroCommand();
+          clearControlInputs();
+          // Queue zero while letting the backend mission stop proceed immediately.
+          sendZeroCommand();
           const result = await postJson('/api/v1/teleop/stop', {{}});
           if (!result.success) {{
             teleopStopPending = false;
@@ -6443,6 +6591,7 @@ class MissionFrontendRenderer:
     lightsButton.addEventListener('click', async () => {{
       const nextEnabled = !lightsEnabled;
       lightsButton.disabled = true;
+      renderDesktopTeleopActions();
       try {{
         const result = await postJson('/api/v1/teleop/lights', {{ enabled: nextEnabled }});
         if (result.success) {{
@@ -6457,12 +6606,20 @@ class MissionFrontendRenderer:
         setBanner('error', error.message || 'Lights request failed');
       }} finally {{
         lightsButton.disabled = false;
+        renderDesktopTeleopActions();
       }}
     }});
     twoStickButton.addEventListener('click', () => {{
-      if (gamepadEnabled) stopControlInputs();
+      stopControlInputs();
       twoStickEnabled = !twoStickEnabled;
-      renderControlMode(!gamepadEnabled);
+      renderControlMode(false);
+    }});
+    brushesButton.addEventListener('click', () => {{
+      brushDirection = brushDirection === 'OUT' ? 'IN' : 'OUT';
+      brushesButton.textContent = brushDirection;
+      brushesButton.classList.toggle('enabled', brushDirection === 'IN');
+      brushesButton.setAttribute('aria-pressed', String(brushDirection === 'IN'));
+      renderDesktopTeleopActions();
     }});
     gamepadButton.addEventListener('click', () => {{
       stopControlInputs();
@@ -6477,7 +6634,7 @@ class MissionFrontendRenderer:
       }}
     }});
     drawerSafetyStopButton.addEventListener('click', () => {{
-      if (gamepadEnabled) stopControlInputs(true);
+      stopControlInputs(true);
     }});
     window.addEventListener('gamepadconnected', () => updateGamepad());
     window.addEventListener('gamepaddisconnected', (event) => {{
@@ -6508,10 +6665,7 @@ class MissionFrontendRenderer:
     document.addEventListener('visibilitychange', () => {{
       if (document.visibilityState !== 'visible') {{
         disableCamera();
-        gamepadArmed = false;
-        gamepadSpeedButtons = null;
-        if (gamepadDriving) stopControlInputs(true);
-        else sendZeroCommand(true);
+        stopControlInputs(true);
       }}
     }});
     window.addEventListener('blur', () => {{
@@ -6520,20 +6674,19 @@ class MissionFrontendRenderer:
     }});
     window.addEventListener('pagehide', () => {{
       disableCamera();
-      gamepadArmed = false;
-      gamepadSpeedButtons = null;
-      if (gamepadDriving) stopControlInputs(true);
-      else sendZeroCommand(true);
+      stopControlInputs(true);
     }});
     window.addEventListener('beforeunload', () => {{
       disableCamera();
-      if (gamepadEnabled) clearControlInputs();
+      clearControlInputs();
+      // Best-effort unload fallback: browser teardown cannot await the command queue.
       const body = JSON.stringify({{
         left_x: 0,
         left_y: 0,
         right_x: 0,
         right_y: 0,
         control_mode: twoStickEnabled ? 'two_stick' : 'one_stick',
+        brush_direction: brushDirection,
         wheel_scale: speedScales.wheel.value,
         tool_scale: speedScales.tool.value,
       }});
