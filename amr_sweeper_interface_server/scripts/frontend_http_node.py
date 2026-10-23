@@ -5477,12 +5477,6 @@ class MissionFrontendRenderer:
       --desktop-camera-on-background: #064E3B;
       --desktop-camera-on-text: #FFF8E7;
       --desktop-camera-on-border-color: #0B8A68;
-      --desktop-two-stick-on-background: #064E3B;
-      --desktop-two-stick-on-text: #FFF8E7;
-      --desktop-two-stick-on-border-color: #0B8A68;
-      --desktop-brushes-in-background: #064E3B;
-      --desktop-brushes-in-text: #FFF8E7;
-      --desktop-brushes-in-border-color: #0B8A68;
       display: grid;
       grid-column: 1 / -1;
       gap: 12px;
@@ -5500,7 +5494,8 @@ class MissionFrontendRenderer:
       background: color-mix(in srgb, var(--desktop-button-background) var(--desktop-button-background-opacity), transparent);
       color: var(--desktop-button-text);
     }}
-    .desktop-teleop-actions button:not(.enabled):not(:disabled):hover {{
+    .desktop-teleop-actions button:not(.enabled):not(:disabled):hover,
+    .desktop-teleop-actions .mode-button:not(:disabled):hover {{
       background: color-mix(in srgb, var(--desktop-button-hover-background) var(--desktop-button-background-opacity), transparent);
       color: var(--desktop-button-hover-text);
       border-color: var(--desktop-button-hover-border-color);
@@ -5518,16 +5513,6 @@ class MissionFrontendRenderer:
       color: var(--desktop-camera-on-text);
       border-color: var(--desktop-camera-on-border-color);
     }}
-    .desktop-teleop-actions #desktop-two-stick-button.enabled {{
-      background: color-mix(in srgb, var(--desktop-two-stick-on-background) var(--desktop-button-background-opacity), transparent);
-      color: var(--desktop-two-stick-on-text);
-      border-color: var(--desktop-two-stick-on-border-color);
-    }}
-    .desktop-teleop-actions #desktop-brushes-button.enabled {{
-      background: color-mix(in srgb, var(--desktop-brushes-in-background) var(--desktop-button-background-opacity), transparent);
-      color: var(--desktop-brushes-in-text);
-      border-color: var(--desktop-brushes-in-border-color);
-    }}
     .teleop-layout.desktop-controls {{
       --controls-width: calc(180px * var(--desktop-button-scale));
     }}
@@ -5544,6 +5529,31 @@ class MissionFrontendRenderer:
     }}
     .teleop-layout.desktop-controls .merged-button .gear {{
       font-size: calc(1.15rem * var(--desktop-button-scale));
+    }}
+    .teleop-layout.desktop-controls.busy-controls {{
+      --controls-width: 411.9px;
+    }}
+    .teleop-layout.desktop-controls.busy-controls .merged-button {{
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: calc(10px * var(--desktop-button-scale));
+      height: auto;
+      min-height: 90.15px;
+      padding: 13.5px 19.5px;
+      border-radius: calc(24px * var(--desktop-button-scale));
+    }}
+    .teleop-layout.desktop-controls.busy-controls .busy-label {{
+      min-width: 0;
+      margin-right: 0;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      line-height: 1.25;
+      text-align: center;
+    }}
+    .teleop-layout.desktop-controls.busy-controls .gear {{
+      flex: 0 0 auto;
+      line-height: 1;
     }}
     .left-column-button {{
       grid-column: 1;
@@ -5763,8 +5773,8 @@ class MissionFrontendRenderer:
           <div id="desktop-teleop-actions" class="desktop-teleop-actions" role="group" aria-label="Teleop shortcuts" hidden>
             <button id="desktop-lights-button" class="toggle-button" type="button">LIGHTS</button>
             <button id="desktop-camera-button" class="camera-button" type="button">CAMERA</button>
-            <button id="desktop-two-stick-button" class="mode-button" type="button">2 STICK MODE</button>
-            <button id="desktop-brushes-button" class="mode-button" type="button">BRUSHES</button>
+            <button id="desktop-two-stick-button" class="mode-button" type="button">2-STICK MODE</button>
+            <button id="desktop-brushes-button" class="mode-button" type="button">SWEEP IN</button>
           </div>
         </section>
         <section id="tools-panel" class="stick-panel tools-panel">
@@ -5835,11 +5845,10 @@ class MissionFrontendRenderer:
     const desktopActionButtons = [
       [document.getElementById('desktop-lights-button'), lightsButton, 'LIGHTS'],
       [document.getElementById('desktop-camera-button'), cameraButton, 'CAMERA'],
-      [document.getElementById('desktop-two-stick-button'), twoStickButton, '2 STICK MODE'],
+      [document.getElementById('desktop-two-stick-button'), twoStickButton, '2-STICK MODE'],
       [document.getElementById('desktop-brushes-button'), brushesButton, 'BRUSHES'],
     ];
     const coarsePointerQuery = window.matchMedia('(pointer: coarse)');
-    const finePointerQuery = window.matchMedia('(any-pointer: fine)');
     const driveToolScaleSlot = document.getElementById('drive-tool-scale-slot');
     const toolScaleSlot = document.getElementById('tool-scale-slot');
     const speedScales = {{
@@ -5852,7 +5861,7 @@ class MissionFrontendRenderer:
     let twoStickEnabled = false;
     let brushDirection = 'OUT';
     let lightsEnabled = false;
-    let cameraEnabled = true;
+    let cameraEnabled = !isSmartphoneDevice();
     let cameraStreamActive = false;
     let commandInFlight = false;
     let zeroCommandPending = false;
@@ -5888,15 +5897,27 @@ class MissionFrontendRenderer:
       right: {{ x: 0, y: 0, shell: document.getElementById('right-stick'), knob: document.getElementById('right-knob'), pointerId: null, relaxFrame: 0 }},
     }};
 
+    function isSmartphoneDevice() {{
+      // Use the full screen and an orientation-independent aspect ratio.
+      const screenWidth = screen.width || innerWidth;
+      const screenHeight = screen.height || innerHeight;
+      const shortScreenSide = Math.min(screenWidth, screenHeight);
+      const screenAspectRatio = Math.max(screenWidth, screenHeight) / shortScreenSide;
+      const phoneAspectRatio = screenAspectRatio >= 19.5 / 9 && screenAspectRatio <= 20 / 9;
+      return (shortScreenSide <= 820 || phoneAspectRatio) &&
+        coarsePointerQuery.matches;
+    }}
+
     function renderDesktopTeleopActions() {{
-      // Screen dimensions also cover phones in landscape and narrow laptop windows.
-      const shortScreenSide = Math.min(screen.width || innerWidth, screen.height || innerHeight);
-      const smartphone = shortScreenSide <= 820 && coarsePointerQuery.matches && !finePointerQuery.matches;
-      teleopLayout.classList.toggle('desktop-controls', !smartphone && centerControls.classList.contains('active-mode'));
-      desktopTeleopActions.hidden = smartphone || !teleopReady || activeTeleopMode !== 'teleop' ||
-        transitionBusy || teleopStopPending;
+      const smartphone = isSmartphoneDevice();
+      const desktopControls = !smartphone && centerControls.classList.contains('active-mode');
+      teleopLayout.classList.toggle('desktop-controls', desktopControls);
+      teleopLayout.classList.toggle('busy-controls', desktopControls && transitionBusy);
+      desktopTeleopActions.hidden = smartphone || !teleopReady || transitionBusy || teleopStopPending;
       for (const [shortcut, option, label] of desktopActionButtons) {{
         const enabled = option.classList.contains('enabled');
+        if (option === twoStickButton) shortcut.textContent = enabled ? '1-STICK MODE' : '2-STICK MODE';
+        if (option === brushesButton) shortcut.textContent = enabled ? 'SWEEP OUT' : 'SWEEP IN';
         shortcut.classList.toggle('enabled', enabled);
         shortcut.disabled = option.disabled;
         shortcut.setAttribute('aria-pressed', String(enabled));
@@ -6298,7 +6319,6 @@ class MissionFrontendRenderer:
       shortcut.addEventListener('click', () => option.click());
     }}
     coarsePointerQuery.addEventListener('change', renderDesktopTeleopActions);
-    finePointerQuery.addEventListener('change', renderDesktopTeleopActions);
     window.addEventListener('resize', renderDesktopTeleopActions);
 
     async function postJson(path, body, keepalive = false, guardGamepad = gamepadDriving) {{
@@ -6709,6 +6729,7 @@ class MissionFrontendRenderer:
       markTopbarDisconnected();
       stopGamepadInput();
     }}
+    updateCameraState();
     setInterval(streamCommand, 50);
     loadStatus().catch((error) => {{
       handleStatusError();
